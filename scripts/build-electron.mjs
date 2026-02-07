@@ -15,7 +15,7 @@ function resolveStandaloneSymlinks() {
       const target = fs.readlinkSync(fullPath);
       const resolved = path.resolve(standaloneModules, target);
       if (fs.existsSync(resolved)) {
-        fs.rmSync(fullPath);
+        fs.rmSync(fullPath, { recursive: true, force: true });
         fs.cpSync(resolved, fullPath, { recursive: true });
         console.log(`Resolved symlink: ${entry} -> ${target}`);
       }
