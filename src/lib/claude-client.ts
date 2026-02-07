@@ -117,6 +117,25 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           sdkEnv.ANTHROPIC_BASE_URL = appBaseUrl;
         }
 
+        // Inject proxy environment variables if proxy is enabled
+        const proxyEnabled = getSetting('proxy_enabled');
+        if (proxyEnabled === 'true') {
+          const proxyUrl = getSetting('proxy_url');
+          const proxyBypass = getSetting('proxy_bypass');
+          if (proxyUrl) {
+            sdkEnv.HTTP_PROXY = proxyUrl;
+            sdkEnv.HTTPS_PROXY = proxyUrl;
+            sdkEnv.ALL_PROXY = proxyUrl;
+            sdkEnv.http_proxy = proxyUrl;
+            sdkEnv.https_proxy = proxyUrl;
+            sdkEnv.all_proxy = proxyUrl;
+          }
+          if (proxyBypass) {
+            sdkEnv.NO_PROXY = proxyBypass;
+            sdkEnv.no_proxy = proxyBypass;
+          }
+        }
+
         const queryOptions: Options = {
           cwd: workingDirectory || process.cwd(),
           abortController,

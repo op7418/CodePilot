@@ -1,4 +1,4 @@
-import { app, BrowserWindow, nativeImage, dialog } from 'electron';
+import { app, BrowserWindow, nativeImage, dialog, session } from 'electron';
 import path from 'path';
 import { spawn, execFileSync, ChildProcess } from 'child_process';
 import fs from 'fs';
@@ -253,6 +253,46 @@ function getIconPath(): string {
   return path.join(process.resourcesPath, 'icon.icns');
 }
 
+/**
+ * Fetch proxy settings from the CodePilot API and apply them
+ * to Electron's default session so renderer network requests
+ * (e.g. remote images in markdown) also route through the proxy.
+ */
+async function applyProxySettings(port: number): Promise<void> {
+  try {
+    const http = require('http');
+    const data: string = await new Promise((resolve, reject) => {
+      const req = http.get(`http://127.0.0.1:${port}/api/settings/app`, (res: { statusCode?: number; on: Function }) => {
+        let body = '';
+        res.on('data', (chunk: string) => { body += chunk; });
+        res.on('end', () => resolve(body));
+      });
+      req.on('error', reject);
+      req.setTimeout(3000, () => { req.destroy(); reject(new Error('timeout')); });
+    });
+
+    const parsed = JSON.parse(data);
+    const settings = parsed?.settings || {};
+
+    if (settings.proxy_enabled === 'true' && settings.proxy_url) {
+      const proxyUrl = settings.proxy_url;
+      const bypass = settings.proxy_bypass || 'localhost,127.0.0.1';
+      // Electron's setProxy expects proxyRules in the format: scheme://host:port
+      await session.defaultSession.setProxy({
+        proxyRules: proxyUrl,
+        proxyBypassRules: bypass,
+      });
+      console.log(`[proxy] Electron session proxy set to ${proxyUrl} (bypass: ${bypass})`);
+    } else {
+      // Ensure proxy is cleared if disabled
+      await session.defaultSession.setProxy({ mode: 'direct' as never });
+      console.log('[proxy] Electron session proxy: direct (no proxy)');
+    }
+  } catch (err) {
+    console.warn('[proxy] Failed to apply Electron session proxy:', err);
+  }
+}
+
 function createWindow(port: number) {
   const windowOptions: Electron.BrowserWindowConstructorOptions = {
     width: 1280,
@@ -319,6 +359,7 @@ app.whenReady().then(async () => {
     }
 
     serverPort = port;
+    await applyProxySettings(port);
     createWindow(port);
   } catch (err) {
     console.error('Failed to start:', err);
@@ -349,6 +390,7 @@ app.on('activate', async () => {
         await waitForServer(port);
         serverPort = port;
       }
+      await applyProxySettings(serverPort || 3000);
       createWindow(serverPort || 3000);
     } catch (err) {
       console.error('Failed to restart server:', err);

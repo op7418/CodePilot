@@ -24,6 +24,7 @@ import {
   CodeIcon,
   SlidersHorizontalIcon,
   Loading02Icon,
+  GlobeIcon,
 } from "@hugeicons/core-free-icons";
 
 interface SettingsData {
@@ -165,6 +166,135 @@ function ApiConfigSection() {
   );
 }
 
+// --- Proxy Configuration Section (CodePilot app settings, stored in SQLite) ---
+function ProxyConfigSection() {
+  const [proxyEnabled, setProxyEnabled] = useState(false);
+  const [proxyUrl, setProxyUrl] = useState("");
+  const [proxyBypass, setProxyBypass] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+
+  useEffect(() => {
+    fetch("/api/settings/app")
+      .then((r) => r.json())
+      .then((data) => {
+        const s = data.settings || {};
+        setProxyEnabled(s.proxy_enabled === "true");
+        setProxyUrl(s.proxy_url || "");
+        setProxyBypass(s.proxy_bypass || "");
+      })
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  }, []);
+
+  const handleSave = async () => {
+    setSaving(true);
+    setStatus("idle");
+    try {
+      const res = await fetch("/api/settings/app", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            proxy_enabled: proxyEnabled ? "true" : "false",
+            proxy_url: proxyUrl,
+            proxy_bypass: proxyBypass,
+          },
+        }),
+      });
+      if (res.ok) {
+        setStatus("saved");
+        setTimeout(() => setStatus("idle"), 2000);
+      } else {
+        setStatus("error");
+      }
+    } catch {
+      setStatus("error");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (loading) return null;
+
+  return (
+    <div className="rounded-lg border border-border/50 p-4 space-y-4">
+      <div>
+        <div className="flex items-center gap-2">
+          <HugeiconsIcon icon={GlobeIcon} className="h-4 w-4 text-muted-foreground" />
+          <Label className="text-sm font-medium">Proxy Configuration</Label>
+        </div>
+        <p className="text-xs text-muted-foreground mt-1">
+          Configure an HTTP/HTTPS/SOCKS5 proxy for all network access. The proxy
+          environment variables (HTTP_PROXY, HTTPS_PROXY, ALL_PROXY) will be
+          passed to the Claude Code subprocess.
+        </p>
+      </div>
+      <div className="flex items-center gap-3">
+        <Switch
+          id="proxy-enabled"
+          checked={proxyEnabled}
+          onCheckedChange={setProxyEnabled}
+        />
+        <Label htmlFor="proxy-enabled" className="text-sm">
+          {proxyEnabled ? "Proxy Enabled" : "Proxy Disabled"}
+        </Label>
+      </div>
+      <div className="space-y-3">
+        <div>
+          <Label htmlFor="proxy-url" className="text-xs text-muted-foreground">
+            Proxy URL
+          </Label>
+          <Input
+            id="proxy-url"
+            placeholder="http://127.0.0.1:7890"
+            value={proxyUrl}
+            onChange={(e) => setProxyUrl(e.target.value)}
+            disabled={!proxyEnabled}
+            className="mt-1 font-mono text-sm"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Supports http://, https://, socks5:// protocols
+          </p>
+        </div>
+        <div>
+          <Label htmlFor="proxy-bypass" className="text-xs text-muted-foreground">
+            Bypass List (NO_PROXY)
+          </Label>
+          <Input
+            id="proxy-bypass"
+            placeholder="localhost,127.0.0.1,::1"
+            value={proxyBypass}
+            onChange={(e) => setProxyBypass(e.target.value)}
+            disabled={!proxyEnabled}
+            className="mt-1 font-mono text-sm"
+          />
+          <p className="text-xs text-muted-foreground mt-1">
+            Comma-separated list of hosts that should bypass the proxy
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center gap-3">
+        <Button onClick={handleSave} disabled={saving} size="sm" className="gap-2">
+          {saving ? (
+            <HugeiconsIcon icon={Loading02Icon} className="h-4 w-4 animate-spin" />
+          ) : (
+            <HugeiconsIcon icon={FloppyDiskIcon} className="h-4 w-4" />
+          )}
+          {saving ? "Saving..." : "Save Proxy Config"}
+        </Button>
+        {status === "saved" && (
+          <span className="text-sm text-green-600 dark:text-green-400">Saved</span>
+        )}
+        {status === "error" && (
+          <span className="text-sm text-destructive">Failed to save</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // --- Claude CLI Settings Section (manages ~/.claude/settings.json) ---
 function SettingsPageInner() {
   const [settings, setSettings] = useState<SettingsData>({});
@@ -281,6 +411,7 @@ function SettingsPageInner() {
       <div className="flex-1 overflow-auto p-6">
         <div className="max-w-3xl space-y-6">
           <ApiConfigSection />
+          <ProxyConfigSection />
 
           {loading ? (
             <div className="flex items-center justify-center py-12">

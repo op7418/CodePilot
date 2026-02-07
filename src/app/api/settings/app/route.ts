@@ -9,6 +9,9 @@ import { getSetting, setSetting } from '@/lib/db';
 const ALLOWED_KEYS = [
   'anthropic_auth_token',
   'anthropic_base_url',
+  'proxy_enabled',
+  'proxy_url',
+  'proxy_bypass',
 ];
 
 export async function GET() {

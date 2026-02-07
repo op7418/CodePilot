@@ -345,6 +345,9 @@ export const SETTING_KEYS = {
   THEME: 'theme',
   PERMISSION_MODE: 'permission_mode',
   MAX_THINKING_TOKENS: 'max_thinking_tokens',
+  PROXY_ENABLED: 'proxy_enabled',
+  PROXY_URL: 'proxy_url',
+  PROXY_BYPASS: 'proxy_bypass',
 } as const;
 
 // ==========================================
