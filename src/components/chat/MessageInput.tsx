@@ -72,10 +72,24 @@ const MODE_OPTIONS: ModeOption[] = [
   { value: 'ask', label: 'Ask', icon: HelpCircleIcon, description: 'Answer questions only' },
 ];
 
-const MODEL_OPTIONS = [
+const CLAUDE_MODEL_OPTIONS = [
   { value: 'sonnet', label: 'Sonnet 4.5' },
   { value: 'opus', label: 'Opus 4.6' },
   { value: 'haiku', label: 'Haiku 4.5' },
+];
+
+const OPENROUTER_MODEL_OPTIONS = [
+  { value: 'anthropic/claude-sonnet-4', label: 'Claude Sonnet 4' },
+  { value: 'anthropic/claude-sonnet-4.5', label: 'Claude Sonnet 4.5' },
+  { value: 'anthropic/claude-opus-4', label: 'Claude Opus 4' },
+  { value: 'anthropic/claude-opus-4.6', label: 'Claude Opus 4.6' },
+  { value: 'anthropic/claude-haiku-3.5', label: 'Claude Haiku 3.5' },
+  { value: 'openai/gpt-4.1', label: 'GPT-4.1' },
+  { value: 'openai/o3', label: 'o3' },
+  { value: 'google/gemini-2.5-pro', label: 'Gemini 2.5 Pro' },
+  { value: 'google/gemini-2.5-flash', label: 'Gemini 2.5 Flash' },
+  { value: 'deepseek/deepseek-chat-v3-0324', label: 'DeepSeek V3' },
+  { value: 'deepseek/deepseek-r1', label: 'DeepSeek R1' },
 ];
 
 export function MessageInput({
@@ -106,6 +120,51 @@ export function MessageInput({
   const [modeMenuOpen, setModeMenuOpen] = useState(false);
   const [modelMenuOpen, setModelMenuOpen] = useState(false);
   const [inputValue, setInputValue] = useState('');
+  const [apiProvider, setApiProvider] = useState<'claude_code' | 'openrouter'>('claude_code');
+  const [customDefaultModel, setCustomDefaultModel] = useState<string>('');
+  const prevProviderRef = useRef(apiProvider);
+
+  // Fetch current provider setting on mount, on focus, and listen for changes
+  useEffect(() => {
+    const fetchProvider = () => {
+      fetch('/api/settings/app', { cache: 'no-store' })
+        .then((r) => r.json())
+        .then((data) => {
+          const p = data.settings?.api_provider;
+          if (p === 'openrouter') setApiProvider('openrouter');
+          else setApiProvider('claude_code');
+          // Also read the custom default model from settings
+          const orModel = data.settings?.openrouter_model;
+          if (orModel) setCustomDefaultModel(orModel);
+        })
+        .catch(() => {});
+    };
+    fetchProvider();
+    const handler = () => fetchProvider();
+    // Re-fetch when settings saved, window focused, or page becomes visible
+    window.addEventListener('provider-changed', handler);
+    window.addEventListener('focus', handler);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible') handler();
+    });
+    return () => {
+      window.removeEventListener('provider-changed', handler);
+      window.removeEventListener('focus', handler);
+    };
+  }, []);
+
+  // When provider changes, auto-switch model to the default of the new provider
+  useEffect(() => {
+    if (prevProviderRef.current !== apiProvider) {
+      prevProviderRef.current = apiProvider;
+      if (apiProvider === 'openrouter' && customDefaultModel) {
+        onModelChange?.(customDefaultModel);
+      } else {
+        const newOptions = apiProvider === 'openrouter' ? OPENROUTER_MODEL_OPTIONS : CLAUDE_MODEL_OPTIONS;
+        onModelChange?.(newOptions[0].value);
+      }
+    }
+  }, [apiProvider, onModelChange, customDefaultModel]);
 
   // Fetch files for @ mention
   const fetchFiles = useCallback(async (filter: string) => {
@@ -234,6 +293,10 @@ export function MessageInput({
     }
   }, [fetchFiles, fetchSkills, popoverMode, closePopover]);
 
+  const filteredItems = popoverItems.filter((item) =>
+    item.label.toLowerCase().includes(popoverFilter.toLowerCase())
+  );
+
   const handleSubmit = useCallback((_msg: { text: string; files: unknown[] }, e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     const content = inputValue.trim();
@@ -280,7 +343,7 @@ export function MessageInput({
         }
       }
     },
-    [popoverMode, popoverItems, selectedIndex, insertItem, closePopover]
+    [popoverMode, popoverItems, filteredItems, selectedIndex, insertItem, closePopover]
   );
 
   // Click outside to close popover
@@ -319,11 +382,21 @@ export function MessageInput({
     return () => document.removeEventListener('mousedown', handler);
   }, [modelMenuOpen]);
 
-  const filteredItems = popoverItems.filter((item) =>
-    item.label.toLowerCase().includes(popoverFilter.toLowerCase())
-  );
-
-  const currentModelValue = modelName || 'sonnet';
+  // Build model options: preset list + custom default model if not already included
+  const baseModelOptions = apiProvider === 'openrouter' ? OPENROUTER_MODEL_OPTIONS : CLAUDE_MODEL_OPTIONS;
+  const MODEL_OPTIONS = (() => {
+    if (apiProvider !== 'openrouter' || !customDefaultModel) return baseModelOptions;
+    // If the custom model from settings is not in the preset list, add it at the top
+    if (!baseModelOptions.some((m) => m.value === customDefaultModel)) {
+      // Generate a friendly label from the model ID (e.g. "anthropic/claude-opus-4.6" → "claude-opus-4.6")
+      const shortLabel = customDefaultModel.includes('/')
+        ? customDefaultModel.split('/').pop() || customDefaultModel
+        : customDefaultModel;
+      return [{ value: customDefaultModel, label: shortLabel }, ...baseModelOptions];
+    }
+    return baseModelOptions;
+  })();
+  const currentModelValue = modelName || MODEL_OPTIONS[0].value;
   const currentModelOption = MODEL_OPTIONS.find((m) => m.value === currentModelValue) || MODEL_OPTIONS[0];
   const currentMode = MODE_OPTIONS.find((m) => m.value === mode) || MODE_OPTIONS[0];
 

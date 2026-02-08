@@ -1,7 +1,8 @@
 import { NextRequest } from 'next/server';
 import { streamClaude } from '@/lib/claude-client';
+import { streamOpenRouter } from '@/lib/openrouter-client';
 import { addMessage, getSession, updateSessionTitle, updateSdkSessionId, getSetting } from '@/lib/db';
-import type { SendMessageRequest, SSEEvent, TokenUsage } from '@/types';
+import type { SendMessageRequest, SSEEvent, TokenUsage, ApiProvider } from '@/types';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -63,17 +64,33 @@ export async function POST(request: NextRequest) {
       abortController.abort();
     });
 
-    // Stream Claude response, using SDK session ID for resume if available
-    const stream = streamClaude({
-      prompt: content,
-      sessionId: session_id,
-      sdkSessionId: session.sdk_session_id || undefined,
-      model: effectiveModel,
-      systemPrompt: systemPromptOverride || session.system_prompt || undefined,
-      workingDirectory: session.working_directory || undefined,
-      abortController,
-      permissionMode,
-    });
+    // Determine which provider to use
+    const provider: ApiProvider = (getSetting('api_provider') as ApiProvider) || 'claude_code';
+
+    let stream: ReadableStream<string>;
+
+    if (provider === 'openrouter') {
+      // Use OpenRouter (OpenAI-compatible API)
+      stream = streamOpenRouter({
+        prompt: content,
+        sessionId: session_id,
+        model: effectiveModel,
+        systemPrompt: systemPromptOverride || session.system_prompt || undefined,
+        abortController,
+      });
+    } else {
+      // Use Claude Code Agent SDK (default)
+      stream = streamClaude({
+        prompt: content,
+        sessionId: session_id,
+        sdkSessionId: session.sdk_session_id || undefined,
+        model: effectiveModel,
+        systemPrompt: systemPromptOverride || session.system_prompt || undefined,
+        workingDirectory: session.working_directory || undefined,
+        abortController,
+        permissionMode,
+      });
+    }
 
     // Tee the stream: one for client, one for collecting the response
     const [streamForClient, streamForCollect] = stream.tee();

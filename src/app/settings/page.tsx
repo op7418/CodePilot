@@ -62,8 +62,15 @@ export default function SettingsPage() {
 
 // --- API Configuration Section (CodePilot app settings, stored in SQLite) ---
 function ApiConfigSection() {
+  const [provider, setProvider] = useState<"claude_code" | "openrouter">("claude_code");
+  // Claude Code settings
   const [token, setToken] = useState("");
   const [baseUrl, setBaseUrl] = useState("");
+  // OpenRouter settings
+  const [orApiKey, setOrApiKey] = useState("");
+  const [orBaseUrl, setOrBaseUrl] = useState("");
+  const [orModel, setOrModel] = useState("");
+
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
@@ -73,8 +80,12 @@ function ApiConfigSection() {
       .then((r) => r.json())
       .then((data) => {
         const s = data.settings || {};
+        setProvider((s.api_provider as "claude_code" | "openrouter") || "claude_code");
         setToken(s.anthropic_auth_token || "");
         setBaseUrl(s.anthropic_base_url || "");
+        setOrApiKey(s.openrouter_api_key || "");
+        setOrBaseUrl(s.openrouter_base_url || "");
+        setOrModel(s.openrouter_model || "");
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -89,13 +100,19 @@ function ApiConfigSection() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           settings: {
+            api_provider: provider,
             anthropic_auth_token: token,
             anthropic_base_url: baseUrl,
+            openrouter_api_key: orApiKey,
+            openrouter_base_url: orBaseUrl,
+            openrouter_model: orModel,
           },
         }),
       });
       if (res.ok) {
         setStatus("saved");
+        // Dispatch event so other components (e.g. MessageInput) can react
+        window.dispatchEvent(new CustomEvent("provider-changed", { detail: { provider } }));
         setTimeout(() => setStatus("idle"), 2000);
       } else {
         setStatus("error");
@@ -114,37 +131,142 @@ function ApiConfigSection() {
       <div>
         <Label className="text-sm font-medium">API Configuration</Label>
         <p className="text-xs text-muted-foreground">
-          Optional. Configure a custom Anthropic-compatible API for Claude Code.
-          Leave empty to use the default authentication (claude login / shell environment).
+          Choose your API provider and configure the connection settings.
         </p>
       </div>
-      <div className="space-y-3">
-        <div>
-          <Label htmlFor="api-base-url" className="text-xs text-muted-foreground">
-            API Base URL
-          </Label>
-          <Input
-            id="api-base-url"
-            placeholder="https://api.anthropic.com"
-            value={baseUrl}
-            onChange={(e) => setBaseUrl(e.target.value)}
-            className="mt-1 font-mono text-sm"
-          />
-        </div>
-        <div>
-          <Label htmlFor="api-token" className="text-xs text-muted-foreground">
-            API Token (ANTHROPIC_AUTH_TOKEN)
-          </Label>
-          <Input
-            id="api-token"
-            type="password"
-            placeholder="sk-ant-..."
-            value={token}
-            onChange={(e) => setToken(e.target.value)}
-            className="mt-1 font-mono text-sm"
-          />
+
+      {/* Provider selector */}
+      <div className="space-y-2">
+        <Label className="text-xs text-muted-foreground">Provider</Label>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setProvider("claude_code")}
+            className={`flex-1 rounded-lg border px-3 py-2 text-sm transition-colors ${
+              provider === "claude_code"
+                ? "border-primary bg-primary/10 text-primary font-medium"
+                : "border-border hover:border-primary/50"
+            }`}
+          >
+            <div className="font-medium">Claude Code</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              Uses Claude CLI (requires claude login)
+            </div>
+          </button>
+          <button
+            onClick={() => setProvider("openrouter")}
+            className={`flex-1 rounded-lg border px-3 py-2 text-sm transition-colors ${
+              provider === "openrouter"
+                ? "border-primary bg-primary/10 text-primary font-medium"
+                : "border-border hover:border-primary/50"
+            }`}
+          >
+            <div className="font-medium">OpenRouter</div>
+            <div className="text-xs text-muted-foreground mt-0.5">
+              OpenAI-compatible API, supports many models
+            </div>
+          </button>
         </div>
       </div>
+
+      {/* Claude Code settings */}
+      {provider === "claude_code" && (
+        <div className="space-y-3 rounded-lg border border-border/30 p-3">
+          <p className="text-xs text-muted-foreground">
+            Optional. Leave empty to use default authentication (claude login).
+          </p>
+          <div>
+            <Label htmlFor="api-base-url" className="text-xs text-muted-foreground">
+              API Base URL
+            </Label>
+            <Input
+              id="api-base-url"
+              placeholder="https://api.anthropic.com"
+              value={baseUrl}
+              onChange={(e) => setBaseUrl(e.target.value)}
+              className="mt-1 font-mono text-sm"
+            />
+          </div>
+          <div>
+            <Label htmlFor="api-token" className="text-xs text-muted-foreground">
+              API Token (ANTHROPIC_AUTH_TOKEN)
+            </Label>
+            <Input
+              id="api-token"
+              type="password"
+              placeholder="sk-ant-..."
+              value={token}
+              onChange={(e) => setToken(e.target.value)}
+              className="mt-1 font-mono text-sm"
+            />
+          </div>
+        </div>
+      )}
+
+      {/* OpenRouter settings */}
+      {provider === "openrouter" && (
+        <div className="space-y-3 rounded-lg border border-border/30 p-3">
+          <p className="text-xs text-muted-foreground">
+            Configure your OpenRouter API key. Get one at{" "}
+            <a
+              href="https://openrouter.ai/keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary underline"
+            >
+              openrouter.ai/keys
+            </a>
+          </p>
+          <div>
+            <Label htmlFor="or-api-key" className="text-xs text-muted-foreground">
+              API Key
+            </Label>
+            <Input
+              id="or-api-key"
+              type="password"
+              placeholder="sk-or-v1-..."
+              value={orApiKey}
+              onChange={(e) => setOrApiKey(e.target.value)}
+              className="mt-1 font-mono text-sm"
+            />
+          </div>
+          <div>
+            <Label htmlFor="or-base-url" className="text-xs text-muted-foreground">
+              Base URL (optional)
+            </Label>
+            <Input
+              id="or-base-url"
+              placeholder="https://openrouter.ai/api/v1"
+              value={orBaseUrl}
+              onChange={(e) => setOrBaseUrl(e.target.value)}
+              className="mt-1 font-mono text-sm"
+            />
+          </div>
+          <div>
+            <Label htmlFor="or-model" className="text-xs text-muted-foreground">
+              Default Model
+            </Label>
+            <Input
+              id="or-model"
+              placeholder="anthropic/claude-sonnet-4"
+              value={orModel}
+              onChange={(e) => setOrModel(e.target.value)}
+              className="mt-1 font-mono text-sm"
+            />
+            <p className="text-xs text-muted-foreground mt-1">
+              Browse models at{" "}
+              <a
+                href="https://openrouter.ai/models"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-primary underline"
+              >
+                openrouter.ai/models
+              </a>
+            </p>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center gap-3">
         <Button onClick={handleSave} disabled={saving} size="sm" className="gap-2">
           {saving ? (

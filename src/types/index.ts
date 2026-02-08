@@ -348,6 +348,12 @@ export const SETTING_KEYS = {
 } as const;
 
 // ==========================================
+// Provider Types
+// ==========================================
+
+export type ApiProvider = 'claude_code' | 'openrouter';
+
+// ==========================================
 // Claude Client Types
 // ==========================================
 
@@ -361,4 +367,16 @@ export interface ClaudeStreamOptions {
   mcpServers?: Record<string, MCPServerConfig>;
   abortController?: AbortController;
   permissionMode?: string;
+}
+
+// ==========================================
+// OpenRouter Client Types
+// ==========================================
+
+export interface OpenRouterStreamOptions {
+  prompt: string;
+  sessionId: string;
+  model?: string;
+  systemPrompt?: string;
+  abortController?: AbortController;
 }

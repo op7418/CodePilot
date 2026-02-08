@@ -44,6 +44,7 @@
     "shiki": "^3.22.0",
     "streamdown": "^2.1.0",
     "tailwind-merge": "^3.4.0",
+    "undici": "^7.21.0",
     "use-stick-to-bottom": "^1.1.2",
     "uuid": "^13.0.0"
   },

@@ -9,6 +9,10 @@ import { getSetting, setSetting } from '@/lib/db';
 const ALLOWED_KEYS = [
   'anthropic_auth_token',
   'anthropic_base_url',
+  'api_provider',           // 'claude_code' | 'openrouter'
+  'openrouter_api_key',
+  'openrouter_base_url',
+  'openrouter_model',       // default OpenRouter model ID
 ];
 
 export async function GET() {
@@ -17,8 +21,8 @@ export async function GET() {
     for (const key of ALLOWED_KEYS) {
       const value = getSetting(key);
       if (value !== undefined) {
-        // Mask token for security (only return last 8 chars)
-        if (key === 'anthropic_auth_token' && value.length > 8) {
+        // Mask tokens for security (only return last 8 chars)
+        if ((key === 'anthropic_auth_token' || key === 'openrouter_api_key') && value.length > 8) {
           result[key] = '***' + value.slice(-8);
         } else {
           result[key] = value;
@@ -46,7 +50,7 @@ export async function PUT(request: NextRequest) {
       const strValue = String(value ?? '').trim();
       if (strValue) {
         // Don't overwrite token if user sent the masked version back
-        if (key === 'anthropic_auth_token' && strValue.startsWith('***')) {
+        if ((key === 'anthropic_auth_token' || key === 'openrouter_api_key') && strValue.startsWith('***')) {
           continue;
         }
         setSetting(key, strValue);
