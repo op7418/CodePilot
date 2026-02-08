@@ -1,5 +1,6 @@
 import { execFileSync, execFile } from 'child_process';
 import { promisify } from 'util';
+import fs from 'fs';
 import os from 'os';
 import path from 'path';
 
@@ -161,4 +162,51 @@ export async function getClaudeVersion(claudePath: string): Promise<string | nul
   } catch {
     return null;
   }
+}
+
+/**
+ * Find git-bash (bash.exe) on Windows.
+ * Required by Claude Code on Windows for shell execution.
+ * Returns the path to bash.exe, or undefined if not found.
+ */
+export function findGitBash(): string | undefined {
+  if (!isWindows) return undefined;
+
+  // 1. Already set by user
+  if (process.env.CLAUDE_CODE_GIT_BASH_PATH) {
+    const envPath = process.env.CLAUDE_CODE_GIT_BASH_PATH;
+    if (fs.existsSync(envPath)) return envPath;
+  }
+
+  // 2. Common installation paths
+  const commonPaths = [
+    'C:\\Program Files\\Git\\bin\\bash.exe',
+    'C:\\Program Files (x86)\\Git\\bin\\bash.exe',
+  ];
+  for (const p of commonPaths) {
+    if (fs.existsSync(p)) return p;
+  }
+
+  // 3. Derive from `where git` output
+  try {
+    const result = execFileSync('where', ['git'], {
+      timeout: 3000,
+      stdio: 'pipe',
+      shell: true,
+    });
+    const lines = result.toString().trim().split(/\r?\n/);
+    for (const line of lines) {
+      const gitExe = line.trim();
+      if (!gitExe) continue;
+      // git.exe is typically at <GitRoot>/cmd/git.exe or <GitRoot>/bin/git.exe
+      const gitDir = path.dirname(gitExe);
+      const gitRoot = path.dirname(gitDir);
+      const bashPath = path.join(gitRoot, 'bin', 'bash.exe');
+      if (fs.existsSync(bashPath)) return bashPath;
+    }
+  } catch {
+    // where git failed, skip
+  }
+
+  return undefined;
 }

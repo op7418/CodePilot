@@ -15,7 +15,7 @@ import type {
 import type { ClaudeStreamOptions, SSEEvent, TokenUsage, MCPServerConfig, PermissionRequestEvent } from '@/types';
 import { registerPendingPermission } from './permission-registry';
 import { getSetting } from './db';
-import { findClaudeBinary, getExpandedPath } from './platform';
+import { findClaudeBinary, getExpandedPath, isWindows, findGitBash } from './platform';
 import os from 'os';
 
 let cachedClaudePath: string | null | undefined;
@@ -107,6 +107,14 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         if (!sdkEnv.USERPROFILE) sdkEnv.USERPROFILE = os.homedir();
         // Ensure SDK subprocess has expanded PATH (consistent with Electron mode)
         sdkEnv.PATH = getExpandedPath();
+
+        // Auto-detect git-bash on Windows (required by Claude Code)
+        if (isWindows && !sdkEnv.CLAUDE_CODE_GIT_BASH_PATH) {
+          const gitBashPath = findGitBash();
+          if (gitBashPath) {
+            sdkEnv.CLAUDE_CODE_GIT_BASH_PATH = gitBashPath;
+          }
+        }
 
         const appToken = getSetting('anthropic_auth_token');
         const appBaseUrl = getSetting('anthropic_base_url');
