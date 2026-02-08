@@ -67,6 +67,7 @@ function ApiConfigSection() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<"idle" | "saved" | "error">("idle");
+  const [sources, setSources] = useState<Record<string, string>>({});
 
   useEffect(() => {
     fetch("/api/settings/app")
@@ -75,6 +76,7 @@ function ApiConfigSection() {
         const s = data.settings || {};
         setToken(s.anthropic_auth_token || "");
         setBaseUrl(s.anthropic_base_url || "");
+        setSources(data.sources || {});
       })
       .catch(() => {})
       .finally(() => setLoading(false));
@@ -97,6 +99,15 @@ function ApiConfigSection() {
       if (res.ok) {
         setStatus("saved");
         setTimeout(() => setStatus("idle"), 2000);
+        // Re-fetch to update sources
+        const refetch = await fetch("/api/settings/app");
+        if (refetch.ok) {
+          const data = await refetch.json();
+          const s = data.settings || {};
+          setToken(s.anthropic_auth_token || "");
+          setBaseUrl(s.anthropic_base_url || "");
+          setSources(data.sources || {});
+        }
       } else {
         setStatus("error");
       }
@@ -122,6 +133,9 @@ function ApiConfigSection() {
         <div>
           <Label htmlFor="api-base-url" className="text-xs text-muted-foreground">
             API Base URL
+            {sources.anthropic_base_url === "env" && (
+              <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">from env</span>
+            )}
           </Label>
           <Input
             id="api-base-url"
@@ -133,7 +147,10 @@ function ApiConfigSection() {
         </div>
         <div>
           <Label htmlFor="api-token" className="text-xs text-muted-foreground">
-            API Token (ANTHROPIC_AUTH_TOKEN)
+            API Token (ANTHROPIC_AUTH_TOKEN / ANTHROPIC_API_KEY)
+            {sources.anthropic_auth_token === "env" && (
+              <span className="ml-2 rounded bg-blue-100 px-1.5 py-0.5 text-[10px] font-medium text-blue-700 dark:bg-blue-900/30 dark:text-blue-400">from env</span>
+            )}
           </Label>
           <Input
             id="api-token"
@@ -143,6 +160,9 @@ function ApiConfigSection() {
             onChange={(e) => setToken(e.target.value)}
             className="mt-1 font-mono text-sm"
           />
+          {sources.anthropic_auth_token === "env" && (
+            <p className="mt-1 text-[11px] text-muted-foreground">Currently using value from environment variable. Save to override with a custom value.</p>
+          )}
         </div>
       </div>
       <div className="flex items-center gap-3">

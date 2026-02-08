@@ -11,21 +11,41 @@ const ALLOWED_KEYS = [
   'anthropic_base_url',
 ];
 
+const ENV_VAR_MAP: Record<string, string[]> = {
+  anthropic_auth_token: ['ANTHROPIC_AUTH_TOKEN', 'ANTHROPIC_API_KEY'],
+  anthropic_base_url: ['ANTHROPIC_BASE_URL'],
+};
+
 export async function GET() {
   try {
     const result: Record<string, string> = {};
+    const sources: Record<string, 'db' | 'env'> = {};
     for (const key of ALLOWED_KEYS) {
-      const value = getSetting(key);
-      if (value !== undefined) {
-        // Mask token for security (only return last 8 chars)
+      let value = getSetting(key);
+      let source: 'db' | 'env' = 'db';
+
+      if (value === undefined || value === '') {
+        const envVarNames = ENV_VAR_MAP[key] ?? [];
+        for (const envName of envVarNames) {
+          const envValue = process.env[envName];
+          if (envValue) {
+            value = envValue;
+            source = 'env';
+            break;
+          }
+        }
+      }
+
+      if (value !== undefined && value !== '') {
         if (key === 'anthropic_auth_token' && value.length > 8) {
           result[key] = '***' + value.slice(-8);
         } else {
           result[key] = value;
         }
+        sources[key] = source;
       }
     }
-    return NextResponse.json({ settings: result });
+    return NextResponse.json({ settings: result, sources });
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to read app settings';
     return NextResponse.json({ error: message }, { status: 500 });
