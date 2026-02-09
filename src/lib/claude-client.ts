@@ -264,8 +264,20 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
 
         // Find claude binary for packaged app where PATH is limited
         const claudePath = findClaudePath();
+        console.log('[claude-client] Found Claude binary at:', claudePath);
+
         if (claudePath) {
-          queryOptions.pathToClaudeCodeExecutable = claudePath;
+            // On Windows, if the binary is a .cmd/.bat file, we cannot use it directly
+            // because the SDK uses spawn() without { shell: true } and doesn't expose an option to enable it.
+            // In this case, we're better off falling back to the SDK's internal JS implementation
+            // (which runs via 'node') rather than failing with spawn EINVAL.
+            const isWindowsCmd = process.platform === 'win32' && /\.(cmd|bat)$/i.test(claudePath);
+            
+            if (isWindowsCmd) {
+                console.warn(`[claude-client] Ignoring system Claude binary "${claudePath}" because it requires shell execution (which SDK lacks). Falling back to internal implementation.`);
+            } else {
+                queryOptions.pathToClaudeCodeExecutable = claudePath;
+            }
         }
 
         if (model) {
@@ -434,9 +446,11 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           }
         }
 
+
+
         const conversation = query({
           prompt: finalPrompt,
-          options: queryOptions,
+          options: queryOptions as Options,
         });
 
         let lastAssistantText = '';
