@@ -96,8 +96,34 @@ export function getExpandedPath(): string {
 }
 
 /**
+ * On Windows, npm .cmd shims cannot be spawned directly by the Claude Agent SDK
+ * (which uses child_process.spawn without shell:true, causing EINVAL).
+ * This function reads a .cmd file and extracts the underlying .js entry point
+ * so the SDK can spawn it via node instead.
+ */
+function resolveNpmCmdToJs(cmdPath: string): string | undefined {
+  try {
+    const content = fs.readFileSync(cmdPath, 'utf-8');
+    // npm .cmd shims contain a line like: "%_prog%" "%dp0%\node_modules\...\cli.js" %*
+    // Extract the relative path after %dp0%
+    const match = content.match(/%dp0%\\([^"]+\.js)/i);
+    if (match) {
+      const jsRelPath = match[1].replace(/\\/g, path.sep);
+      const jsPath = path.join(path.dirname(cmdPath), jsRelPath);
+      if (fs.existsSync(jsPath)) {
+        return jsPath;
+      }
+    }
+  } catch {
+    // Failed to read or parse .cmd file
+  }
+  return undefined;
+}
+
+/**
  * Find and validate the Claude CLI binary.
  * Tests each candidate with --version before returning.
+ * On Windows, resolves .cmd shims to .js entry points for SDK compatibility.
  */
 export function findClaudeBinary(): string | undefined {
   // Try known candidate paths first
@@ -108,6 +134,11 @@ export function findClaudeBinary(): string | undefined {
         stdio: 'pipe',
         shell: needsShell(p),
       });
+      // On Windows, resolve .cmd shims to .js entry points for SDK spawn compatibility
+      if (isWindows && /\.(cmd|bat)$/i.test(p)) {
+        const jsPath = resolveNpmCmdToJs(p);
+        if (jsPath) return jsPath;
+      }
       return p;
     } catch {
       // not found, try next
@@ -135,6 +166,11 @@ export function findClaudeBinary(): string | undefined {
           stdio: 'pipe',
           shell: needsShell(candidate),
         });
+        // On Windows, resolve .cmd shims to .js entry points for SDK spawn compatibility
+        if (isWindows && /\.(cmd|bat)$/i.test(candidate)) {
+          const jsPath = resolveNpmCmdToJs(candidate);
+          if (jsPath) return jsPath;
+        }
         return candidate;
       } catch {
         continue;
@@ -149,14 +185,18 @@ export function findClaudeBinary(): string | undefined {
 
 /**
  * Execute claude --version and return the version string.
- * Handles .cmd shell execution on Windows.
+ * Handles .cmd shell execution on Windows and .js entry points.
  */
 export async function getClaudeVersion(claudePath: string): Promise<string | null> {
   try {
-    const { stdout } = await execFileAsync(claudePath, ['--version'], {
+    // .js entry points (from resolveNpmCmdToJs) need to be run via node
+    const isJsFile = /\.m?js$/i.test(claudePath);
+    const cmd = isJsFile ? process.execPath : claudePath;
+    const args = isJsFile ? [claudePath, '--version'] : ['--version'];
+    const { stdout } = await execFileAsync(cmd, args, {
       timeout: 5000,
       env: { ...process.env, PATH: getExpandedPath() },
-      shell: needsShell(claudePath),
+      shell: !isJsFile && needsShell(claudePath),
     });
     return stdout.trim() || null;
   } catch {
