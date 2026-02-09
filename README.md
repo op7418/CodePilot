@@ -10,7 +10,7 @@
 [中文文档](./README_CN.md)
 
 ---
-
+good
 ## Features
 
 - **💬 Conversational coding** -- Stream responses from Claude in real time with full Markdown rendering, syntax-highlighted code blocks, and tool-call visualization.
