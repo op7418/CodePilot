@@ -49,7 +49,11 @@ export async function PUT(request: Request) {
       );
     }
 
-    writeSettingsFile(settings);
+    // Merge with existing settings to preserve fields the frontend doesn't manage
+    // (e.g. mcpServers configured via CLI)
+    const existing = readSettingsFile();
+    const merged = { ...existing, ...settings };
+    writeSettingsFile(merged);
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

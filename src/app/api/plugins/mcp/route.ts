@@ -8,6 +8,7 @@ import type {
   ErrorResponse,
   SuccessResponse,
 } from '@/types';
+import { discoverCliMcpServers } from '@/lib/mcp-config';
 
 function getSettingsPath(): string {
   return path.join(os.homedir(), '.claude', 'settings.json');
@@ -35,7 +36,16 @@ function writeSettings(settings: Record<string, unknown>): void {
 export async function GET(): Promise<NextResponse<MCPConfigResponse | ErrorResponse>> {
   try {
     const settings = readSettings();
-    const mcpServers = (settings.mcpServers || {}) as Record<string, MCPServerConfig>;
+    const settingsServers = (settings.mcpServers || {}) as Record<string, MCPServerConfig>;
+    const cliServers = discoverCliMcpServers();
+    // CLI-discovered servers as base, settings.json overrides
+    const mcpServers: Record<string, MCPServerConfig & { source?: string }> = {};
+    for (const [name, config] of Object.entries(cliServers)) {
+      mcpServers[name] = { ...config, source: 'cli' };
+    }
+    for (const [name, config] of Object.entries(settingsServers)) {
+      mcpServers[name] = { ...config, source: 'settings' };
+    }
     return NextResponse.json({ mcpServers });
   } catch (error) {
     return NextResponse.json(

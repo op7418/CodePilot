@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { streamClaude } from '@/lib/claude-client';
 import { addMessage, getSession, updateSessionTitle, updateSdkSessionId, getSetting } from '@/lib/db';
+import { getMergedMcpServers } from '@/lib/mcp-config';
 import type { SendMessageRequest, SSEEvent, TokenUsage, MessageContentBlock, FileAttachment } from '@/types';
 import fs from 'fs';
 import path from 'path';
@@ -92,6 +93,10 @@ export async function POST(request: NextRequest) {
         }))
       : undefined;
 
+    // Read MCP server configs from CLI discovery, user settings, and project .mcp.json
+    const workingDirectory = session.working_directory || undefined;
+    const mcpServers = getMergedMcpServers(workingDirectory);
+
     // Stream Claude response, using SDK session ID for resume if available
     const stream = streamClaude({
       prompt: content,
@@ -99,10 +104,11 @@ export async function POST(request: NextRequest) {
       sdkSessionId: session.sdk_session_id || undefined,
       model: effectiveModel,
       systemPrompt: systemPromptOverride || session.system_prompt || undefined,
-      workingDirectory: session.working_directory || undefined,
+      workingDirectory,
       abortController,
       permissionMode,
       files: fileAttachments,
+      mcpServers: Object.keys(mcpServers).length > 0 ? mcpServers : undefined,
     });
 
     // Tee the stream: one for client, one for collecting the response
