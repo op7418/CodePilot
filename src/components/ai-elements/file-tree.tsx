@@ -129,8 +129,8 @@ export const FileTreeFolder = ({
   }, [togglePath, path]);
 
   const handleSelect = useCallback(() => {
-    onSelect?.(path);
-  }, [onSelect, path]);
+    togglePath(path);
+  }, [togglePath, path]);
 
   const folderContextValue = useMemo(
     () => ({ isExpanded, name, path }),
