@@ -97,7 +97,7 @@ export function FolderPicker({ open, onOpenChange, onSelect, initialPath }: Fold
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg overflow-hidden">
+      <DialogContent className="sm:max-w-2xl">
         <DialogHeader>
           <DialogTitle>Select Project Folder</DialogTitle>
         </DialogHeader>
