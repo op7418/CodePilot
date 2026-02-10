@@ -13,9 +13,10 @@ import type { FilePreview as FilePreviewType } from "@/types";
 interface FilePreviewProps {
   filePath: string;
   onBack: () => void;
+  workingDirectory?: string;
 }
 
-export function FilePreview({ filePath, onBack }: FilePreviewProps) {
+export function FilePreview({ filePath, onBack, workingDirectory }: FilePreviewProps) {
   const [preview, setPreview] = useState<FilePreviewType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -26,8 +27,10 @@ export function FilePreview({ filePath, onBack }: FilePreviewProps) {
       setLoading(true);
       setError(null);
       try {
+        const params = new URLSearchParams({ path: filePath });
+        if (workingDirectory) params.set('baseDir', workingDirectory);
         const res = await fetch(
-          `/api/files/preview?path=${encodeURIComponent(filePath)}`
+          `/api/files/preview?${params.toString()}`
         );
         if (!res.ok) {
           const data = await res.json();
@@ -43,7 +46,7 @@ export function FilePreview({ filePath, onBack }: FilePreviewProps) {
     }
 
     loadPreview();
-  }, [filePath]);
+  }, [filePath, workingDirectory]);
 
   const handleCopyPath = async () => {
     await navigator.clipboard.writeText(filePath);

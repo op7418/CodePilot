@@ -353,9 +353,11 @@ export function MessageInput({
 
   // Fetch files for @ mention
   const fetchFiles = useCallback(async (filter: string) => {
+    if (!workingDirectory) return [];
     try {
       const params = new URLSearchParams();
-      if (sessionId) params.set('session_id', sessionId);
+      params.set('dir', workingDirectory);
+      params.set('baseDir', workingDirectory);
       if (filter) params.set('q', filter);
       const res = await fetch(`/api/files?${params.toString()}`);
       if (!res.ok) return [];
@@ -373,7 +375,7 @@ export function MessageInput({
     } catch {
       return [];
     }
-  }, [sessionId]);
+  }, [workingDirectory]);
 
   // Fetch skills for / command (built-in + API)
   // Returns all items unfiltered — filtering is done by filteredItems

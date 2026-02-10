@@ -154,7 +154,7 @@ export function RightPanel() {
           <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70 mb-1.5 block">Files</span>
           <div className="overflow-hidden">
             {previewPath ? (
-              <FilePreview filePath={previewPath} onBack={handleBackToTree} />
+              <FilePreview filePath={previewPath} onBack={handleBackToTree} workingDirectory={workingDirectory} />
             ) : (
               <FileTree
                 workingDirectory={workingDirectory}

@@ -74,6 +74,50 @@ export function isPathSafe(basePath: string, targetPath: string): boolean {
   return resolvedTarget.startsWith(resolvedBase + path.sep) || resolvedTarget === resolvedBase;
 }
 
+/**
+ * Check if the given path is a filesystem root (e.g. `/` on Unix, `C:\` on Windows).
+ */
+export function isRootPath(p: string): boolean {
+  const resolved = path.resolve(p);
+  return resolved === path.parse(resolved).root;
+}
+
+/**
+ * Get the depth of a path relative to its filesystem root.
+ * Examples:
+ *   `/`            → 0
+ *   `/etc`         → 1
+ *   `/opt/projects`→ 2
+ *   `C:\`          → 0
+ *   `D:\projects`  → 1
+ *   `D:\projects\myapp` → 2
+ */
+export function getPathDepth(p: string): number {
+  const resolved = path.resolve(p);
+  const root = path.parse(resolved).root;
+  if (resolved === root) return 0;
+  // Remove the root prefix and split by separator
+  const relative = resolved.slice(root.length);
+  return relative.split(path.sep).filter(Boolean).length;
+}
+
+/**
+ * Minimum required directory depth for baseDir.
+ * Depth ≥ 2 prevents shallow system directories like /etc, /tmp, /var
+ * from being used as base directories while allowing real project paths
+ * like /opt/projects/myapp or D:\projects\myapp.
+ */
+const MIN_BASE_DIR_DEPTH = 2;
+
+/**
+ * Check if a path is too broad to be used as a baseDir.
+ * Rejects filesystem roots and shallow paths (depth < 2) that could
+ * expose sensitive system directories.
+ */
+export function isBaseDirUnsafe(p: string): boolean {
+  return getPathDepth(p) < MIN_BASE_DIR_DEPTH;
+}
+
 export function scanDirectory(dir: string, depth: number = 3): FileTreeNode[] {
   const resolvedDir = path.resolve(dir);
 

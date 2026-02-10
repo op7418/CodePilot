@@ -35,6 +35,7 @@ yarn-error.log*
 
 # vercel
 .vercel
+.claude
 
 # local database
 /data/

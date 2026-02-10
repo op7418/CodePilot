@@ -8,6 +8,9 @@
  * 2. Paths outside the base directory are rejected
  * 3. Symlink-based escapes are caught
  * 4. Edge cases (root, same path, trailing separators) are handled
+ * 5. isRootPath correctly identifies filesystem roots
+ * 6. getPathDepth returns correct depth values
+ * 7. isBaseDirUnsafe blocks shallow/system directories
  */
 
 import { describe, it, after } from 'node:test';
@@ -16,8 +19,8 @@ import path from 'path';
 import os from 'os';
 import fs from 'fs';
 
-// Import the function under test
-import { isPathSafe } from '../../lib/files';
+// Import the functions under test
+import { isPathSafe, isRootPath, getPathDepth, isBaseDirUnsafe } from '../../lib/files';
 
 describe('isPathSafe', () => {
   it('should allow paths within the base directory', () => {
@@ -118,18 +121,120 @@ describe('File API path traversal scenarios', () => {
   });
 });
 
-describe('baseDir validation', () => {
-  it('should reject baseDir set to root (bypass attempt)', () => {
-    // If baseDir=/, every path would pass isPathSafe — must be blocked
-    const homeDir = os.homedir();
-    assert.equal(isPathSafe(homeDir, '/'), false);
+describe('isRootPath', () => {
+  it('should detect Unix root as a root path', () => {
+    assert.equal(isRootPath('/'), true);
   });
 
-  it('should reject baseDir outside home directory', () => {
-    const homeDir = os.homedir();
-    assert.equal(isPathSafe(homeDir, '/tmp'), false);
-    assert.equal(isPathSafe(homeDir, '/etc'), false);
-    assert.equal(isPathSafe(homeDir, '/var/log'), false);
+  it('should detect Windows drive roots as root paths', () => {
+    if (process.platform === 'win32') {
+      assert.equal(isRootPath('C:\\'), true);
+      assert.equal(isRootPath('D:\\'), true);
+    }
+  });
+
+  it('should not treat regular directories as root paths', () => {
+    assert.equal(isRootPath('/home/user/project'), false);
+    assert.equal(isRootPath('/tmp'), false);
+    assert.equal(isRootPath('/etc'), false);
+    if (process.platform === 'win32') {
+      assert.equal(isRootPath('C:\\Users\\user\\project'), false);
+      assert.equal(isRootPath('D:\\projects'), false);
+    }
+  });
+});
+
+describe('getPathDepth', () => {
+  it('should return 0 for filesystem roots', () => {
+    assert.equal(getPathDepth('/'), 0);
+    if (process.platform === 'win32') {
+      assert.equal(getPathDepth('C:\\'), 0);
+      assert.equal(getPathDepth('D:\\'), 0);
+    }
+  });
+
+  it('should return 1 for top-level directories', () => {
+    if (process.platform === 'win32') {
+      assert.equal(getPathDepth('C:\\Users'), 1);
+      assert.equal(getPathDepth('D:\\projects'), 1);
+    } else {
+      assert.equal(getPathDepth('/etc'), 1);
+      assert.equal(getPathDepth('/tmp'), 1);
+      assert.equal(getPathDepth('/var'), 1);
+    }
+  });
+
+  it('should return 2 for two-level paths', () => {
+    if (process.platform === 'win32') {
+      assert.equal(getPathDepth('C:\\Users\\user'), 2);
+      assert.equal(getPathDepth('D:\\projects\\myapp'), 2);
+    } else {
+      assert.equal(getPathDepth('/opt/projects'), 2);
+      assert.equal(getPathDepth('/home/user'), 2);
+    }
+  });
+
+  it('should return correct depth for deep paths', () => {
+    if (process.platform === 'win32') {
+      assert.equal(getPathDepth('C:\\Users\\user\\projects\\myapp'), 4);
+    } else {
+      assert.equal(getPathDepth('/home/user/projects/myapp'), 4);
+    }
+  });
+});
+
+describe('isBaseDirUnsafe', () => {
+  it('should reject filesystem roots', () => {
+    assert.equal(isBaseDirUnsafe('/'), true);
+    if (process.platform === 'win32') {
+      assert.equal(isBaseDirUnsafe('C:\\'), true);
+      assert.equal(isBaseDirUnsafe('D:\\'), true);
+    }
+  });
+
+  it('should reject shallow system directories (depth 1)', () => {
+    if (process.platform === 'win32') {
+      assert.equal(isBaseDirUnsafe('D:\\projects'), true);
+    } else {
+      assert.equal(isBaseDirUnsafe('/etc'), true);
+      assert.equal(isBaseDirUnsafe('/tmp'), true);
+      assert.equal(isBaseDirUnsafe('/var'), true);
+    }
+  });
+
+  it('should allow directories with depth >= 2', () => {
+    if (process.platform === 'win32') {
+      assert.equal(isBaseDirUnsafe('D:\\projects\\myapp'), false);
+      assert.equal(isBaseDirUnsafe('C:\\Users\\user'), false);
+    } else {
+      assert.equal(isBaseDirUnsafe('/opt/projects'), false);
+      assert.equal(isBaseDirUnsafe('/home/user'), false);
+      assert.equal(isBaseDirUnsafe('/home/user/projects/myapp'), false);
+    }
+  });
+});
+
+describe('baseDir validation', () => {
+  it('should reject baseDir set to root (bypass attempt)', () => {
+    assert.equal(isBaseDirUnsafe('/'), true);
+  });
+
+  it('should reject shallow system dirs as baseDir', () => {
+    // /etc, /tmp etc. have depth 1 — too shallow for baseDir
+    if (process.platform === 'win32') {
+      assert.equal(isBaseDirUnsafe('D:\\projects'), true);
+    } else {
+      assert.equal(isBaseDirUnsafe('/etc'), true);
+      assert.equal(isBaseDirUnsafe('/tmp'), true);
+    }
+  });
+
+  it('should allow baseDir with sufficient depth outside home', () => {
+    if (process.platform === 'win32') {
+      assert.equal(isBaseDirUnsafe('D:\\projects\\myapp'), false);
+    } else {
+      assert.equal(isBaseDirUnsafe('/opt/projects'), false);
+    }
   });
 
   it('should allow baseDir inside home directory', () => {
@@ -153,5 +258,18 @@ describe('baseDir validation', () => {
     const homeDir = os.homedir();
     const filePath = path.join(homeDir, 'documents', 'file.txt');
     assert.equal(isPathSafe(homeDir, filePath), true);
+  });
+
+  it('should allow dir within a non-home baseDir', () => {
+    // This is the key fix: D:\\projects\\myapp should work as baseDir
+    const baseDir = path.resolve('/opt/projects/myapp');
+    const targetDir = path.join(baseDir, 'src', 'components');
+    assert.equal(isPathSafe(baseDir, targetDir), true);
+  });
+
+  it('should block dir outside a non-home baseDir', () => {
+    const baseDir = path.resolve('/opt/projects/myapp');
+    const targetDir = path.resolve('/etc/passwd');
+    assert.equal(isPathSafe(baseDir, targetDir), false);
   });
 });

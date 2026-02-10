@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { scanDirectory, isPathSafe } from '@/lib/files';
+import { scanDirectory, isPathSafe, isBaseDirUnsafe } from '@/lib/files';
 import type { FileTreeResponse, ErrorResponse } from '@/types';
 
 export async function GET(request: NextRequest) {
@@ -20,17 +20,17 @@ export async function GET(request: NextRequest) {
   const homeDir = os.homedir();
 
   // Use baseDir (the session's working directory) as the trust boundary.
-  // The baseDir itself must be under the user's home directory to prevent
+  // The baseDir must not be a filesystem root (e.g. / or C:\) to prevent
   // attackers from setting baseDir=/ to bypass all restrictions.
   // If no baseDir is provided, fall back to the user's home directory
   // to prevent scanning arbitrary system directories.
   const baseDir = searchParams.get('baseDir');
   if (baseDir) {
     const resolvedBase = path.resolve(baseDir);
-    // Ensure baseDir is within the home directory (prevent baseDir=/ bypass)
-    if (!isPathSafe(homeDir, resolvedBase)) {
+    // Prevent overly broad baseDir (root paths or shallow system dirs like /etc)
+    if (isBaseDirUnsafe(resolvedBase)) {
       return NextResponse.json<ErrorResponse>(
-        { error: 'Base directory is outside the allowed scope' },
+        { error: 'Base directory is too broad (must be at least 2 levels deep)' },
         { status: 403 }
       );
     }
