@@ -2,8 +2,9 @@
  * Shared MCP configuration reader.
  * Reads MCP server configs from:
  *   1. CLI discovery: `claude mcp list` (cached 60s)
- *   2. User-level: ~/.claude/settings.json -> mcpServers
- *   3. Project-level: <workDir>/.mcp.json -> mcpServers
+ *   2. Claude config: ~/.claude.json -> mcpServers (fallback for CLI discovery)
+ *   3. User-level: ~/.claude/settings.json -> mcpServers
+ *   4. Project-level: <workDir>/.mcp.json -> mcpServers
  * Later sources override earlier ones for the same server name.
  */
 
@@ -179,6 +180,23 @@ export async function discoverCliMcpServers(
 }
 
 /**
+ * Read MCP servers from ~/.claude.json (Claude Code's main config file).
+ * This is where `claude mcp add` stores server configs.
+ * Used as a reliable fallback when `claude mcp list` fails (e.g. on Windows
+ * where Git Bash detection can prevent the CLI from running).
+ */
+export function readClaudeConfigMcpServers(): Record<string, MCPServerConfig> {
+  const configPath = path.join(os.homedir(), '.claude.json');
+  try {
+    if (!fs.existsSync(configPath)) return {};
+    const config = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
+    return (config.mcpServers || {}) as Record<string, MCPServerConfig>;
+  } catch {
+    return {};
+  }
+}
+
+/**
  * Read MCP servers from ~/.claude/settings.json
  */
 export function readUserMcpServers(): Record<string, MCPServerConfig> {
@@ -210,14 +228,15 @@ export function readProjectMcpServers(
 }
 
 /**
- * Merge CLI-discovered, user-level, and project-level MCP servers.
- * Priority (highest wins): project-level > user-level > CLI-discovered.
+ * Merge CLI-discovered, claude config, user-level, and project-level MCP servers.
+ * Priority (highest wins): project-level > user-level > claude config > CLI-discovered.
  */
 export async function getMergedMcpServers(
   workDir?: string
 ): Promise<Record<string, MCPServerConfig>> {
   const cliServers = await discoverCliMcpServers();
+  const claudeConfigServers = readClaudeConfigMcpServers();
   const userServers = readUserMcpServers();
   const projectServers = readProjectMcpServers(workDir);
-  return { ...cliServers, ...userServers, ...projectServers };
+  return { ...cliServers, ...claudeConfigServers, ...userServers, ...projectServers };
 }

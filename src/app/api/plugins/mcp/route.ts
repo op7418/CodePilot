@@ -8,7 +8,7 @@ import type {
   ErrorResponse,
   SuccessResponse,
 } from '@/types';
-import { discoverCliMcpServers, invalidateCliMcpCache } from '@/lib/mcp-config';
+import { discoverCliMcpServers, invalidateCliMcpCache, readClaudeConfigMcpServers } from '@/lib/mcp-config';
 
 function getSettingsPath(): string {
   return path.join(os.homedir(), '.claude', 'settings.json');
@@ -92,11 +92,19 @@ export async function GET(request: NextRequest): Promise<NextResponse<MCPConfigR
     const settings = readSettings();
     const settingsServers = normalizeSettingsServers(settings.mcpServers);
     const cliServers = await discoverCliMcpServers(forceRefresh);
+    const claudeConfigServers = readClaudeConfigMcpServers();
 
-    // CLI-discovered servers are read-only in UI; settings servers override same-name CLI entries.
+    // CLI-discovered servers and ~/.claude.json servers are read-only in UI;
+    // settings servers override same-name entries.
     const mcpServers: Record<string, MCPServerConfig> = {};
     for (const [name, config] of Object.entries(cliServers)) {
       mcpServers[name] = { ...config, source: 'cli' };
+    }
+    for (const [name, config] of Object.entries(claudeConfigServers)) {
+      // Only add if not already discovered via CLI (same data, CLI is authoritative)
+      if (!mcpServers[name]) {
+        mcpServers[name] = { ...config, source: 'cli' };
+      }
     }
     for (const [name, config] of Object.entries(settingsServers)) {
       mcpServers[name] = { ...config, source: 'settings' };
