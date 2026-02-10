@@ -2,8 +2,8 @@
  * Shared MCP configuration reader.
  * Reads MCP server configs from:
  *   1. CLI discovery: `claude mcp list` (cached 60s)
- *   2. User-level: ~/.claude/settings.json → mcpServers
- *   3. Project-level: <workDir>/.mcp.json → mcpServers
+ *   2. User-level: ~/.claude/settings.json -> mcpServers
+ *   3. Project-level: <workDir>/.mcp.json -> mcpServers
  * Later sources override earlier ones for the same server name.
  */
 
@@ -28,9 +28,98 @@ export function invalidateCliMcpCache(): void {
   cliCache = null;
 }
 
+type QuoteChar = '"' | "'";
+
+/**
+ * Split a CLI command string into argv tokens while preserving quoted sections.
+ */
+function splitCommandLine(commandLine: string): string[] {
+  const parts: string[] = [];
+  let current = '';
+  let quote: QuoteChar | null = null;
+
+  for (let i = 0; i < commandLine.length; i++) {
+    const ch = commandLine[i];
+
+    if (quote) {
+      if (ch === quote) {
+        quote = null;
+        continue;
+      }
+
+      // Handle escaped quotes/backslashes inside double-quoted strings.
+      if (ch === '\\' && quote === '"' && i + 1 < commandLine.length) {
+        const next = commandLine[i + 1];
+        if (next === '"' || next === '\\') {
+          current += next;
+          i++;
+          continue;
+        }
+      }
+
+      current += ch;
+      continue;
+    }
+
+    if (ch === '"' || ch === "'") {
+      quote = ch;
+      continue;
+    }
+
+    if (/\s/.test(ch)) {
+      if (current) {
+        parts.push(current);
+        current = '';
+      }
+      continue;
+    }
+
+    current += ch;
+  }
+
+  if (current) {
+    parts.push(current);
+  }
+
+  return parts;
+}
+
+/**
+ * Parse one line from `claude mcp list` output.
+ * Expected shape: `<name>: <command> - [status]`.
+ */
+export function parseCliMcpListLine(
+  line: string
+): { name: string; config: MCPServerConfig } | null {
+  const colonIndex = line.indexOf(':');
+  if (colonIndex <= 0) return null;
+
+  const name = line.slice(0, colonIndex).trim();
+  if (!name) return null;
+
+  const commandAndStatus = line.slice(colonIndex + 1).trim();
+  const statusSeparator = commandAndStatus.lastIndexOf(' - ');
+  if (statusSeparator <= 0) return null;
+
+  const fullCommand = commandAndStatus.slice(0, statusSeparator).trim();
+  const statusText = commandAndStatus.slice(statusSeparator + 3).trim();
+  if (!fullCommand || !/^[\u2713\u2717]/.test(statusText)) return null;
+
+  const argv = splitCommandLine(fullCommand);
+  if (argv.length === 0) return null;
+
+  const [command, ...args] = argv;
+  return {
+    name,
+    config: {
+      command,
+      ...(args.length > 0 ? { args } : {}),
+    },
+  };
+}
+
 /**
  * Discover MCP servers by calling `claude mcp list` (async).
- * Parses output lines like: `name: command args - ✓ Connected`
  * Results are cached for 60 seconds to avoid frequent CLI calls.
  *
  * NOTE: This relies on the human-readable output format of `claude mcp list`.
@@ -72,24 +161,17 @@ export async function discoverCliMcpServers(
       shell: needsShell,
     });
 
-    // Parse lines like:
-    //   reactbits: cmd /c npx reactbits-dev-mcp-server - ✓ Connected
-    //   shadcn: cmd /c npx shadcn@latest mcp - ✗ Failed
     for (const line of stdout.split(/\r?\n/)) {
       try {
-        const match = line.match(/^(\S+):\s+(.+?)\s+-\s+[✓✗]/);
-        if (!match) continue;
-        const [, name, fullCommand] = match;
-        const parts = fullCommand.trim().split(/\s+/);
-        const command = parts[0];
-        const args = parts.slice(1);
-        servers[name] = { command, ...(args.length > 0 ? { args } : {}) };
+        const parsed = parseCliMcpListLine(line);
+        if (!parsed) continue;
+        servers[parsed.name] = parsed.config;
       } catch {
-        // Single line parse failure — skip and continue with other lines
+        // Single line parse failure - skip and continue with other lines
       }
     }
   } catch {
-    // CLI not available or timed out — return empty
+    // CLI not available or timed out - return empty
   }
 
   cliCache = { servers, timestamp: Date.now() };

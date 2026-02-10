@@ -29,7 +29,7 @@ export async function GET() {
   try {
     const settings = readSettingsFile();
     return NextResponse.json({ settings });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to read settings" },
       { status: 500 }
@@ -42,31 +42,17 @@ export async function PUT(request: Request) {
     const body = await request.json();
     const { settings } = body;
 
-    if (!settings || typeof settings !== "object") {
+    if (!settings || typeof settings !== "object" || Array.isArray(settings)) {
       return NextResponse.json(
         { error: "Invalid settings data" },
         { status: 400 }
       );
     }
 
-    // Merge with existing settings to preserve fields the frontend doesn't manage
-    // (e.g. mcpServers configured via CLI).
-    // Skip keys whose value is an empty object to avoid accidentally wiping
-    // nested configs like mcpServers when the frontend sends {}.
-    const existing = readSettingsFile();
-    const merged = { ...existing };
-    for (const [key, value] of Object.entries(settings)) {
-      if (value !== undefined) {
-        // Skip empty objects to prevent overwriting nested configs
-        if (typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0) {
-          continue;
-        }
-        merged[key] = value;
-      }
-    }
-    writeSettingsFile(merged);
+    // Keep overwrite semantics: save exactly what the user submitted.
+    writeSettingsFile(settings as Record<string, unknown>);
     return NextResponse.json({ success: true });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       { error: "Failed to save settings" },
       { status: 500 }

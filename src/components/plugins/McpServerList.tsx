@@ -4,7 +4,6 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/com
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { HugeiconsIcon } from "@hugeicons/react";
-import type { IconSvgElement } from "@hugeicons/react";
 import { Delete02Icon, PencilIcon, ServerStack01Icon, Wifi01Icon, GlobeIcon } from "@hugeicons/core-free-icons";
 import type { MCPServer } from '@/types';
 
@@ -45,6 +44,8 @@ export function McpServerList({ servers, onEdit, onDelete }: McpServerListProps)
     <div className="space-y-3">
       {entries.map(([name, server]) => {
         const typeInfo = getServerTypeInfo(server);
+        const isCliDiscovered = server.source === 'cli';
+
         return (
           <Card key={name}>
             <CardHeader className="flex flex-row items-start justify-between space-y-0 pb-2">
@@ -55,8 +56,8 @@ export function McpServerList({ servers, onEdit, onDelete }: McpServerListProps)
                   <Badge variant="outline" className="text-xs shrink-0">
                     {typeInfo.label}
                   </Badge>
-                  <Badge variant="secondary" className="text-xs shrink-0">
-                    Configured
+                  <Badge variant={isCliDiscovered ? 'secondary' : 'default'} className="text-xs shrink-0">
+                    {isCliDiscovered ? 'CLI (read-only)' : 'Settings'}
                   </Badge>
                 </div>
                 <CardDescription className="text-xs mt-1 font-mono">
@@ -71,6 +72,8 @@ export function McpServerList({ servers, onEdit, onDelete }: McpServerListProps)
                   size="icon"
                   className="h-8 w-8"
                   onClick={() => onEdit(name, server)}
+                  disabled={isCliDiscovered}
+                  title={isCliDiscovered ? 'CLI-discovered servers are read-only' : 'Edit server'}
                 >
                   <HugeiconsIcon icon={PencilIcon} className="h-3.5 w-3.5" />
                 </Button>
@@ -79,6 +82,8 @@ export function McpServerList({ servers, onEdit, onDelete }: McpServerListProps)
                   size="icon"
                   className="h-8 w-8 text-destructive hover:text-destructive"
                   onClick={() => onDelete(name)}
+                  disabled={isCliDiscovered}
+                  title={isCliDiscovered ? 'CLI-discovered servers are read-only' : 'Delete server'}
                 >
                   <HugeiconsIcon icon={Delete02Icon} className="h-3.5 w-3.5" />
                 </Button>
