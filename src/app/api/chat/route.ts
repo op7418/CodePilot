@@ -95,7 +95,7 @@ export async function POST(request: NextRequest) {
 
     // Read MCP server configs from CLI discovery, user settings, and project .mcp.json
     const workingDirectory = session.working_directory || undefined;
-    const mcpServers = getMergedMcpServers(workingDirectory);
+    const mcpServers = await getMergedMcpServers(workingDirectory);
 
     // Stream Claude response, using SDK session ID for resume if available
     const stream = streamClaude({

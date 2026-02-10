@@ -10,21 +10,39 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { execFileSync } from 'child_process';
+import { execFile } from 'child_process';
+import { promisify } from 'util';
 import type { MCPServerConfig } from '@/types';
 import { findClaudeBinary, findGitBash, getExpandedPath, isWindows } from './platform';
+
+const execFileAsync = promisify(execFile);
 
 // Cache for CLI-discovered MCP servers
 let cliCache: { servers: Record<string, MCPServerConfig>; timestamp: number } | null = null;
 const CLI_CACHE_TTL_MS = 60_000; // 60 seconds
 
 /**
- * Discover MCP servers by calling `claude mcp list`.
+ * Invalidate the CLI MCP server cache, forcing the next call to re-discover.
+ */
+export function invalidateCliMcpCache(): void {
+  cliCache = null;
+}
+
+/**
+ * Discover MCP servers by calling `claude mcp list` (async).
  * Parses output lines like: `name: command args - ✓ Connected`
  * Results are cached for 60 seconds to avoid frequent CLI calls.
+ *
+ * NOTE: This relies on the human-readable output format of `claude mcp list`.
+ * `claude mcp list --json` is not currently available (verified as of 2025-05).
+ * If a JSON flag becomes available in the future, prefer using it for robustness.
+ *
+ * @param forceRefresh - If true, bypass the cache and re-discover from CLI.
  */
-export function discoverCliMcpServers(): Record<string, MCPServerConfig> {
-  if (cliCache && Date.now() - cliCache.timestamp < CLI_CACHE_TTL_MS) {
+export async function discoverCliMcpServers(
+  forceRefresh?: boolean
+): Promise<Record<string, MCPServerConfig>> {
+  if (!forceRefresh && cliCache && Date.now() - cliCache.timestamp < CLI_CACHE_TTL_MS) {
     return cliCache.servers;
   }
 
@@ -48,24 +66,27 @@ export function discoverCliMcpServers(): Record<string, MCPServerConfig> {
     }
 
     const needsShell = isWindows && /\.(cmd|bat)$/i.test(claudePath);
-    const stdout = execFileSync(claudePath, ['mcp', 'list'], {
+    const { stdout } = await execFileAsync(claudePath, ['mcp', 'list'], {
       timeout: 10_000,
-      stdio: 'pipe',
       env: env as NodeJS.ProcessEnv,
       shell: needsShell,
-    }).toString();
+    });
 
     // Parse lines like:
     //   reactbits: cmd /c npx reactbits-dev-mcp-server - ✓ Connected
     //   shadcn: cmd /c npx shadcn@latest mcp - ✗ Failed
     for (const line of stdout.split(/\r?\n/)) {
-      const match = line.match(/^(\S+):\s+(.+?)\s+-\s+[✓✗]/);
-      if (!match) continue;
-      const [, name, fullCommand] = match;
-      const parts = fullCommand.trim().split(/\s+/);
-      const command = parts[0];
-      const args = parts.slice(1);
-      servers[name] = { command, ...(args.length > 0 ? { args } : {}) };
+      try {
+        const match = line.match(/^(\S+):\s+(.+?)\s+-\s+[✓✗]/);
+        if (!match) continue;
+        const [, name, fullCommand] = match;
+        const parts = fullCommand.trim().split(/\s+/);
+        const command = parts[0];
+        const args = parts.slice(1);
+        servers[name] = { command, ...(args.length > 0 ? { args } : {}) };
+      } catch {
+        // Single line parse failure — skip and continue with other lines
+      }
     }
   } catch {
     // CLI not available or timed out — return empty
@@ -110,10 +131,10 @@ export function readProjectMcpServers(
  * Merge CLI-discovered, user-level, and project-level MCP servers.
  * Priority (highest wins): project-level > user-level > CLI-discovered.
  */
-export function getMergedMcpServers(
+export async function getMergedMcpServers(
   workDir?: string
-): Record<string, MCPServerConfig> {
-  const cliServers = discoverCliMcpServers();
+): Promise<Record<string, MCPServerConfig>> {
+  const cliServers = await discoverCliMcpServers();
   const userServers = readUserMcpServers();
   const projectServers = readProjectMcpServers(workDir);
   return { ...cliServers, ...userServers, ...projectServers };

@@ -50,9 +50,20 @@ export async function PUT(request: Request) {
     }
 
     // Merge with existing settings to preserve fields the frontend doesn't manage
-    // (e.g. mcpServers configured via CLI)
+    // (e.g. mcpServers configured via CLI).
+    // Skip keys whose value is an empty object to avoid accidentally wiping
+    // nested configs like mcpServers when the frontend sends {}.
     const existing = readSettingsFile();
-    const merged = { ...existing, ...settings };
+    const merged = { ...existing };
+    for (const [key, value] of Object.entries(settings)) {
+      if (value !== undefined) {
+        // Skip empty objects to prevent overwriting nested configs
+        if (typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0) {
+          continue;
+        }
+        merged[key] = value;
+      }
+    }
     writeSettingsFile(merged);
     return NextResponse.json({ success: true });
   } catch (error) {
