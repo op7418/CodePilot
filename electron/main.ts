@@ -12,8 +12,43 @@ let serverErrors: string[] = [];
 let serverExited = false;
 let serverExitCode: number | null = null;
 let userShellEnv: Record<string, string> = {};
+let isQuitting = false;
 
 const isDev = !app.isPackaged;
+
+/**
+ * Gracefully shut down the server process.
+ * Sends kill() (SIGTERM) first, waits up to 3s for exit,
+ * then force-kills via process.kill(pid, SIGKILL) as fallback.
+ */
+function killServer(): Promise<void> {
+  return new Promise((resolve) => {
+    if (!serverProcess) {
+      resolve();
+      return;
+    }
+
+    const pid = serverProcess.pid;
+
+    const timeout = setTimeout(() => {
+      // Force kill via Node's process.kill with SIGKILL
+      if (pid) {
+        try { process.kill(pid, 'SIGKILL'); } catch { /* already dead */ }
+      }
+      serverProcess = null;
+      resolve();
+    }, 3000);
+
+    serverProcess.on('exit', () => {
+      clearTimeout(timeout);
+      serverProcess = null;
+      resolve();
+    });
+
+    // UtilityProcess.kill() sends SIGTERM
+    serverProcess.kill();
+  });
+}
 
 /**
  * Verify that better_sqlite3.node in standalone resources is compatible
@@ -343,11 +378,8 @@ app.whenReady().then(async () => {
   }
 });
 
-app.on('window-all-closed', () => {
-  if (serverProcess) {
-    serverProcess.kill();
-    serverProcess = null;
-  }
+app.on('window-all-closed', async () => {
+  await killServer();
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -369,9 +401,11 @@ app.on('activate', async () => {
   }
 });
 
-app.on('before-quit', () => {
-  if (serverProcess) {
-    serverProcess.kill();
-    serverProcess = null;
+app.on('before-quit', async (e) => {
+  if (serverProcess && !isQuitting) {
+    isQuitting = true;
+    e.preventDefault();
+    await killServer();
+    app.quit();
   }
 });

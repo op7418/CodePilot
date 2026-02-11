@@ -31,7 +31,7 @@ function ExtensionsPageInner() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="border-b border-border/50 px-6 pt-4 pb-0">
+      <div className="px-6 pt-4 pb-0">
         <h1 className="text-xl font-semibold mb-3">Extensions</h1>
         <Tabs value={tab} onValueChange={(v) => setTab(v as ExtTab)}>
           <TabsList>

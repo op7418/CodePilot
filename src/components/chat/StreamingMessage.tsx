@@ -6,13 +6,7 @@ import {
   MessageContent,
   MessageResponse,
 } from '@/components/ai-elements/message';
-import {
-  Tool,
-  ToolHeader,
-  ToolContent,
-  ToolInput,
-  ToolOutput,
-} from '@/components/ai-elements/tool';
+import { ToolActionsGroup } from '@/components/ai-elements/tool-actions-group';
 import {
   Confirmation,
   ConfirmationTitle,
@@ -48,12 +42,6 @@ interface StreamingMessageProps {
   pendingPermission?: PermissionRequestEvent | null;
   onPermissionResponse?: (decision: 'allow' | 'allow_session' | 'deny') => void;
   permissionResolved?: 'allow' | 'deny' | null;
-}
-
-function getToolState(hasResult: boolean, isError?: boolean): ToolUIPart['state'] {
-  if (!hasResult) return 'input-available';
-  if (isError) return 'output-error';
-  return 'output-available';
 }
 
 function ElapsedTimer() {
@@ -149,35 +137,22 @@ export function StreamingMessage({
   return (
     <AIMessage from="assistant">
       <MessageContent>
-        {/* Tool calls */}
+        {/* Tool calls — compact collapsible group */}
         {toolUses.length > 0 && (
-          <div className="space-y-2 w-full">
-            {toolUses.map((tool, index) => {
+          <ToolActionsGroup
+            tools={toolUses.map((tool) => {
               const result = toolResults.find((r) => r.tool_use_id === tool.id);
-              const isRunning = !result;
-              const isLastRunning = isRunning && index === toolUses.length - 1;
-              return (
-                <Tool key={tool.id} defaultOpen={isRunning || !!result}>
-                  <ToolHeader
-                    type="tool-invocation"
-                    title={tool.name}
-                    state={getToolState(!!result, result?.is_error)}
-                  />
-                  <ToolContent>
-                    <ToolInput input={tool.input} />
-                    {isLastRunning && streamingToolOutput ? (
-                      <ToolOutput output={streamingToolOutput} errorText={undefined} />
-                    ) : (
-                      <ToolOutput
-                        output={result?.content}
-                        errorText={result?.is_error ? result.content : undefined}
-                      />
-                    )}
-                  </ToolContent>
-                </Tool>
-              );
+              return {
+                id: tool.id,
+                name: tool.name,
+                input: tool.input,
+                result: result?.content,
+                isError: result?.is_error,
+              };
             })}
-          </div>
+            isStreaming={isStreaming}
+            streamingToolOutput={streamingToolOutput}
+          />
         )}
 
         {/* Permission approval confirmation */}

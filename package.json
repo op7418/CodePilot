@@ -1,7 +1,12 @@
 {
   "name": "codepilot",
-  "version": "0.7.0",
+  "version": "0.9.0",
   "private": true,
+  "author": {
+    "name": "op7418",
+    "email": "7418@openclaw.ai"
+  },
+  "description": "A native desktop GUI client for Claude Code",
   "main": "dist-electron/main.js",
   "scripts": {
     "dev": "next dev",

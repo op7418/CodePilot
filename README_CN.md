@@ -3,37 +3,42 @@
 
 **Claude Code 的原生桌面客户端** -- 通过可视化界面进行对话、编码和项目管理，无需在终端中操作。
 
-[English](./README.md)
+[English](./README.md) | [日本語](./README_JA.md)
 
 [![GitHub release](https://img.shields.io/github/v/release/op7418/CodePilot)](https://github.com/op7418/CodePilot/releases)
-[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows-lightgrey)](https://github.com/op7418/CodePilot/releases)
+[![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/op7418/CodePilot/releases)
 [![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
 
 ---
 
-## ✨ 功能特性
+## 功能特性
 
-- 💬 **实时对话编码** -- 流式接收 Claude 的响应，支持完整的 Markdown 渲染、语法高亮代码块和工具调用可视化
-- 📂 **会话管理** -- 创建、重命名、归档和恢复聊天会话。所有对话本地持久化存储在 SQLite 中，重启不丢失
-- 🎯 **项目感知上下文** -- 为每个会话选择工作目录。右侧面板实时展示文件树和文件预览，随时了解 Claude 正在查看的内容
-- 🔐 **权限控制** -- 逐项审批、拒绝或自动允许工具使用，可选择不同的权限模式
-- 🎭 **多种交互模式** -- 在 *Code*、*Plan* 和 *Ask* 模式之间切换，控制 Claude 在每个会话中的行为方式
-- 🤖 **模型切换** -- 在对话中随时切换 Claude 模型（Opus、Sonnet、Haiku）
-- 🔌 **MCP 服务器管理** -- 直接在扩展页面添加、配置和移除 Model Context Protocol 服务器。支持 `stdio`、`sse` 和 `http` 传输类型
-- ⚡ **自定义技能** -- 定义可复用的提示词技能（全局或项目级别），在聊天中作为斜杠命令调用
-- ⚙️ **设置编辑器** -- 可视化和 JSON 编辑器管理 `~/.claude/settings.json`，包括权限和环境变量配置
-- 📊 **Token 用量追踪** -- 每次助手回复后查看输入/输出 Token 数量和预估费用
-- 🌓 **深色/浅色主题** -- 导航栏一键切换主题
-- 💻 **斜杠命令** -- 内置 `/help`、`/clear`、`/cost`、`/compact`、`/doctor`、`/review` 等命令
-- 📦 **Electron 打包** -- 原生桌面应用，隐藏标题栏，内置 Next.js 服务器，自动端口分配
+- **实时对话编码** -- 流式接收 Claude 的响应，支持完整的 Markdown 渲染、语法高亮代码块和工具调用可视化
+- **会话管理** -- 创建、重命名、归档和恢复聊天会话。所有对话本地持久化存储在 SQLite 中，重启不丢失
+- **项目感知上下文** -- 为每个会话选择工作目录。右侧面板实时展示文件树和文件预览，随时了解 Claude 正在查看的内容
+- **可调节面板宽度** -- 拖拽聊天列表和右侧面板的边缘调整宽度，偏好设置跨会话保存
+- **文件和图片附件** -- 在聊天输入框直接附加文件和图片。图片以多模态视觉内容发送给 Claude 进行分析
+- **权限控制** -- 逐项审批、拒绝或自动允许工具使用，可选择不同的权限模式
+- **多种交互模式** -- 在 *Code*、*Plan* 和 *Ask* 模式之间切换，控制 Claude 在每个会话中的行为方式
+- **模型切换** -- 在对话中随时切换 Claude 模型（Opus、Sonnet、Haiku）
+- **MCP 服务器管理** -- 直接在扩展页面添加、配置和移除 Model Context Protocol 服务器。支持 `stdio`、`sse` 和 `http` 传输类型
+- **自定义技能** -- 定义可复用的提示词技能（全局或项目级别），在聊天中作为斜杠命令调用
+- **设置编辑器** -- 可视化和 JSON 编辑器管理 `~/.claude/settings.json`，包括权限和环境变量配置
+- **Token 用量追踪** -- 每次助手回复后查看输入/输出 Token 数量和预估费用
+- **自动更新检查** -- 应用定期检查新版本并在有更新时通知你
+- **深色/浅色主题** -- 导航栏一键切换主题
+- **斜杠命令** -- 内置 `/help`、`/clear`、`/cost`、`/compact`、`/doctor`、`/review` 等命令
+- **Electron 打包** -- 原生桌面应用，隐藏标题栏，内置 Next.js 服务器，优雅关闭进程，自动端口分配
 
-## 📸 截图
+---
+
+## 截图
 
 ![CodePilot](docs/screenshot.png)
 
 ---
 
-## 📋 环境要求
+## 环境要求
 
 | 要求 | 最低版本 |
 |------|---------|
@@ -45,7 +50,7 @@
 
 ---
 
-## 🚀 快速开始
+## 快速开始
 
 ```bash
 # 克隆仓库
@@ -66,19 +71,19 @@ npm run electron:dev
 
 ---
 
-## 📥 下载
+## 下载
 
-预编译版本可在 [Releases](https://github.com/op7418/CodePilot/releases) 页面下载。
+预编译版本可在 [Releases](https://github.com/op7418/CodePilot/releases) 页面下载。所有平台的安装包均由 GitHub Actions 自动构建发布。
 
 ### 支持平台
 
 - **macOS** -- 支持 arm64（Apple Silicon）和 x64（Intel）架构的 `.dmg` 安装包
-- **Windows** -- 提供 `.zip` 压缩包，解压即用
+- **Windows** -- NSIS 安装程序（`.exe`），包含 x64 + arm64
 - **Linux** -- 支持 x64 和 arm64 架构，提供 `.AppImage`、`.deb` 和 `.rpm` 格式
 
 ---
 
-## 🔧 安装问题排查
+## 安装问题排查
 
 CodePilot 尚未进行代码签名，因此操作系统在首次打开时会显示安全警告。
 
@@ -123,7 +128,7 @@ Windows SmartScreen 会阻止安装程序或可执行文件。
 
 ---
 
-## 🛠 技术栈
+## 技术栈
 
 | 层级 | 技术 |
 |------|------|
@@ -138,14 +143,16 @@ Windows SmartScreen 会阻止安装程序或可执行文件。
 | 流式传输 | [Vercel AI SDK](https://sdk.vercel.ai/) + Server-Sent Events |
 | 图标 | [Hugeicons](https://hugeicons.com/) + [Lucide](https://lucide.dev/) |
 | 测试 | [Playwright](https://playwright.dev/) |
+| CI/CD | [GitHub Actions](https://github.com/features/actions)（自动构建 + tag 发版） |
 | 构建打包 | electron-builder + esbuild |
 
 ---
 
-## 📂 项目结构
+## 项目结构
 
 ```
 codepilot/
+├── .github/workflows/      # CI/CD：多平台构建和自动发版
 ├── electron/                # Electron 主进程和预加载脚本
 │   ├── main.ts              # 窗口创建、内嵌服务器生命周期管理
 │   └── preload.ts           # Context bridge
@@ -164,7 +171,7 @@ codepilot/
 │   ├── components/
 │   │   ├── ai-elements/     # 消息气泡、代码块、工具调用等
 │   │   ├── chat/            # ChatView、MessageList、MessageInput、流式消息
-│   │   ├── layout/          # AppShell、NavRail、Header、RightPanel
+│   │   ├── layout/          # AppShell、NavRail、ResizeHandle、RightPanel
 │   │   ├── plugins/         # MCP 服务器列表和编辑器
 │   │   ├── project/         # FileTree、FilePreview、TaskList
 │   │   ├── skills/          # SkillsManager、SkillEditor
@@ -184,7 +191,7 @@ codepilot/
 
 ---
 
-## 💻 开发
+## 开发
 
 ```bash
 # 仅运行 Next.js 开发服务器（在浏览器中打开）
@@ -200,9 +207,23 @@ npm run build
 # 构建 Electron 可分发包 + Next.js
 npm run electron:build
 
-# 打包 macOS DMG
-npm run electron:pack
+# 打包特定平台
+npm run electron:pack:mac     # macOS DMG（arm64 + x64）
+npm run electron:pack:win     # Windows NSIS 安装包
+npm run electron:pack:linux   # Linux AppImage、deb、rpm
 ```
+
+### CI/CD
+
+项目使用 GitHub Actions 自动构建。推送 `v*` tag 会自动触发全平台构建并创建 GitHub Release：
+
+```bash
+git tag v0.8.1
+git push origin v0.8.1
+# CI 自动构建 Windows + macOS + Linux，然后发布 Release
+```
+
+也可以在 Actions 页面手动触发单个平台的构建。
 
 ### 说明
 
@@ -212,7 +233,7 @@ npm run electron:pack
 
 ---
 
-## 🤝 贡献
+## 贡献
 
 欢迎贡献代码。开始之前：
 
@@ -226,6 +247,6 @@ npm run electron:pack
 
 ---
 
-## 📄 许可证
+## 许可证
 
 MIT

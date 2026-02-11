@@ -21,6 +21,7 @@ import type { ChatSession } from "@/types";
 
 interface ChatListPanelProps {
   open: boolean;
+  width?: number;
 }
 
 function formatRelativeTime(dateStr: string): string {
@@ -69,7 +70,7 @@ const MODE_BADGE_CONFIG = {
   ask: { label: "Ask", className: "bg-green-500/10 text-green-500" },
 } as const;
 
-export function ChatListPanel({ open }: ChatListPanelProps) {
+export function ChatListPanel({ open, width }: ChatListPanelProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { streamingSessionId, pendingApprovalSessionId } = usePanel();
@@ -150,7 +151,7 @@ export function ChatListPanel({ open }: ChatListPanelProps) {
   if (!open) return null;
 
   return (
-    <aside className="hidden h-full w-60 shrink-0 flex-col overflow-hidden bg-sidebar lg:flex">
+    <aside className="hidden h-full shrink-0 flex-col overflow-hidden bg-sidebar lg:flex" style={{ width: width ?? 240 }}>
       {/* Header - extra top padding for macOS traffic lights */}
       <div className="flex h-12 shrink-0 items-center justify-between px-3 mt-5 pl-6">
         <span className="text-[13px] font-semibold tracking-tight text-sidebar-foreground">

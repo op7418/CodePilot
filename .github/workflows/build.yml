@@ -1,0 +1,212 @@
+name: Build & Package
+
+on:
+  workflow_dispatch:
+    inputs:
+      platform:
+        description: "Target platform"
+        required: true
+        default: "all"
+        type: choice
+        options:
+          - all
+          - windows
+          - macos
+          - linux
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'windows' }}
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron app
+        run: npm run electron:build
+
+      - name: Package for Windows
+        run: npx electron-builder --win --config electron-builder.yml --publish never
+
+      - name: Upload Windows artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows
+          path: |
+            release/*.exe
+            release/*.zip
+          if-no-files-found: warn
+
+  build-macos:
+    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'macos' }}
+    runs-on: macos-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron app
+        run: npm run electron:build
+
+      - name: Package for macOS (${{ matrix.arch }})
+        run: npx electron-builder --mac --${{ matrix.arch }} --config electron-builder.yml --publish never
+
+      - name: Upload macOS artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-${{ matrix.arch }}
+          path: release/*.dmg
+          if-no-files-found: warn
+
+  build-linux:
+    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'linux' }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        arch: [x64, arm64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron app
+        run: npm run electron:build
+
+      - name: Package for Linux (${{ matrix.arch }})
+        run: npx electron-builder --linux --${{ matrix.arch }} --config electron-builder.yml --publish never
+
+      - name: Upload Linux artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-${{ matrix.arch }}
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+          if-no-files-found: warn
+
+  release:
+    if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(needs.*.result, 'cancelled') }}
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Get version and previous tag
+        id: meta
+        run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          PREV_TAG=$(git tag --sort=-creatordate | grep '^v' | sed -n '2p' || echo "")
+          echo "prev_tag=$PREV_TAG" >> "$GITHUB_OUTPUT"
+
+      - name: Generate changelog
+        id: changelog
+        run: |
+          PREV_TAG="${{ steps.meta.outputs.prev_tag }}"
+          if [ -n "$PREV_TAG" ]; then
+            RANGE="${PREV_TAG}..HEAD"
+          else
+            RANGE="HEAD"
+          fi
+          {
+            echo "changelog<<CHANGELOG_EOF"
+            git log "$RANGE" --pretty=format:'| `%h` | %s |'
+            echo ""
+            echo "CHANGELOG_EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Collect release files
+        run: |
+          mkdir -p release-files
+          find artifacts -type f \( -name '*.exe' -o -name '*.dmg' -o -name '*.AppImage' -o -name '*.deb' -o -name '*.rpm' -o -name '*.zip' \) -exec cp {} release-files/ \;
+          ls -lh release-files/
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.meta.outputs.version }}"
+          PREV_TAG="${{ steps.meta.outputs.prev_tag }}"
+
+          cat > release-notes.md << 'NOTES_EOF'
+          ## Downloads
+
+          **Windows**
+          - **CodePilot Setup ${{ steps.meta.outputs.version }}.exe** — Windows installer (x64 + arm64)
+
+          **macOS**
+          - **CodePilot-${{ steps.meta.outputs.version }}-arm64.dmg** — macOS Apple Silicon (M1/M2/M3/M4)
+          - **CodePilot-${{ steps.meta.outputs.version }}-x64.dmg** — macOS Intel
+
+          **Linux**
+          - **AppImage / deb / rpm** — x64 and arm64
+
+          ## Installation
+
+          **Windows**: 下载 exe 安装包，双击安装，按提示完成即可。
+
+          **macOS**:
+          1. 下载对应芯片架构的 DMG 文件
+          2. 打开 DMG，将 CodePilot 拖入 Applications 文件夹
+          3. 首次打开时如遇安全提示，前往 **系统设置 → 隐私与安全性** 点击"仍要打开"
+          4. 在 Settings 页面配置 Anthropic API Key 或环境变量
+
+          **Linux**: 使用 AppImage 直接运行，或通过 deb/rpm 包安装。
+
+          ## Requirements
+
+          - Windows 10+ / macOS 12.0+ / Linux (glibc 2.31+)
+          - Anthropic API Key 或已配置 `ANTHROPIC_API_KEY` 环境变量
+          - 如需使用代码相关功能，建议安装 Claude Code CLI
+
+          ## Changelog
+          NOTES_EOF
+
+          if [ -n "$PREV_TAG" ]; then
+            echo "" >> release-notes.md
+            echo "| Commit | Description |" >> release-notes.md
+            echo "|--------|-------------|" >> release-notes.md
+            echo '${{ steps.changelog.outputs.changelog }}' >> release-notes.md
+          fi
+
+          gh release create "${GITHUB_REF_NAME}" \
+            --title "CodePilot v${VERSION}" \
+            --notes-file release-notes.md \
+            --latest \
+            release-files/*

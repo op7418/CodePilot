@@ -4,6 +4,8 @@ import { createContext, useContext } from "react";
 
 export type PanelContent = "files" | "tasks";
 
+export type PreviewViewMode = "source" | "rendered";
+
 export interface PanelContextValue {
   panelOpen: boolean;
   setPanelOpen: (open: boolean) => void;
@@ -19,6 +21,10 @@ export interface PanelContextValue {
   setStreamingSessionId: (id: string) => void;
   pendingApprovalSessionId: string;
   setPendingApprovalSessionId: (id: string) => void;
+  previewFile: string | null;
+  setPreviewFile: (path: string | null) => void;
+  previewViewMode: PreviewViewMode;
+  setPreviewViewMode: (mode: PreviewViewMode) => void;
 }
 
 export const PanelContext = createContext<PanelContextValue | null>(null);

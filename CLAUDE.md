@@ -6,12 +6,20 @@ CodePilot — Claude Code 的原生桌面 GUI 客户端，基于 Electron + Next
 
 ## Release Checklist
 
-**发版前必须更新版本号：**
+**发版流程（CI 自动打包 + 发布）：**
 
-1. `package.json` 中的 `"version"` 字段
+1. `package.json` 中的 `"version"` 字段更新为新版本号
 2. `package-lock.json` 中的对应版本（运行 `npm install` 会自动同步）
-3. 构建命令：`npm run electron:pack:mac`（macOS）/ `npm run electron:pack:win`（Windows）
-4. 上传产物到 GitHub Release 并编写 release notes（格式见下方 Release Notes 规范）
+3. 提交代码并推送到 `main` 分支
+4. 创建并推送 tag：`git tag v{版本号} && git push origin v{版本号}`
+5. **推送 tag 后 CI 会自动触发**（`.github/workflows/build.yml`）：
+   - 自动在 macOS / Windows / Linux 上构建
+   - 自动收集所有平台产物（DMG、exe、AppImage、deb、rpm）
+   - 自动创建 GitHub Release 并上传所有产物
+6. 等待 CI 完成，在 GitHub Release 页面补充 New Features / Bug Fixes 描述
+7. 可通过 `gh run list` 查看 CI 状态，`gh run rerun <id> --failed` 重试失败的任务
+
+**重要：不要手动创建 GitHub Release**，否则会与 CI 自动创建的 Release 冲突。如果需要本地打包测试，使用 `npm run electron:pack:mac` 但不要手动上传到 Release。
 
 ## Development Rules
 

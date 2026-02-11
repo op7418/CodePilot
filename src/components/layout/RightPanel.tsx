@@ -12,11 +12,13 @@ import {
 } from "@/components/ui/tooltip";
 import { usePanel } from "@/hooks/usePanel";
 import { FileTree } from "@/components/project/FileTree";
-import { FilePreview } from "@/components/project/FilePreview";
 
-export function RightPanel() {
-  const { panelOpen, setPanelOpen, workingDirectory, sessionId, sessionTitle, setSessionTitle } = usePanel();
-  const [previewPath, setPreviewPath] = useState<string | null>(null);
+interface RightPanelProps {
+  width?: number;
+}
+
+export function RightPanel({ width }: RightPanelProps) {
+  const { panelOpen, setPanelOpen, workingDirectory, sessionId, sessionTitle, setSessionTitle, previewFile, setPreviewFile } = usePanel();
   const [isEditingName, setIsEditingName] = useState(false);
   const [editName, setEditName] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -64,6 +66,15 @@ export function RightPanel() {
     }
   }, [handleSaveName]);
 
+  const handleFileSelect = useCallback((path: string) => {
+    // Toggle: clicking the same file closes the preview
+    if (previewFile === path) {
+      setPreviewFile(null);
+    } else {
+      setPreviewFile(path);
+    }
+  }, [previewFile, setPreviewFile]);
+
   if (!panelOpen) {
     return (
       <div className="flex flex-col items-center gap-2 bg-background p-2">
@@ -84,16 +95,8 @@ export function RightPanel() {
     );
   }
 
-  const handleFileSelect = (path: string) => {
-    setPreviewPath(path);
-  };
-
-  const handleBackToTree = () => {
-    setPreviewPath(null);
-  };
-
   return (
-    <aside className="hidden h-full w-72 shrink-0 flex-col overflow-hidden bg-background lg:flex">
+    <aside className="hidden h-full shrink-0 flex-col overflow-hidden bg-background lg:flex" style={{ width: width ?? 288 }}>
       {/* Header */}
       <div className="flex h-10 shrink-0 items-center justify-between px-4">
         <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Chat Info</span>
@@ -149,18 +152,14 @@ export function RightPanel() {
         {/* Divider */}
         <div className="h-px bg-border/50" />
 
-        {/* Files */}
+        {/* Files — always show FileTree */}
         <div className="flex flex-col min-h-0">
           <span className="text-[11px] font-medium uppercase tracking-wider text-muted-foreground/70 mb-1.5 block">Files</span>
           <div className="overflow-hidden">
-            {previewPath ? (
-              <FilePreview filePath={previewPath} onBack={handleBackToTree} />
-            ) : (
-              <FileTree
-                workingDirectory={workingDirectory}
-                onFileSelect={handleFileSelect}
-              />
-            )}
+            <FileTree
+              workingDirectory={workingDirectory}
+              onFileSelect={handleFileSelect}
+            />
           </div>
         </div>
 

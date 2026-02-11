@@ -7,15 +7,8 @@ import {
   MessageContent,
   MessageResponse,
 } from '@/components/ai-elements/message';
-import {
-  Tool,
-  ToolHeader,
-  ToolContent,
-  ToolInput,
-  ToolOutput,
-} from '@/components/ai-elements/tool';
+import { ToolActionsGroup } from '@/components/ai-elements/tool-actions-group';
 import { CopyIcon, CheckIcon, ChevronDownIcon, ChevronUpIcon } from 'lucide-react';
-import type { ToolUIPart } from 'ai';
 import { FileAttachmentDisplay } from './FileAttachmentDisplay';
 
 interface MessageItemProps {
@@ -149,12 +142,6 @@ function pairTools(tools: ToolBlock[]): Array<{
   return paired;
 }
 
-function getToolState(result?: string, isError?: boolean): ToolUIPart['state'] {
-  if (result === undefined) return 'input-available';
-  if (isError) return 'output-error';
-  return 'output-available';
-}
-
 function parseMessageFiles(content: string): { files: FileAttachment[]; text: string } {
   const match = content.match(/^<!--files:(.*?)-->\n?/);
   if (!match) return { files: [], text: content };
@@ -261,26 +248,17 @@ export function MessageItem({ message }: MessageItemProps) {
           <FileAttachmentDisplay files={files} />
         )}
 
-        {/* Tool calls for assistant messages */}
+        {/* Tool calls for assistant messages — compact collapsible group */}
         {!isUser && pairedTools.length > 0 && (
-          <div className="space-y-2 w-full">
-            {pairedTools.map((tool, i) => (
-              <Tool key={`tool-${i}`}>
-                <ToolHeader
-                  type="tool-invocation"
-                  title={tool.name}
-                  state={getToolState(tool.result, tool.isError)}
-                />
-                <ToolContent>
-                  <ToolInput input={tool.input} />
-                  <ToolOutput
-                    output={tool.result}
-                    errorText={tool.isError ? tool.result : undefined}
-                  />
-                </ToolContent>
-              </Tool>
-            ))}
-          </div>
+          <ToolActionsGroup
+            tools={pairedTools.map((tool, i) => ({
+              id: `hist-${i}`,
+              name: tool.name,
+              input: tool.input,
+              result: tool.result,
+              isError: tool.isError,
+            }))}
+          />
         )}
 
         {/* Text content */}
