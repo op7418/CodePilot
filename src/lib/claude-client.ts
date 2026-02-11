@@ -264,8 +264,6 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
 
         // Find claude binary for packaged app where PATH is limited
         const claudePath = findClaudePath();
-        console.log('[claude-client] Found Claude binary at:', claudePath);
-
         if (claudePath) {
             // On Windows, if the binary is a .cmd/.bat file, we cannot use it directly
             // because the SDK uses spawn() without { shell: true } and doesn't expose an option to enable it.
@@ -446,11 +444,9 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           }
         }
 
-
-
         const conversation = query({
           prompt: finalPrompt,
-          options: queryOptions as Options,
+          options: queryOptions,
         });
 
         let lastAssistantText = '';
