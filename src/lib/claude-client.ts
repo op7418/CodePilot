@@ -19,7 +19,7 @@ import type { ClaudeStreamOptions, SSEEvent, TokenUsage, MCPServerConfig, Permis
 import { isImageFile } from '@/types';
 import { registerPendingPermission } from './permission-registry';
 import { getSetting, getActiveProvider } from './db';
-import { findClaudeBinary, findGitBash, getExpandedPath } from './platform';
+import { findClaudeBinary, findGitBash, getExpandedPath, resolveClaudeScriptPath } from './platform';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -264,6 +264,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
 
         // Find claude binary for packaged app where PATH is limited
         const claudePath = findClaudePath();
+        
         if (claudePath) {
             // On Windows, if the binary is a .cmd/.bat file, we cannot use it directly
             // because the SDK uses spawn() without { shell: true } and doesn't expose an option to enable it.
@@ -272,7 +273,14 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             const isWindowsCmd = process.platform === 'win32' && /\.(cmd|bat)$/i.test(claudePath);
             
             if (isWindowsCmd) {
-                console.warn(`[claude-client] Ignoring system Claude binary "${claudePath}" because it requires shell execution (which SDK lacks). Falling back to internal implementation.`);
+                // Try to resolve the underlying JS file to run with node
+                const scriptPath = resolveClaudeScriptPath(claudePath);
+                if (scriptPath) {
+                     queryOptions.pathToClaudeCodeExecutable = scriptPath;
+                     // We rely on SDK default executable="node" to run this script
+                } else {
+                    console.warn(`[claude-client] Ignoring system Claude binary "${claudePath}" because it requires shell execution (which SDK lacks) and script resolution failed. Falling back to internal implementation.`);
+                }
             } else {
                 queryOptions.pathToClaudeCodeExecutable = claudePath;
             }

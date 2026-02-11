@@ -109,7 +109,7 @@ export function findClaudeBinary(): string | undefined {
         shell: needsShell(p),
       });
       return p;
-    } catch {
+    } catch (e) {
       // not found, try next
     }
   }
@@ -136,11 +136,11 @@ export function findClaudeBinary(): string | undefined {
           shell: needsShell(candidate),
         });
         return candidate;
-      } catch {
+      } catch (e) {
         continue;
       }
     }
-  } catch {
+  } catch (e) {
     // not found
   }
 
@@ -208,5 +208,60 @@ export function findGitBash(): string | null {
     // where git failed or timed out
   }
 
+  return null;
+}
+
+/**
+ * Resolve the actual JS script path from a Windows .cmd/.bat wrapper.
+ * This is needed because the SDK uses spawn() without shell, so we must run 'node <script>' directly.
+ */
+export function resolveClaudeScriptPath(cmdPath: string): string | null {
+  if (!isWindows || !/\.(cmd|bat)$/i.test(cmdPath)) {
+    return null;
+  }
+
+  try {
+    const content = fs.readFileSync(cmdPath, 'utf8');
+    
+    // Pattern 1: "%dp0%\node_modules\@anthropic-ai\claude-code\cli.js" (Standard npm global install)
+    // Pattern 2: node  "%~dp0\..\@anthropic-ai\claude-code\cli.js" (Some npm versions)
+    // Pattern 3: "%_prog%"  "%dp0%\node_modules\@anthropic-ai\claude-code\cli.js" (Current user case)
+    
+    // We want to find the argument that ends with cli.js
+    // The previous regex was too greedy or matched the wrong quotes
+    
+    // Strategy: Look for the specific segment containing cli.js, being careful about quotes.
+    // Match group 1 will be the path we want.
+    const match = content.match(/"([^"]*?node_modules[^"]*?cli\.js)"/i) || 
+                  content.match(/'([^']*?node_modules[^']*?cli\.js)'/i) ||
+                  content.match(/"([^"]*?cli\.js)"/i) ||
+                  content.match(/'([^']*?cli\.js)'/i) ||
+                  content.match(/([^\s"']+\.js)/i);
+
+    if (match && match[1]) {
+      let scriptPath = match[1];
+      
+      // Resolve %~dp0% or similar variables if present (simple replacement)
+      // Standard cmd variable for script directory is %~dp0
+      // In the user's file, it uses %dp0% which is set to %~dp0 earlier
+      if (scriptPath.includes('%~dp0') || scriptPath.includes('%dp0%')) {
+        const cmdDir = path.dirname(cmdPath);
+        scriptPath = scriptPath.replace(/%~dp0/g, cmdDir + '\\').replace(/%dp0%/g, cmdDir + '\\');
+      } else if (scriptPath.startsWith('.')) {
+         // Relative path
+         scriptPath = path.resolve(path.dirname(cmdPath), scriptPath);
+      }
+      
+      // Clean up path
+      scriptPath = path.normalize(scriptPath);
+      
+      if (fs.existsSync(scriptPath)) {
+        return scriptPath;
+      }
+    }
+  } catch (err) {
+    console.warn('[platform] Failed to resolve Claude script path:', err);
+  }
+  
   return null;
 }
