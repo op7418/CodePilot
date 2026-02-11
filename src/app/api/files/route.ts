@@ -15,12 +15,19 @@ export async function GET(request: NextRequest) {
   }
 
   const path = require('path');
-  const resolvedDir = path.resolve(dir);
 
   // When baseDir is provided, ensure dir stays within that project scope
-  // to prevent directory traversal. No homeDir restriction — this is a
+  // to prevent directory traversal. No homeDir restriction - this is a
   // desktop Electron app and users may have projects on any drive.
   const baseDir = searchParams.get('baseDir');
+  if (!baseDir && !path.isAbsolute(dir)) {
+    return NextResponse.json<ErrorResponse>(
+      { error: 'Directory must be an absolute path' },
+      { status: 400 }
+    );
+  }
+
+  const resolvedDir = path.resolve(dir);
   if (baseDir) {
     const resolvedBase = path.resolve(baseDir);
     if (!isPathSafe(resolvedBase, resolvedDir)) {
@@ -29,11 +36,6 @@ export async function GET(request: NextRequest) {
         { status: 403 }
       );
     }
-  } else if (!path.isAbsolute(resolvedDir)) {
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Directory must be an absolute path' },
-      { status: 400 }
-    );
   }
 
   try {
