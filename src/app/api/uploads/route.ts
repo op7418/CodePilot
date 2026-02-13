@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 
 export const runtime = 'nodejs';
@@ -42,14 +42,16 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  if (!fs.existsSync(resolved)) {
+  try {
+    await fs.access(resolved);
+  } catch {
     return new Response(JSON.stringify({ error: 'File not found' }), {
       status: 404,
       headers: { 'Content-Type': 'application/json' },
     });
   }
 
-  const buffer = fs.readFileSync(resolved);
+  const buffer = await fs.readFile(resolved);
   const ext = path.extname(resolved).toLowerCase();
   const contentType = MIME_TYPES[ext] || 'application/octet-stream';
 

@@ -10,8 +10,8 @@ export const dynamic = 'force-dynamic';
 
 export async function POST(request: NextRequest) {
   try {
-    const body: SendMessageRequest & { files?: FileAttachment[] } = await request.json();
-    const { session_id, content, model, mode, files } = body;
+    const body: SendMessageRequest & { files?: FileAttachment[]; toolTimeout?: number } = await request.json();
+    const { session_id, content, model, mode, files, toolTimeout } = body;
 
     if (!session_id || !content) {
       return new Response(JSON.stringify({ error: 'session_id and content are required' }), {
@@ -30,13 +30,14 @@ export async function POST(request: NextRequest) {
 
     // Save user message — persist file metadata so attachments survive page reload
     let savedContent = content;
+    let fileMeta: Array<{ id: string; name: string; type: string; size: number; filePath: string }> | undefined;
     if (files && files.length > 0) {
       const workDir = session.working_directory || process.cwd();
       const uploadDir = path.join(workDir, '.codepilot-uploads');
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
-      const fileMeta = files.map((f) => {
+      fileMeta = files.map((f) => {
         const safeName = path.basename(f.name).replace(/[^a-zA-Z0-9._-]/g, '_');
         const filePath = path.join(uploadDir, `${Date.now()}-${safeName}`);
         const buffer = Buffer.from(f.data, 'base64');
@@ -81,15 +82,21 @@ export async function POST(request: NextRequest) {
       abortController.abort();
     });
 
-    // Convert file attachments to the format expected by streamClaude
+    // Convert file attachments to the format expected by streamClaude.
+    // Include filePath from the already-saved files so claude-client can
+    // reference the on-disk copies instead of writing them again.
     const fileAttachments: FileAttachment[] | undefined = files && files.length > 0
-      ? files.map((f, i) => ({
-          id: f.id || `file-${Date.now()}-${i}`,
-          name: f.name,
-          type: f.type,
-          size: f.size,
-          data: f.data,
-        }))
+      ? files.map((f, i) => {
+          const meta = fileMeta?.find((m: { id: string }) => m.id === f.id);
+          return {
+            id: f.id || `file-${Date.now()}-${i}`,
+            name: f.name,
+            type: f.type,
+            size: f.size,
+            data: f.data,
+            filePath: meta?.filePath,
+          };
+        })
       : undefined;
 
     // Stream Claude response, using SDK session ID for resume if available
@@ -103,6 +110,7 @@ export async function POST(request: NextRequest) {
       abortController,
       permissionMode,
       files: fileAttachments,
+      toolTimeoutSeconds: toolTimeout || 120,
     });
 
     // Tee the stream: one for client, one for collecting the response

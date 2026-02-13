@@ -202,7 +202,9 @@ jobs:
             echo "" >> release-notes.md
             echo "| Commit | Description |" >> release-notes.md
             echo "|--------|-------------|" >> release-notes.md
-            echo '${{ steps.changelog.outputs.changelog }}' >> release-notes.md
+            cat >> release-notes.md << 'CHANGELOG_INLINE_EOF'
+          ${{ steps.changelog.outputs.changelog }}
+          CHANGELOG_INLINE_EOF
           fi
 
           gh release create "${GITHUB_REF_NAME}" \

@@ -251,6 +251,43 @@ function AttachFileButton() {
 }
 
 /**
+ * Bridge component that listens for 'attach-file-to-chat' custom events
+ * from the file tree and adds files as attachments. Must be rendered inside PromptInput.
+ */
+function FileTreeAttachmentBridge() {
+  const attachments = usePromptInputAttachments();
+  const attachmentsRef = useRef(attachments);
+
+  useEffect(() => {
+    attachmentsRef.current = attachments;
+  }, [attachments]);
+
+  useEffect(() => {
+    const handler = async (e: Event) => {
+      const customEvent = e as CustomEvent<{ path: string }>;
+      const filePath = customEvent.detail?.path;
+      if (!filePath) return;
+
+      try {
+        const res = await fetch(`/api/files/raw?path=${encodeURIComponent(filePath)}`);
+        if (!res.ok) return;
+        const blob = await res.blob();
+        const filename = filePath.split('/').pop() || 'file';
+        const file = new File([blob], filename, { type: blob.type || 'application/octet-stream' });
+        attachmentsRef.current.add([file]);
+      } catch {
+        // Silently fail if file fetch fails
+      }
+    };
+
+    window.addEventListener('attach-file-to-chat', handler);
+    return () => window.removeEventListener('attach-file-to-chat', handler);
+  }, []);
+
+  return null;
+}
+
+/**
  * Capsule display for attached files, rendered inside PromptInput context.
  */
 function FileAttachmentsCapsules() {
@@ -534,7 +571,7 @@ export function MessageInput({
     };
 
     // If badge is active, expand the command/skill and send
-    if (badge) {
+    if (badge && !isStreaming) {
       let expandedPrompt = '';
 
       if (badge.isSkill) {
@@ -572,7 +609,7 @@ export function MessageInput({
     const files = await convertFiles();
     const hasFiles = files.length > 0;
 
-    if ((!content && !hasFiles) || disabled) return;
+    if ((!content && !hasFiles) || disabled || isStreaming) return;
 
     // Check if it's a direct slash command typed in the input
     if (content.startsWith('/') && !hasFiles) {
@@ -610,7 +647,7 @@ export function MessageInput({
 
     onSend(content || 'Please review the attached file(s).', hasFiles ? files : undefined);
     setInputValue('');
-  }, [inputValue, onSend, onCommand, disabled, closePopover, badge]);
+  }, [inputValue, onSend, onCommand, disabled, isStreaming, closePopover, badge]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -842,6 +879,8 @@ export function MessageInput({
             multiple
             maxFileSize={MAX_FILE_SIZE}
           >
+            {/* Bridge: listens for file tree "+" button events */}
+            <FileTreeAttachmentBridge />
             {/* Command badge */}
             {badge && (
               <div className="flex w-full items-center gap-1.5 px-3 pt-2.5 pb-0 order-first">
@@ -870,7 +909,7 @@ export function MessageInput({
               value={inputValue}
               onChange={(e) => handleInputChange(e.currentTarget.value)}
               onKeyDown={handleKeyDown}
-              disabled={disabled || isStreaming}
+              disabled={disabled}
               className="min-h-10"
             />
             <PromptInputFooter>

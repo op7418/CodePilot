@@ -93,8 +93,9 @@ export function DocPreview({
     };
   }, [filePath]);
 
-  const handleCopyPath = async () => {
-    await navigator.clipboard.writeText(filePath);
+  const handleCopyContent = async () => {
+    const text = preview?.content || filePath;
+    await navigator.clipboard.writeText(text);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
@@ -126,13 +127,13 @@ export function DocPreview({
           <ViewModeToggle value={viewMode} onChange={onViewModeChange} />
         )}
 
-        <Button variant="ghost" size="icon-sm" onClick={handleCopyPath}>
+        <Button variant="ghost" size="icon-sm" onClick={handleCopyContent}>
           {copied ? (
             <HugeiconsIcon icon={Tick01Icon} className="h-3.5 w-3.5 text-green-500" />
           ) : (
             <HugeiconsIcon icon={Copy01Icon} className="h-3.5 w-3.5" />
           )}
-          <span className="sr-only">Copy path</span>
+          <span className="sr-only">Copy content</span>
         </Button>
 
         <Button variant="ghost" size="icon-sm" onClick={onClose}>
@@ -262,9 +263,9 @@ function RenderedView({
 
   // Markdown / MDX
   return (
-    <div className="p-4 overflow-x-hidden break-words">
+    <div className="px-6 py-4 overflow-x-hidden break-words">
       <Streamdown
-        className="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0"
+        className="size-full [&>*:first-child]:mt-0 [&>*:last-child]:mb-0 [&_ul]:pl-6 [&_ol]:pl-6"
         plugins={streamdownPlugins}
       >
         {content}

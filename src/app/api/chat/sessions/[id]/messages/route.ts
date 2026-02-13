@@ -3,7 +3,7 @@ import { getMessages, getSession } from '@/lib/db';
 import type { MessagesResponse } from '@/types';
 
 export async function GET(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {
@@ -13,8 +13,15 @@ export async function GET(
       return Response.json({ error: 'Session not found' }, { status: 404 });
     }
 
-    const messages = getMessages(id);
-    const response: MessagesResponse = { messages };
+    const searchParams = request.nextUrl.searchParams;
+    const limitParam = searchParams.get('limit');
+    const beforeParam = searchParams.get('before');
+
+    const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 100, 1), 500) : 100;
+    const beforeRowId = beforeParam ? parseInt(beforeParam, 10) || undefined : undefined;
+
+    const { messages, hasMore } = getMessages(id, { limit, beforeRowId });
+    const response: MessagesResponse = { messages, hasMore };
     return Response.json(response);
   } catch (error) {
     const message = error instanceof Error ? error.message : 'Failed to fetch messages';

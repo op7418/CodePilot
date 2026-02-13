@@ -42,13 +42,15 @@ interface StreamingMessageProps {
   pendingPermission?: PermissionRequestEvent | null;
   onPermissionResponse?: (decision: 'allow' | 'allow_session' | 'deny') => void;
   permissionResolved?: 'allow' | 'deny' | null;
+  onForceStop?: () => void;
 }
 
 function ElapsedTimer() {
   const [elapsed, setElapsed] = useState(0);
-  const startRef = useRef(Date.now());
+  const startRef = useRef(0);
 
   useEffect(() => {
+    startRef.current = Date.now();
     const interval = setInterval(() => {
       setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
     }, 1000);
@@ -65,16 +67,39 @@ function ElapsedTimer() {
   );
 }
 
-function StreamingStatusBar({ statusText }: { statusText?: string }) {
+function StreamingStatusBar({ statusText, onForceStop }: { statusText?: string; onForceStop?: () => void }) {
   const displayText = statusText || 'Thinking';
+
+  // Parse elapsed seconds from statusText like "Running bash... (45s)"
+  const elapsedMatch = statusText?.match(/\((\d+)s\)/);
+  const toolElapsed = elapsedMatch ? parseInt(elapsedMatch[1], 10) : 0;
+  const isWarning = toolElapsed >= 60;
+  const isCritical = toolElapsed >= 90;
 
   return (
     <div className="flex items-center gap-3 py-2 px-1 text-xs text-muted-foreground">
       <div className="flex items-center gap-2">
-        <Shimmer duration={1.5}>{displayText}</Shimmer>
+        <span className={isCritical ? 'text-red-500' : isWarning ? 'text-yellow-500' : undefined}>
+          <Shimmer duration={1.5}>{displayText}</Shimmer>
+        </span>
+        {isWarning && !isCritical && (
+          <span className="text-yellow-500 text-[10px]">Running longer than usual</span>
+        )}
+        {isCritical && (
+          <span className="text-red-500 text-[10px]">Tool may be stuck</span>
+        )}
       </div>
       <span className="text-muted-foreground/50">|</span>
       <ElapsedTimer />
+      {isCritical && onForceStop && (
+        <button
+          type="button"
+          onClick={onForceStop}
+          className="ml-auto rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-500 transition-colors hover:bg-red-500/20"
+        >
+          Force stop
+        </button>
+      )}
     </div>
   );
 }
@@ -89,6 +114,7 @@ export function StreamingMessage({
   pendingPermission,
   onPermissionResponse,
   permissionResolved,
+  onForceStop,
 }: StreamingMessageProps) {
   const runningTools = toolUses.filter(
     (tool) => !toolResults.some((r) => r.tool_use_id === tool.id)
@@ -122,7 +148,11 @@ export function StreamingMessage({
 
   // Extract a human-readable summary of the running command
   const getRunningCommandSummary = (): string | undefined => {
-    if (runningTools.length === 0) return undefined;
+    if (runningTools.length === 0) {
+      // All tools completed but still streaming — AI is generating text
+      if (toolUses.length > 0) return 'Generating response...';
+      return undefined;
+    }
     const tool = runningTools[runningTools.length - 1];
     const input = tool.input as Record<string, unknown>;
     if (tool.name === 'Bash' && input.command) {
@@ -226,7 +256,7 @@ export function StreamingMessage({
         {/* Status bar during streaming */}
         {isStreaming && !pendingPermission && <StreamingStatusBar statusText={
           statusText || getRunningCommandSummary()
-        } />}
+        } onForceStop={onForceStop} />}
       </MessageContent>
     </AIMessage>
   );

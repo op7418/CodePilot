@@ -66,7 +66,24 @@ export function RightPanel({ width }: RightPanelProps) {
     }
   }, [handleSaveName]);
 
+  const handleFileAdd = useCallback((path: string) => {
+    window.dispatchEvent(new CustomEvent('attach-file-to-chat', { detail: { path } }));
+  }, []);
+
   const handleFileSelect = useCallback((path: string) => {
+    // Only open preview for text-based files, skip images/videos/binaries
+    const ext = path.split(".").pop()?.toLowerCase() || "";
+    const NON_PREVIEWABLE = new Set([
+      "png", "jpg", "jpeg", "gif", "bmp", "ico", "webp", "svg", "avif",
+      "mp4", "mov", "avi", "mkv", "webm", "flv", "wmv",
+      "mp3", "wav", "ogg", "flac", "aac", "wma",
+      "zip", "tar", "gz", "rar", "7z", "bz2",
+      "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
+      "exe", "dll", "so", "dylib", "bin", "dmg", "iso",
+      "woff", "woff2", "ttf", "otf", "eot",
+    ]);
+    if (NON_PREVIEWABLE.has(ext)) return;
+
     // Toggle: clicking the same file closes the preview
     if (previewFile === path) {
       setPreviewFile(null);
@@ -159,6 +176,7 @@ export function RightPanel({ width }: RightPanelProps) {
             <FileTree
               workingDirectory={workingDirectory}
               onFileSelect={handleFileSelect}
+              onFileAdd={handleFileAdd}
             />
           </div>
         </div>

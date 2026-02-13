@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, use } from 'react';
+import Link from 'next/link';
 import type { Message, MessagesResponse, ChatSession } from '@/types';
 import { ChatView } from '@/components/chat/ChatView';
 import { HugeiconsIcon } from "@hugeicons/react";
@@ -14,6 +15,7 @@ interface ChatSessionPageProps {
 export default function ChatSessionPage({ params }: ChatSessionPageProps) {
   const { id } = use(params);
   const [messages, setMessages] = useState<Message[]>([]);
+  const [hasMore, setHasMore] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [sessionTitle, setSessionTitle] = useState<string>('');
@@ -52,12 +54,13 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
     setLoading(true);
     setError(null);
     setMessages([]);
+    setHasMore(false);
 
     let cancelled = false;
 
     async function loadMessages() {
       try {
-        const res = await fetch(`/api/chat/sessions/${id}/messages`);
+        const res = await fetch(`/api/chat/sessions/${id}/messages?limit=100`);
         if (cancelled) return;
         if (!res.ok) {
           if (res.status === 404) {
@@ -69,6 +72,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
         const data: MessagesResponse = await res.json();
         if (cancelled) return;
         setMessages(data.messages);
+        setHasMore(data.hasMore ?? false);
       } catch (err) {
         if (cancelled) return;
         setError(err instanceof Error ? err.message : 'Failed to load messages');
@@ -95,9 +99,9 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
       <div className="flex h-full items-center justify-center">
         <div className="text-center space-y-2">
           <p className="text-destructive font-medium">{error}</p>
-          <a href="/chat" className="text-sm text-muted-foreground hover:underline">
+          <Link href="/chat" className="text-sm text-muted-foreground hover:underline">
             Start a new chat
-          </a>
+          </Link>
         </div>
       </div>
     );
@@ -116,7 +120,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
           </h2>
         </div>
       )}
-      <ChatView key={id} sessionId={id} initialMessages={messages} modelName={sessionModel} initialMode={sessionMode} />
+      <ChatView key={id} sessionId={id} initialMessages={messages} initialHasMore={hasMore} modelName={sessionModel} initialMode={sessionMode} />
     </div>
   );
 }

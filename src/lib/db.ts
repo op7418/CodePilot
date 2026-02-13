@@ -1,17 +1,17 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import crypto from 'crypto';
+import fs from 'fs';
+import os from 'os';
 import type { ChatSession, Message, SettingsMap, TaskItem, TaskStatus, ApiProvider, CreateProviderRequest, UpdateProviderRequest } from '@/types';
 
-const dataDir = process.env.CLAUDE_GUI_DATA_DIR || path.join(require('os').homedir(), '.codepilot');
+const dataDir = process.env.CLAUDE_GUI_DATA_DIR || path.join(os.homedir(), '.codepilot');
 const DB_PATH = path.join(dataDir, 'codepilot.db');
 
 let db: Database.Database | null = null;
 
 export function getDb(): Database.Database {
   if (!db) {
-    const fs = require('fs');
-    const os = require('os');
     const dir = path.dirname(DB_PATH);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -276,9 +276,35 @@ export function updateSessionMode(id: string, mode: string): void {
 // Message Operations
 // ==========================================
 
-export function getMessages(sessionId: string): Message[] {
+export function getMessages(
+  sessionId: string,
+  options?: { limit?: number; beforeRowId?: number },
+): { messages: Message[]; hasMore: boolean } {
   const db = getDb();
-  return db.prepare('SELECT * FROM messages WHERE session_id = ? ORDER BY created_at ASC').all(sessionId) as Message[];
+  const limit = options?.limit ?? 100;
+  const beforeRowId = options?.beforeRowId;
+
+  let rows: Message[];
+  if (beforeRowId) {
+    // Fetch `limit + 1` rows before the cursor to detect if there are more
+    rows = db.prepare(
+      'SELECT *, rowid as _rowid FROM messages WHERE session_id = ? AND rowid < ? ORDER BY rowid DESC LIMIT ?'
+    ).all(sessionId, beforeRowId, limit + 1) as Message[];
+  } else {
+    // Fetch the most recent `limit + 1` messages
+    rows = db.prepare(
+      'SELECT *, rowid as _rowid FROM messages WHERE session_id = ? ORDER BY rowid DESC LIMIT ?'
+    ).all(sessionId, limit + 1) as Message[];
+  }
+
+  const hasMore = rows.length > limit;
+  if (hasMore) {
+    rows = rows.slice(0, limit);
+  }
+
+  // Reverse to chronological order (ASC)
+  rows.reverse();
+  return { messages: rows, hasMore };
 }
 
 export function addMessage(

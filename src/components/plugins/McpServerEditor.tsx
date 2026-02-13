@@ -53,6 +53,7 @@ export function McpServerEditor({
   const [error, setError] = useState<string | null>(null);
 
   // Reset form when dialog opens with new data
+  /* eslint-disable react-hooks/set-state-in-effect -- intentional form reset when dialog opens with new props */
   useEffect(() => {
     if (open) {
       setName(initialName || '');
@@ -79,6 +80,7 @@ export function McpServerEditor({
       setError(null);
     }
   }, [open, initialName, initialServer]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   function handleSave() {
     setError(null);

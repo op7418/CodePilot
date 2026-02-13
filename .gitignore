@@ -50,3 +50,6 @@ next-env.d.ts
 # test artifacts
 /playwright-report/
 /test-results/
+
+# user uploads (runtime data)
+.codepilot-uploads/

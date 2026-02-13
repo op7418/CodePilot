@@ -21,7 +21,7 @@ const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'codepilot-db-test-'));
 process.env.CLAUDE_GUI_DATA_DIR = tmpDir;
 
 // Use require to avoid top-level await issues with CJS output
-/* eslint-disable @typescript-eslint/no-var-requires */
+/* eslint-disable @typescript-eslint/no-require-imports */
 const { getDb, closeDb, createSession, getSession } = require('../../lib/db') as typeof import('../../lib/db');
 
 describe('closeDb', () => {

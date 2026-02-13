@@ -169,6 +169,7 @@ async function waitForServer(port: number, timeout = 30000): Promise<void> {
     }
     try {
       await new Promise<void>((resolve, reject) => {
+        // eslint-disable-next-line @typescript-eslint/no-require-imports
         const req = require('http').get(`http://127.0.0.1:${port}/api/health`, (res: { statusCode?: number }) => {
           if (res.statusCode === 200) resolve();
           else reject(new Error(`Status ${res.statusCode}`));

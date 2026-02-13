@@ -1,7 +1,7 @@
 "use client";
 
 import { useTheme } from "next-themes";
-import { useEffect, useState } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Moon02Icon, Sun02Icon } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
@@ -13,11 +13,8 @@ import {
 
 export function Header() {
   const { theme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
+  const emptySubscribe = useCallback(() => () => {}, []);
+  const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
 
   return (
     <header className="flex h-11 shrink-0 items-center gap-2 border-b border-border/50 bg-background px-4">

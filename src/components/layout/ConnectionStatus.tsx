@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,26 +17,67 @@ interface ClaudeStatus {
   version: string | null;
 }
 
+const BASE_INTERVAL = 30_000; // 30s
+const BACKED_OFF_INTERVAL = 60_000; // 60s after 3 consecutive stable results
+const STABLE_THRESHOLD = 3;
+
 export function ConnectionStatus() {
   const [status, setStatus] = useState<ClaudeStatus | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
+  const stableCountRef = useRef(0);
+  const lastConnectedRef = useRef<boolean | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Use a ref-based approach to avoid circular deps between check and schedule
+  const checkRef = useRef<() => void>(() => {});
+
+  const schedule = useCallback(() => {
+    if (timerRef.current) clearTimeout(timerRef.current);
+    const interval = stableCountRef.current >= STABLE_THRESHOLD
+      ? BACKED_OFF_INTERVAL
+      : BASE_INTERVAL;
+    timerRef.current = setTimeout(() => checkRef.current(), interval);
+  }, []);
 
   const checkStatus = useCallback(async () => {
     try {
       const res = await fetch("/api/claude-status");
       if (res.ok) {
         const data: ClaudeStatus = await res.json();
+        if (lastConnectedRef.current === data.connected) {
+          stableCountRef.current++;
+        } else {
+          stableCountRef.current = 0;
+        }
+        lastConnectedRef.current = data.connected;
         setStatus(data);
       }
     } catch {
+      if (lastConnectedRef.current === false) {
+        stableCountRef.current++;
+      } else {
+        stableCountRef.current = 0;
+      }
+      lastConnectedRef.current = false;
       setStatus({ connected: false, version: null });
     }
-  }, []);
+    schedule();
+  }, [schedule]);
 
   useEffect(() => {
+    checkRef.current = checkStatus;
+  }, [checkStatus]);
+
+  useEffect(() => {
+    checkStatus(); // eslint-disable-line react-hooks/set-state-in-effect -- setState is called asynchronously after fetch
+    return () => {
+      if (timerRef.current) clearTimeout(timerRef.current);
+    };
+  }, [checkStatus]);
+
+  const handleManualRefresh = useCallback(() => {
+    stableCountRef.current = 0;
     checkStatus();
-    const interval = setInterval(checkStatus, 30000);
-    return () => clearInterval(interval);
   }, [checkStatus]);
 
   const connected = status?.connected ?? false;
@@ -127,9 +168,7 @@ export function ConnectionStatus() {
           <DialogFooter>
             <Button
               variant="outline"
-              onClick={() => {
-                checkStatus();
-              }}
+              onClick={handleManualRefresh}
             >
               Refresh
             </Button>

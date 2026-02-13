@@ -135,26 +135,32 @@ function extractTokenUsage(msg: SDKResultMessage): TokenUsage | null {
  * Returns a ReadableStream of SSE-formatted strings.
  */
 /**
- * Save non-image file attachments to a temporary upload directory
- * and return the file paths. The files are placed in .codepilot-uploads/
- * under the working directory so Claude's Read tool can access them.
+ * Get file paths for non-image attachments. If the file already has a
+ * persisted filePath (written by the uploads route), reuse it. Otherwise
+ * fall back to writing the file to .codepilot-uploads/.
  */
-function saveUploadedFiles(files: FileAttachment[], workDir: string): string[] {
-  const uploadDir = path.join(workDir, '.codepilot-uploads');
-  if (!fs.existsSync(uploadDir)) {
-    fs.mkdirSync(uploadDir, { recursive: true });
-  }
-  const savedPaths: string[] = [];
+function getUploadedFilePaths(files: FileAttachment[], workDir: string): string[] {
+  const paths: string[] = [];
+  let uploadDir: string | undefined;
   for (const file of files) {
-    // Sanitize filename to prevent directory traversal
-    const safeName = path.basename(file.name).replace(/[^a-zA-Z0-9._-]/g, '_');
-    const timestamp = Date.now();
-    const filePath = path.join(uploadDir, `${timestamp}-${safeName}`);
-    const buffer = Buffer.from(file.data, 'base64');
-    fs.writeFileSync(filePath, buffer);
-    savedPaths.push(filePath);
+    if (file.filePath) {
+      paths.push(file.filePath);
+    } else {
+      // Fallback: write file to disk (should not happen in normal flow)
+      if (!uploadDir) {
+        uploadDir = path.join(workDir, '.codepilot-uploads');
+        if (!fs.existsSync(uploadDir)) {
+          fs.mkdirSync(uploadDir, { recursive: true });
+        }
+      }
+      const safeName = path.basename(file.name).replace(/[^a-zA-Z0-9._-]/g, '_');
+      const filePath = path.join(uploadDir, `${Date.now()}-${safeName}`);
+      const buffer = Buffer.from(file.data, 'base64');
+      fs.writeFileSync(filePath, buffer);
+      paths.push(filePath);
+    }
   }
-  return savedPaths;
+  return paths;
 }
 
 export function streamClaude(options: ClaudeStreamOptions): ReadableStream<string> {
@@ -168,6 +174,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
     abortController,
     permissionMode,
     files,
+    toolTimeoutSeconds = 0,
   } = options;
 
   return new ReadableStream<string>({
@@ -282,8 +289,28 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           };
         }
 
-        if (mcpServers && Object.keys(mcpServers).length > 0) {
-          queryOptions.mcpServers = toSdkMcpConfig(mcpServers);
+        // Load MCP servers: use passed-in config, or auto-read from config files
+        let effectiveMcpServers = mcpServers;
+        if (!effectiveMcpServers || Object.keys(effectiveMcpServers).length === 0) {
+          try {
+            const userConfigPath = path.join(os.homedir(), '.claude.json');
+            const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+            let merged: Record<string, MCPServerConfig> = {};
+            if (fs.existsSync(userConfigPath)) {
+              const userConfig = JSON.parse(fs.readFileSync(userConfigPath, 'utf-8'));
+              if (userConfig.mcpServers) merged = { ...merged, ...userConfig.mcpServers };
+            }
+            if (fs.existsSync(settingsPath)) {
+              const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+              if (settings.mcpServers) merged = { ...merged, ...settings.mcpServers };
+            }
+            if (Object.keys(merged).length > 0) effectiveMcpServers = merged;
+          } catch {
+            // ignore config read errors
+          }
+        }
+        if (effectiveMcpServers && Object.keys(effectiveMcpServers).length > 0) {
+          queryOptions.mcpServers = toSdkMcpConfig(effectiveMcpServers);
         }
 
         // Resume session if we have an SDK session ID from a previous conversation turn
@@ -388,7 +415,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           let textPrompt = prompt;
           if (nonImageFiles.length > 0) {
             const workDir = workingDirectory || process.cwd();
-            const savedPaths = saveUploadedFiles(nonImageFiles, workDir);
+            const savedPaths = getUploadedFilePaths(nonImageFiles, workDir);
             const fileReferences = savedPaths
               .map((p, i) => `[User attached file: ${p} (${nonImageFiles[i].name})]`)
               .join('\n');
@@ -542,6 +569,17 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                   elapsed_time_seconds: progressMsg.elapsed_time_seconds,
                 }),
               }));
+              // Auto-timeout: abort if tool runs longer than configured threshold
+              if (toolTimeoutSeconds > 0 && progressMsg.elapsed_time_seconds >= toolTimeoutSeconds) {
+                controller.enqueue(formatSSE({
+                  type: 'tool_timeout',
+                  data: JSON.stringify({
+                    tool_name: progressMsg.tool_name,
+                    elapsed_seconds: Math.round(progressMsg.elapsed_time_seconds),
+                  }),
+                }));
+                abortController?.abort();
+              }
               break;
             }
 

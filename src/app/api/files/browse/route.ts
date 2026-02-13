@@ -1,16 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 import os from 'os';
 import type { ErrorResponse } from '@/types';
 
-function getWindowsDrives(): string[] {
+async function getWindowsDrives(): Promise<string[]> {
   if (process.platform !== 'win32') return [];
   const drives: string[] = [];
   for (let i = 65; i <= 90; i++) {
     const drive = String.fromCharCode(i) + ':\\';
     try {
-      fs.accessSync(drive);
+      await fs.access(drive);
       drives.push(drive);
     } catch {
       // drive not available
@@ -26,7 +26,9 @@ export async function GET(request: NextRequest) {
 
   const resolvedDir = path.resolve(dir);
 
-  if (!fs.existsSync(resolvedDir)) {
+  try {
+    await fs.access(resolvedDir);
+  } catch {
     return NextResponse.json<ErrorResponse>(
       { error: 'Directory does not exist' },
       { status: 404 }
@@ -34,7 +36,7 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    const entries = fs.readdirSync(resolvedDir, { withFileTypes: true });
+    const entries = await fs.readdir(resolvedDir, { withFileTypes: true });
     const directories = entries
       .filter((e) => e.isDirectory() && !e.name.startsWith('.'))
       .map((e) => ({
@@ -43,7 +45,7 @@ export async function GET(request: NextRequest) {
       }))
       .sort((a, b) => a.name.localeCompare(b.name));
 
-    const drives = getWindowsDrives();
+    const drives = await getWindowsDrives();
 
     return NextResponse.json({
       current: resolvedDir,

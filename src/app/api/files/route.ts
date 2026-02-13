@@ -1,4 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
+import path from 'path';
+import os from 'os';
 import { scanDirectory, isPathSafe } from '@/lib/files';
 import type { FileTreeResponse, ErrorResponse } from '@/types';
 
@@ -14,32 +16,43 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const path = require('path');
-
-  // When baseDir is provided, ensure dir stays within that project scope
-  // to prevent directory traversal. No homeDir restriction - this is a
-  // desktop Electron app and users may have projects on any drive.
-  const baseDir = searchParams.get('baseDir');
-  if (!baseDir && !path.isAbsolute(dir)) {
-    return NextResponse.json<ErrorResponse>(
-      { error: 'Directory must be an absolute path' },
-      { status: 400 }
-    );
-  }
-
   const resolvedDir = path.resolve(dir);
+  const homeDir = os.homedir();
+
+  // Use baseDir (the session's working directory) as the trust boundary.
+  // The baseDir itself must be under the user's home directory to prevent
+  // attackers from setting baseDir=/ to bypass all restrictions.
+  // If no baseDir is provided, fall back to the user's home directory
+  // to prevent scanning arbitrary system directories.
+  const baseDir = searchParams.get('baseDir');
   if (baseDir) {
     const resolvedBase = path.resolve(baseDir);
+    // Ensure baseDir is within the home directory (prevent baseDir=/ bypass)
+    if (!isPathSafe(homeDir, resolvedBase)) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'Base directory is outside the allowed scope' },
+        { status: 403 }
+      );
+    }
     if (!isPathSafe(resolvedBase, resolvedDir)) {
       return NextResponse.json<ErrorResponse>(
         { error: 'Directory is outside the project scope' },
         { status: 403 }
       );
     }
+  } else {
+    // Fallback: without a baseDir, restrict to the user's home directory
+    // to prevent scanning arbitrary system directories like /etc
+    if (!isPathSafe(homeDir, resolvedDir)) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'Directory is outside the allowed scope' },
+        { status: 403 }
+      );
+    }
   }
 
   try {
-    const tree = scanDirectory(resolvedDir, Math.min(depth, 5));
+    const tree = await scanDirectory(resolvedDir, Math.min(depth, 5));
     return NextResponse.json<FileTreeResponse>({ tree, root: resolvedDir });
   } catch (error) {
     return NextResponse.json<ErrorResponse>(

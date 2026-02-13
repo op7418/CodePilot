@@ -243,6 +243,7 @@ export interface SessionResponse {
 
 export interface MessagesResponse {
   messages: Message[];
+  hasMore?: boolean;
 }
 
 export interface SuccessResponse {
@@ -305,6 +306,7 @@ export type SSEEventType =
   | 'tool_use'           // tool invocation info
   | 'tool_result'        // tool execution result
   | 'tool_output'        // streaming tool output (stderr from SDK process)
+  | 'tool_timeout'       // tool execution timed out
   | 'status'             // status update (compacting, etc.)
   | 'result'             // final result with usage stats
   | 'error'              // error occurred
@@ -432,4 +434,5 @@ export interface ClaudeStreamOptions {
   abortController?: AbortController;
   permissionMode?: string;
   files?: FileAttachment[];
+  toolTimeoutSeconds?: number;
 }

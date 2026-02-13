@@ -13,14 +13,22 @@ function getSettingsPath(): string {
   return path.join(os.homedir(), '.claude', 'settings.json');
 }
 
-function readSettings(): Record<string, unknown> {
-  const settingsPath = getSettingsPath();
-  if (!fs.existsSync(settingsPath)) return {};
+// ~/.claude.json — Claude CLI stores user-scoped MCP servers here
+function getUserConfigPath(): string {
+  return path.join(os.homedir(), '.claude.json');
+}
+
+function readJsonFile(filePath: string): Record<string, unknown> {
+  if (!fs.existsSync(filePath)) return {};
   try {
-    return JSON.parse(fs.readFileSync(settingsPath, 'utf-8'));
+    return JSON.parse(fs.readFileSync(filePath, 'utf-8'));
   } catch {
     return {};
   }
+}
+
+function readSettings(): Record<string, unknown> {
+  return readJsonFile(getSettingsPath());
 }
 
 function writeSettings(settings: Record<string, unknown>): void {
@@ -35,7 +43,12 @@ function writeSettings(settings: Record<string, unknown>): void {
 export async function GET(): Promise<NextResponse<MCPConfigResponse | ErrorResponse>> {
   try {
     const settings = readSettings();
-    const mcpServers = (settings.mcpServers || {}) as Record<string, MCPServerConfig>;
+    const userConfig = readJsonFile(getUserConfigPath());
+    // Merge: ~/.claude/settings.json takes precedence over ~/.claude.json
+    const mcpServers = {
+      ...((userConfig.mcpServers || {}) as Record<string, MCPServerConfig>),
+      ...((settings.mcpServers || {}) as Record<string, MCPServerConfig>),
+    };
     return NextResponse.json({ mcpServers });
   } catch (error) {
     return NextResponse.json(
