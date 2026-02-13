@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { useState } from "react";
+import { useTranslation } from "@/hooks/useTranslation";
 
 export interface SkillItem {
   name: string;
@@ -36,6 +37,7 @@ export function SkillListItem({
 }: SkillListItemProps) {
   const [hovered, setHovered] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { t } = useTranslation();
 
   const handleDelete = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -112,7 +114,7 @@ export function SkillListItem({
             </Button>
           </TooltipTrigger>
           <TooltipContent side="right">
-            {confirmDelete ? "Click again to confirm" : "Delete"}
+            {confirmDelete ? t('skillListItem.confirmDelete') : t('skillListItem.delete')}
           </TooltipContent>
         </Tooltip>
       )}

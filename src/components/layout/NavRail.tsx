@@ -19,6 +19,8 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/hooks/useTranslation";
+import type { TranslationKey } from "@/i18n";
 
 
 interface NavRailProps {
@@ -34,10 +36,17 @@ const navItems = [
   { href: "/settings", label: "Settings", icon: Settings02Icon },
 ] as const;
 
+const navLabelKeys: Record<string, TranslationKey> = {
+  '/chat': 'nav.chats',
+  '/extensions': 'nav.extensions',
+  '/settings': 'nav.settings',
+};
+
 export function NavRail({ onToggleChatList, hasUpdate, skipPermissionsActive }: NavRailProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+  const { t } = useTranslation();
   const emptySubscribe = useCallback(() => () => {}, []);
   const mounted = useSyncExternalStore(emptySubscribe, () => true, () => false);
   const isChatRoute = pathname === "/chat" || pathname.startsWith("/chat/");
@@ -76,7 +85,7 @@ export function NavRail({ onToggleChatList, hasUpdate, skipPermissionsActive }: 
                     }}
                   >
                     <HugeiconsIcon icon={item.icon} className="h-4 w-4" />
-                    <span className="sr-only">{item.label}</span>
+                    <span className="sr-only">{t(navLabelKeys[item.href])}</span>
                   </Button>
                 ) : (
                   <div className="relative">
@@ -91,7 +100,7 @@ export function NavRail({ onToggleChatList, hasUpdate, skipPermissionsActive }: 
                     >
                       <Link href={item.href}>
                         <HugeiconsIcon icon={item.icon} className="h-4 w-4" />
-                        <span className="sr-only">{item.label}</span>
+                        <span className="sr-only">{t(navLabelKeys[item.href])}</span>
                       </Link>
                     </Button>
                     {item.href === "/settings" && hasUpdate && (
@@ -100,7 +109,7 @@ export function NavRail({ onToggleChatList, hasUpdate, skipPermissionsActive }: 
                   </div>
                 )}
               </TooltipTrigger>
-              <TooltipContent side="right">{item.label}</TooltipContent>
+              <TooltipContent side="right">{t(navLabelKeys[item.href])}</TooltipContent>
             </Tooltip>
           );
         })}
@@ -118,7 +127,7 @@ export function NavRail({ onToggleChatList, hasUpdate, skipPermissionsActive }: 
                 </span>
               </div>
             </TooltipTrigger>
-            <TooltipContent side="right">Auto-approve is ON</TooltipContent>
+            <TooltipContent side="right">{t('nav.autoApproveOn')}</TooltipContent>
           </Tooltip>
         )}
         {mounted && (
@@ -135,11 +144,11 @@ export function NavRail({ onToggleChatList, hasUpdate, skipPermissionsActive }: 
                 ) : (
                   <HugeiconsIcon icon={Moon02Icon} className="h-4 w-4" />
                 )}
-                <span className="sr-only">Toggle theme</span>
+                <span className="sr-only">{t('nav.toggleTheme')}</span>
               </Button>
             </TooltipTrigger>
             <TooltipContent side="right">
-              {theme === "dark" ? "Light mode" : "Dark mode"}
+              {theme === "dark" ? t('nav.lightMode') : t('nav.darkMode')}
             </TooltipContent>
           </Tooltip>
         )}

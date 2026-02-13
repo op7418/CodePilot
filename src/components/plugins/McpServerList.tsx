@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { HugeiconsIcon } from "@hugeicons/react";
 import type { IconSvgElement } from "@hugeicons/react";
 import { Delete02Icon, PencilIcon, ServerStack01Icon, Wifi01Icon, GlobeIcon } from "@hugeicons/core-free-icons";
+import { useTranslation } from "@/hooks/useTranslation";
 import type { MCPServer } from '@/types';
 
 interface McpServerListProps {
@@ -28,14 +29,15 @@ function getServerTypeInfo(server: MCPServer) {
 
 export function McpServerList({ servers, onEdit, onDelete }: McpServerListProps) {
   const entries = Object.entries(servers);
+  const { t } = useTranslation();
 
   if (entries.length === 0) {
     return (
       <div className="flex flex-col items-center justify-center py-12 text-muted-foreground">
         <HugeiconsIcon icon={ServerStack01Icon} className="h-10 w-10 mb-3 opacity-50" />
-        <p className="text-sm">No MCP servers configured</p>
+        <p className="text-sm">{t('mcpList.noServers')}</p>
         <p className="text-xs mt-1">
-          Add an MCP server to extend Claude&apos;s capabilities
+          {t('mcpList.noServersDesc')}
         </p>
       </div>
     );
@@ -56,7 +58,7 @@ export function McpServerList({ servers, onEdit, onDelete }: McpServerListProps)
                     {typeInfo.label}
                   </Badge>
                   <Badge variant="secondary" className="text-xs shrink-0">
-                    Configured
+                    {t('mcpList.configured')}
                   </Badge>
                 </div>
                 <CardDescription className="text-xs mt-1 font-mono">
@@ -89,7 +91,7 @@ export function McpServerList({ servers, onEdit, onDelete }: McpServerListProps)
               <CardContent className="pt-0">
                 {server.args && server.args.length > 0 && (
                   <div className="mb-2">
-                    <p className="text-xs text-muted-foreground mb-1">Arguments:</p>
+                    <p className="text-xs text-muted-foreground mb-1">{t('mcpList.arguments')}</p>
                     <div className="flex gap-1 flex-wrap">
                       {server.args.map((arg, i) => (
                         <Badge key={i} variant="outline" className="text-xs font-mono">
@@ -101,7 +103,7 @@ export function McpServerList({ servers, onEdit, onDelete }: McpServerListProps)
                 )}
                 {server.env && Object.keys(server.env).length > 0 && (
                   <div>
-                    <p className="text-xs text-muted-foreground mb-1">Environment:</p>
+                    <p className="text-xs text-muted-foreground mb-1">{t('mcpList.environment')}</p>
                     <div className="flex gap-1 flex-wrap">
                       {Object.keys(server.env).map((key) => (
                         <Badge key={key} variant="outline" className="text-xs font-mono">

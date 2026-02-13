@@ -2,6 +2,7 @@
 
 import { Suspense, useState } from "react";
 import { useSearchParams } from "next/navigation";
+import { useTranslation } from "@/hooks/useTranslation";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Loading02Icon } from "@hugeicons/core-free-icons";
@@ -28,15 +29,16 @@ function ExtensionsPageInner() {
   const searchParams = useSearchParams();
   const initialTab = (searchParams.get("tab") as ExtTab) || "skills";
   const [tab, setTab] = useState<ExtTab>(initialTab);
+  const { t } = useTranslation();
 
   return (
     <div className="flex h-full flex-col">
       <div className="px-6 pt-4 pb-0">
-        <h1 className="text-xl font-semibold mb-3">Extensions</h1>
+        <h1 className="text-xl font-semibold mb-3">{t('extensions.title')}</h1>
         <Tabs value={tab} onValueChange={(v) => setTab(v as ExtTab)}>
           <TabsList>
-            <TabsTrigger value="skills">Skills</TabsTrigger>
-            <TabsTrigger value="mcp">MCP Servers</TabsTrigger>
+            <TabsTrigger value="skills">{t('extensions.skills')}</TabsTrigger>
+            <TabsTrigger value="mcp">{t('extensions.mcpServers')}</TabsTrigger>
           </TabsList>
         </Tabs>
       </div>

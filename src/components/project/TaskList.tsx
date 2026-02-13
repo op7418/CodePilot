@@ -8,6 +8,7 @@ import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { cn } from "@/lib/utils";
 import { TaskCard } from "./TaskCard";
+import { useTranslation } from "@/hooks/useTranslation";
 import type { TaskItem, TaskStatus } from "@/types";
 
 interface TaskListProps {
@@ -21,6 +22,7 @@ export function TaskList({ sessionId }: TaskListProps) {
   const [loading, setLoading] = useState(false);
   const [newTitle, setNewTitle] = useState("");
   const [filter, setFilter] = useState<FilterTab>("all");
+  const { t } = useTranslation();
 
   const fetchTasks = useCallback(async () => {
     if (!sessionId) return;
@@ -101,9 +103,9 @@ export function TaskList({ sessionId }: TaskListProps) {
   });
 
   const filterTabs: { key: FilterTab; label: string }[] = [
-    { key: "all", label: "All" },
-    { key: "in_progress", label: "Active" },
-    { key: "completed", label: "Done" },
+    { key: "all", label: t('taskList.all') },
+    { key: "in_progress", label: t('taskList.active') },
+    { key: "completed", label: t('taskList.done') },
   ];
 
   return (
@@ -129,7 +131,7 @@ export function TaskList({ sessionId }: TaskListProps) {
       {/* Add task input */}
       <div className="flex items-center gap-1 pb-2">
         <Input
-          placeholder="Add a task..."
+          placeholder={t('taskList.addPlaceholder')}
           value={newTitle}
           onChange={(e) => setNewTitle(e.target.value)}
           onKeyDown={(e) => {
@@ -144,7 +146,7 @@ export function TaskList({ sessionId }: TaskListProps) {
           disabled={!newTitle.trim()}
         >
           <HugeiconsIcon icon={PlusSignIcon} className="h-3.5 w-3.5" />
-          <span className="sr-only">Add task</span>
+          <span className="sr-only">{t('taskList.addTask')}</span>
         </Button>
       </div>
 
@@ -152,11 +154,11 @@ export function TaskList({ sessionId }: TaskListProps) {
       <ScrollArea className="flex-1">
         {loading && tasks.length === 0 ? (
           <p className="py-4 text-center text-xs text-muted-foreground">
-            Loading tasks...
+            {t('taskList.loading')}
           </p>
         ) : filtered.length === 0 ? (
           <p className="py-4 text-center text-xs text-muted-foreground">
-            {tasks.length === 0 ? "No tasks yet" : "No matching tasks"}
+            {tasks.length === 0 ? t('taskList.noTasks') : t('taskList.noMatching')}
           </p>
         ) : (
           <div className="flex flex-col gap-1.5 pb-4">

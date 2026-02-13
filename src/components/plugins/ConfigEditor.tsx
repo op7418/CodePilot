@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Textarea } from '@/components/ui/textarea';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface ConfigEditorProps {
   value: string;
@@ -14,6 +15,7 @@ interface ConfigEditorProps {
 export function ConfigEditor({ value, onSave, label }: ConfigEditorProps) {
   const [text, setText] = useState(value);
   const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   useEffect(() => { setText(value); }, [value]);
 
@@ -23,7 +25,7 @@ export function ConfigEditor({ value, onSave, label }: ConfigEditorProps) {
       setError(null);
       onSave(text);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Invalid JSON');
+      setError(e instanceof Error ? e.message : t('configEditor.invalidJson'));
     }
   }
 
@@ -33,7 +35,7 @@ export function ConfigEditor({ value, onSave, label }: ConfigEditorProps) {
       setText(JSON.stringify(parsed, null, 2));
       setError(null);
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Invalid JSON');
+      setError(e instanceof Error ? e.message : t('configEditor.invalidJson'));
     }
   }
 
@@ -52,10 +54,10 @@ export function ConfigEditor({ value, onSave, label }: ConfigEditorProps) {
       {error && <p className="text-xs text-destructive">{error}</p>}
       <div className="flex gap-2">
         <Button size="sm" onClick={handleSave}>
-          Save
+          {t('configEditor.save')}
         </Button>
         <Button size="sm" variant="outline" onClick={handleFormat}>
-          Format
+          {t('configEditor.format')}
         </Button>
       </div>
     </div>

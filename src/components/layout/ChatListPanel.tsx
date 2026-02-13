@@ -25,6 +25,7 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { usePanel } from "@/hooks/usePanel";
+import { useTranslation } from "@/hooks/useTranslation";
 import { ConnectionStatus } from "./ConnectionStatus";
 import { ImportSessionDialog } from "./ImportSessionDialog";
 import { FolderPicker } from "@/components/chat/FolderPicker";
@@ -117,6 +118,7 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { streamingSessionId, pendingApprovalSessionId } = usePanel();
+  const { t } = useTranslation();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [hoveredSession, setHoveredSession] = useState<string | null>(null);
   const [deletingSession, setDeletingSession] = useState<string | null>(null);
@@ -222,7 +224,7 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
   ) => {
     e.preventDefault();
     e.stopPropagation();
-    if (!confirm("Delete this conversation?")) return;
+    if (!confirm(t('chatList.deleteConfirm'))) return;
     setDeletingSession(sessionId);
     try {
       const res = await fetch(`/api/chat/sessions/${sessionId}`, {
@@ -305,7 +307,7 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
       {/* Header - extra top padding for macOS traffic lights */}
       <div className="flex h-12 shrink-0 items-center justify-between px-3 mt-5 pl-6">
         <span className="text-[13px] font-semibold tracking-tight text-sidebar-foreground">
-          Threads
+          {t('chatList.threads')}
         </span>
         <ConnectionStatus />
       </div>
@@ -320,7 +322,7 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
           onClick={handleNewChat}
         >
           <HugeiconsIcon icon={PlusSignIcon} className="h-3.5 w-3.5" />
-          New Chat
+          {t('chatList.newChat')}
         </Button>
         <Tooltip>
           <TooltipTrigger asChild>
@@ -331,10 +333,10 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
               onClick={() => setFolderPickerOpen(true)}
             >
               <HugeiconsIcon icon={FolderOpenIcon} className="h-3.5 w-3.5" />
-              <span className="sr-only">Open project folder</span>
+              <span className="sr-only">{t('chatList.openProjectFolder')}</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="bottom">Open project folder</TooltipContent>
+          <TooltipContent side="bottom">{t('chatList.openProjectFolder')}</TooltipContent>
         </Tooltip>
       </div>
 
@@ -346,7 +348,7 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
             className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground"
           />
           <Input
-            placeholder="Search threads..."
+            placeholder={t('chatList.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-8 pl-7 text-xs"
@@ -363,7 +365,7 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
           onClick={() => setImportDialogOpen(true)}
         >
           <HugeiconsIcon icon={FileImportIcon} className="h-3 w-3" />
-          Import CLI Session
+          {t('chatList.importCliSession')}
         </Button>
       </div>
 
@@ -372,7 +374,7 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
         <div className="flex flex-col pb-3">
           {filteredSessions.length === 0 ? (
             <p className="px-2.5 py-3 text-[11px] text-muted-foreground/60">
-              {searchQuery ? "No matching threads" : "No conversations yet"}
+              {searchQuery ? t('chatList.noMatchingThreads') : t('chatList.noConversations')}
             </p>
           ) : (
             projectGroups.map((group) => {
@@ -404,7 +406,7 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
                       className="h-3.5 w-3.5 shrink-0 text-muted-foreground"
                     />
                     <span className="flex-1 truncate text-[12px] font-medium text-sidebar-foreground">
-                      {group.displayName}
+                      {group.displayName === "No Project" ? t('chatList.noProject') : group.displayName}
                     </span>
                     {/* New chat in project button (on hover) */}
                     {group.workingDirectory !== "" && (
@@ -430,12 +432,12 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
                               className="h-3 w-3"
                             />
                             <span className="sr-only">
-                              New chat in {group.displayName}
+                              {t('chatList.newChatIn', { name: group.displayName })}
                             </span>
                           </Button>
                         </TooltipTrigger>
                         <TooltipContent side="right">
-                          New chat in {group.displayName}
+                          {t('chatList.newChatIn', { name: group.displayName })}
                         </TooltipContent>
                       </Tooltip>
                     )}
@@ -526,12 +528,12 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
                                       className="h-3 w-3"
                                     />
                                     <span className="sr-only">
-                                      Delete session
+                                      {t('chatList.deleteSession')}
                                     </span>
                                   </Button>
                                 </TooltipTrigger>
                                 <TooltipContent side="right">
-                                  Delete
+                                  {t('chatList.delete')}
                                 </TooltipContent>
                               </Tooltip>
                             )}

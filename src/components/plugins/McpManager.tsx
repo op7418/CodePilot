@@ -8,6 +8,7 @@ import { PlusSignIcon, ListViewIcon, CodeIcon, Loading02Icon } from "@hugeicons/
 import { McpServerList } from "@/components/plugins/McpServerList";
 import { McpServerEditor } from "@/components/plugins/McpServerEditor";
 import { ConfigEditor } from "@/components/plugins/ConfigEditor";
+import { useTranslation } from "@/hooks/useTranslation";
 import type { MCPServer } from "@/types";
 
 export function McpManager() {
@@ -18,6 +19,7 @@ export function McpManager() {
   const [editingServer, setEditingServer] = useState<MCPServer | undefined>();
   const [tab, setTab] = useState<"list" | "json">("list");
   const [error, setError] = useState<string | null>(null);
+  const { t } = useTranslation();
 
   const fetchServers = useCallback(async () => {
     try {
@@ -140,7 +142,7 @@ export function McpManager() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-lg font-semibold">MCP Servers</h3>
+            <h3 className="text-lg font-semibold">{t('mcp.title')}</h3>
             {serverCount > 0 && (
               <span className="text-sm text-muted-foreground">
                 ({serverCount})
@@ -148,12 +150,12 @@ export function McpManager() {
             )}
           </div>
           <p className="text-sm text-muted-foreground mt-0.5">
-            Configure Model Context Protocol servers for Claude
+            {t('mcp.desc')}
           </p>
         </div>
         <Button size="sm" className="gap-1" onClick={handleAdd}>
           <HugeiconsIcon icon={PlusSignIcon} className="h-3.5 w-3.5" />
-          Add Server
+          {t('mcp.addServer')}
         </Button>
       </div>
 
@@ -167,11 +169,11 @@ export function McpManager() {
         <TabsList>
           <TabsTrigger value="list" className="gap-1.5">
             <HugeiconsIcon icon={ListViewIcon} className="h-3.5 w-3.5" />
-            Servers
+            {t('mcp.servers')}
           </TabsTrigger>
           <TabsTrigger value="json" className="gap-1.5">
             <HugeiconsIcon icon={CodeIcon} className="h-3.5 w-3.5" />
-            JSON Config
+            {t('mcp.jsonConfig')}
           </TabsTrigger>
         </TabsList>
 
@@ -179,7 +181,7 @@ export function McpManager() {
           {loading ? (
             <div className="flex items-center justify-center gap-2 py-12 text-muted-foreground">
               <HugeiconsIcon icon={Loading02Icon} className="h-4 w-4 animate-spin" />
-              <p className="text-sm">Loading MCP servers...</p>
+              <p className="text-sm">{t('mcp.loading')}</p>
             </div>
           ) : (
             <McpServerList
@@ -194,12 +196,13 @@ export function McpManager() {
           <ConfigEditor
             value={JSON.stringify(servers, null, 2)}
             onSave={handleJsonSave}
-            label="MCP Server Configuration"
+            label={t('mcp.configLabel')}
           />
         </TabsContent>
       </Tabs>
 
       <McpServerEditor
+        key={editorOpen ? (editingName || 'new') : 'closed'}
         open={editorOpen}
         onOpenChange={setEditorOpen}
         name={editingName}

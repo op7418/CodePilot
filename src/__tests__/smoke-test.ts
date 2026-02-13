@@ -80,7 +80,8 @@ async function runSmokeTests() {
       results.push({ name: route.name, status: 'PASS', details, consoleErrors, loadTimeMs: elapsed });
     } catch (err: unknown) {
       const elapsed = Date.now() - start;
-      results.push({ name: route.name, status: 'FAIL', details: err instanceof Error ? err.message : String(err), consoleErrors, loadTimeMs: elapsed });
+      const message = err instanceof Error ? err.message : String(err);
+      results.push({ name: route.name, status: 'FAIL', details: message, consoleErrors, loadTimeMs: elapsed });
     }
     await page.close();
   }

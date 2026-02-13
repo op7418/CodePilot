@@ -16,6 +16,7 @@ import {
 } from "@hugeicons/core-free-icons";
 import { ChevronRightIcon } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/hooks/useTranslation';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -194,15 +195,14 @@ function getRunningDescription(tools: ToolAction[]): string {
 export function ToolActionsGroup({
   tools,
   isStreaming = false,
-  streamingToolOutput: _streamingToolOutput,
 }: ToolActionsGroupProps) {
   const hasRunningTool = tools.some((t) => t.result === undefined);
+  const { t } = useTranslation();
 
-  // Track whether user has manually toggled and their chosen state
-  const [userExpandedState, setUserExpandedState] = useState<boolean | null>(null);
-
-  // Derived: if user has toggled, use their choice; otherwise auto-expand based on streaming state
-  const expanded = userExpandedState !== null ? userExpandedState : (hasRunningTool || isStreaming);
+  const autoExpanded = hasRunningTool || isStreaming;
+  const [userToggled, setUserToggled] = useState(false);
+  const [manualExpanded, setManualExpanded] = useState(false);
+  const expanded = userToggled ? manualExpanded : autoExpanded;
 
   if (tools.length === 0) return null;
 
@@ -211,15 +211,20 @@ export function ToolActionsGroup({
   const runningDesc = getRunningDescription(tools);
 
   const handleToggle = () => {
-    setUserExpandedState((prev) => prev !== null ? !prev : !expanded);
+    if (!userToggled) {
+      setUserToggled(true);
+      setManualExpanded(!autoExpanded);
+      return;
+    }
+
+    setManualExpanded((prev) => !prev);
   };
 
   // Build summary text parts
   const summaryParts: string[] = [];
-  if (runningCount > 0) summaryParts.push(`${runningCount} running`);
-  if (doneCount > 0) summaryParts.push(`${doneCount} completed`);
-  if (runningCount === 0 && isStreaming) summaryParts.push('generating response');
-  if (summaryParts.length === 0) summaryParts.push(`${tools.length} actions`);
+  if (runningCount > 0) summaryParts.push(`${runningCount} ${t('toolActions.running')}`);
+  if (doneCount > 0) summaryParts.push(`${doneCount} ${t('toolActions.completed')}`);
+  if (summaryParts.length === 0) summaryParts.push(`${tools.length} ${t('toolActions.actions')}`);
 
   return (
     <div className="w-[min(100%,48rem)]">

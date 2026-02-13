@@ -11,6 +11,7 @@ import {
 import { MessageItem } from './MessageItem';
 import { StreamingMessage } from './StreamingMessage';
 import { CodePilotLogo } from './CodePilotLogo';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface ToolUseInfo {
   id: string;
@@ -57,6 +58,8 @@ export function MessageList({
   loadingMore,
   onLoadMore,
 }: MessageListProps) {
+  const { t } = useTranslation();
+
   // Scroll anchor: preserve position when older messages are prepended
   const anchorIdRef = useRef<string | null>(null);
   const prevMessageCountRef = useRef(messages.length);
@@ -85,8 +88,8 @@ export function MessageList({
     return (
       <div className="flex flex-1 items-center justify-center">
         <ConversationEmptyState
-          title="Claude Chat"
-          description="Start a conversation with Claude. Ask questions, get help with code, or explore ideas."
+          title={t('chat.welcomeTitle')}
+          description={t('chat.welcomeDesc')}
           icon={<CodePilotLogo className="h-16 w-16" />}
         />
       </div>

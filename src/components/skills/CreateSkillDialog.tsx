@@ -15,6 +15,7 @@ import { Label } from "@/components/ui/label";
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Loading02Icon, GlobeIcon, FolderOpenIcon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface CreateSkillDialogProps {
   open: boolean;
@@ -63,15 +64,22 @@ export function CreateSkillDialog({
   const [templateIdx, setTemplateIdx] = useState(0);
   const [creating, setCreating] = useState(false);
   const [error, setError] = useState("");
+  const { t } = useTranslation();
+
+  const templateLabels = [
+    t('createSkill.templateBlank'),
+    t('createSkill.templateCommit'),
+    t('createSkill.templateReviewer'),
+  ];
 
   const handleCreate = async () => {
     const trimmed = name.trim();
     if (!trimmed) {
-      setError("Name is required");
+      setError(t('createSkill.nameRequired'));
       return;
     }
     if (!/^[a-zA-Z0-9_-]+$/.test(trimmed)) {
-      setError("Name can only contain letters, numbers, hyphens, and underscores");
+      setError(t('createSkill.nameInvalid'));
       return;
     }
 
@@ -85,7 +93,7 @@ export function CreateSkillDialog({
       setTemplateIdx(0);
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to create skill");
+      setError(err instanceof Error ? err.message : t('createSkill.failed'));
     } finally {
       setCreating(false);
     }
@@ -95,21 +103,21 @@ export function CreateSkillDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Create New Skill</DialogTitle>
+          <DialogTitle>{t('createSkill.title')}</DialogTitle>
           <DialogDescription>
-            Create a new slash command skill. It will be saved as a .md file.
+            {t('createSkill.desc')}
           </DialogDescription>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           {/* Name input */}
           <div className="space-y-2">
-            <Label htmlFor="skill-name">Name</Label>
+            <Label htmlFor="skill-name">{t('createSkill.name')}</Label>
             <div className="flex items-center gap-1">
               <span className="text-sm text-muted-foreground">/</span>
               <Input
                 id="skill-name"
-                placeholder="my-skill"
+                placeholder={t('createSkill.namePlaceholder')}
                 value={name}
                 onChange={(e) => {
                   setName(e.target.value);
@@ -124,7 +132,7 @@ export function CreateSkillDialog({
 
           {/* Scope selection */}
           <div className="space-y-2">
-            <Label>Scope</Label>
+            <Label>{t('createSkill.scope')}</Label>
             <div className="flex gap-2">
               <button
                 type="button"
@@ -137,7 +145,7 @@ export function CreateSkillDialog({
                 )}
               >
                 <HugeiconsIcon icon={FolderOpenIcon} className="h-4 w-4" />
-                Project
+                {t('createSkill.scopeProject')}
               </button>
               <button
                 type="button"
@@ -150,23 +158,23 @@ export function CreateSkillDialog({
                 )}
               >
                 <HugeiconsIcon icon={GlobeIcon} className="h-4 w-4" />
-                Global
+                {t('createSkill.scopeGlobal')}
               </button>
             </div>
             <p className="text-xs text-muted-foreground">
               {scope === "project"
-                ? "Saved in .claude/commands/ (this project only)"
-                : "Saved in ~/.claude/commands/ (available everywhere)"}
+                ? t('createSkill.scopeProjectDesc')
+                : t('createSkill.scopeGlobalDesc')}
             </p>
           </div>
 
           {/* Template selection */}
           <div className="space-y-2">
-            <Label>Template</Label>
+            <Label>{t('createSkill.template')}</Label>
             <div className="flex gap-2 flex-wrap">
-              {TEMPLATES.map((t, i) => (
+              {TEMPLATES.map((tmpl, i) => (
                 <button
-                  key={t.label}
+                  key={tmpl.label}
                   type="button"
                   onClick={() => setTemplateIdx(i)}
                   className={cn(
@@ -176,7 +184,7 @@ export function CreateSkillDialog({
                       : "border-border hover:bg-accent"
                   )}
                 >
-                  {t.label}
+                  {templateLabels[i]}
                 </button>
               ))}
             </div>
@@ -191,11 +199,11 @@ export function CreateSkillDialog({
             onClick={() => onOpenChange(false)}
             disabled={creating}
           >
-            Cancel
+            {t('createSkill.cancel')}
           </Button>
           <Button onClick={handleCreate} disabled={creating} className="gap-2">
             {creating && <HugeiconsIcon icon={Loading02Icon} className="h-4 w-4 animate-spin" />}
-            Create Skill
+            {t('createSkill.create')}
           </Button>
         </DialogFooter>
       </DialogContent>

@@ -9,6 +9,8 @@ import {
 } from "@hugeicons/core-free-icons";
 import { Plug01Icon } from "@hugeicons/core-free-icons";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/hooks/useTranslation";
+import type { TranslationKey } from "@/i18n";
 import { GeneralSection } from "./GeneralSection";
 import { ProviderManager } from "./ProviderManager";
 import { CliSettingsSection } from "./CliSettingsSection";
@@ -17,39 +19,31 @@ type Section = "general" | "providers" | "cli";
 
 interface SidebarItem {
   id: Section;
-  label: string;
+  labelKey: TranslationKey;
   icon: IconSvgElement;
 }
 
 const sidebarItems: SidebarItem[] = [
-  { id: "general", label: "General", icon: Settings02Icon },
-  { id: "providers", label: "Providers", icon: Plug01Icon },
-  { id: "cli", label: "Claude CLI", icon: CodeIcon },
+  { id: "general", labelKey: "settings.sidebarGeneral", icon: Settings02Icon },
+  { id: "providers", labelKey: "settings.sidebarProviders", icon: Plug01Icon },
+  { id: "cli", labelKey: "settings.sidebarCli", icon: CodeIcon },
 ];
 
-function getInitialSection(): Section {
-  if (typeof window !== "undefined") {
-    const hash = window.location.hash.replace("#", "");
-    if (sidebarItems.some((item) => item.id === hash)) {
-      return hash as Section;
-    }
-  }
-  return "general";
-}
-
 export function SettingsLayout() {
-  const [activeSection, setActiveSection] = useState<Section>(getInitialSection);
+  const [activeSection, setActiveSection] = useState<Section>("general");
+  const { t } = useTranslation();
 
   // Sync hash on mount and on popstate
   useEffect(() => {
-    const onHashChange = () => {
+    const syncHash = () => {
       const hash = window.location.hash.replace("#", "");
       if (sidebarItems.some((item) => item.id === hash)) {
         setActiveSection(hash as Section);
       }
     };
-    window.addEventListener("hashchange", onHashChange);
-    return () => window.removeEventListener("hashchange", onHashChange);
+    syncHash();
+    window.addEventListener("hashchange", syncHash);
+    return () => window.removeEventListener("hashchange", syncHash);
   }, []);
 
   const handleSectionChange = (section: Section) => {
@@ -60,9 +54,9 @@ export function SettingsLayout() {
   return (
     <div className="flex h-full flex-col">
       <div className="border-b border-border/50 px-6 pt-4 pb-4">
-        <h1 className="text-xl font-semibold">Settings</h1>
+        <h1 className="text-xl font-semibold">{t("settings.title")}</h1>
         <p className="text-sm text-muted-foreground">
-          Manage CodePilot and Claude CLI settings
+          {t("settings.subtitle")}
         </p>
       </div>
 
@@ -81,7 +75,7 @@ export function SettingsLayout() {
               )}
             >
               <HugeiconsIcon icon={item.icon} className="h-4 w-4 shrink-0" />
-              {item.label}
+              {t(item.labelKey)}
             </button>
           ))}
         </nav>
