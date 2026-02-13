@@ -19,6 +19,7 @@ import {
 } from '@/components/ui/dropdown-menu';
 import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface FolderEntry {
   name: string;
@@ -40,6 +41,7 @@ interface FolderPickerProps {
 }
 
 export function FolderPicker({ open, onOpenChange, onSelect, initialPath }: FolderPickerProps) {
+  const { t } = useTranslation();
   const [currentDir, setCurrentDir] = useState('');
   const [parentDir, setParentDir] = useState<string | null>(null);
   const [directories, setDirectories] = useState<FolderEntry[]>([]);
@@ -99,7 +101,7 @@ export function FolderPicker({ open, onOpenChange, onSelect, initialPath }: Fold
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg overflow-hidden">
         <DialogHeader>
-          <DialogTitle>Select Project Folder</DialogTitle>
+          <DialogTitle>{t('folder.selectProjectFolder')}</DialogTitle>
         </DialogHeader>
 
         {/* Path input */}
@@ -111,7 +113,7 @@ export function FolderPicker({ open, onOpenChange, onSelect, initialPath }: Fold
             className="flex-1 font-mono text-sm"
           />
           <Button type="submit" variant="outline" size="sm">
-            Go
+            {t('folder.go')}
           </Button>
         </form>
 
@@ -162,11 +164,11 @@ export function FolderPicker({ open, onOpenChange, onSelect, initialPath }: Fold
           <ScrollArea className="h-64">
             {loading ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                Loading...
+                {t('folder.loading')}
               </div>
             ) : directories.length === 0 ? (
               <div className="flex items-center justify-center py-8 text-sm text-muted-foreground">
-                No subdirectories
+                {t('folder.noSubdirectories')}
               </div>
             ) : (
               <div className="p-1">
@@ -188,11 +190,11 @@ export function FolderPicker({ open, onOpenChange, onSelect, initialPath }: Fold
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('folder.cancel')}
           </Button>
           <Button onClick={handleSelect} className="gap-2">
             <HugeiconsIcon icon={FolderOpenIcon} className="h-4 w-4" />
-            Select This Folder
+            {t('folder.selectThisFolder')}
           </Button>
         </DialogFooter>
       </DialogContent>

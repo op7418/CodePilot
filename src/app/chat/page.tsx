@@ -6,6 +6,8 @@ import type { Message, SSEEvent, SessionResponse, TokenUsage, PermissionRequestE
 import { MessageList } from '@/components/chat/MessageList';
 import { MessageInput } from '@/components/chat/MessageInput';
 import { usePanel } from '@/hooks/usePanel';
+import { useTranslation } from '@/hooks/useTranslation';
+import { buildHelpContent } from '@/lib/help-content';
 
 interface ToolUseInfo {
   id: string;
@@ -21,6 +23,7 @@ interface ToolResultInfo {
 export default function NewChatPage() {
   const router = useRouter();
   const { setWorkingDirectory, setPanelOpen, setPendingApprovalSessionId } = usePanel();
+  const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -119,7 +122,7 @@ export default function NewChatPage() {
 
         if (!createRes.ok) {
           const errBody = await createRes.json().catch(() => ({}));
-          throw new Error(errBody.error || `Failed to create session (${createRes.status})`);
+          throw new Error(errBody.error || 'Failed to create session');
         }
 
         const { session }: SessionResponse = await createRes.json();
@@ -203,7 +206,7 @@ export default function NewChatPage() {
                   try {
                     const parsed = JSON.parse(event.data);
                     if (parsed._progress) {
-                      setStatusText(`Running ${parsed.tool_name}... (${Math.round(parsed.elapsed_time_seconds)}s)`);
+                      setStatusText(t('chat.running', { tool: parsed.tool_name, seconds: Math.round(parsed.elapsed_time_seconds) }));
                       break;
                     }
                   } catch {
@@ -219,7 +222,7 @@ export default function NewChatPage() {
                   try {
                     const statusData = JSON.parse(event.data);
                     if (statusData.session_id) {
-                      setStatusText(`Connected (${statusData.model || 'claude'})`);
+                      setStatusText(t('chat.connected', { model: statusData.model || 'claude' }));
                       setTimeout(() => setStatusText(undefined), 2000);
                     } else if (statusData.notification) {
                       setStatusText(statusData.message || statusData.title || undefined);
@@ -251,7 +254,7 @@ export default function NewChatPage() {
                   break;
                 }
                 case 'error': {
-                  accumulated += '\n\n**Error:** ' + event.data;
+                  accumulated += '\n\n**' + t('chat.error') + ':** ' + event.data;
                   setStreamingContent(accumulated);
                   break;
                 }
@@ -286,12 +289,12 @@ export default function NewChatPage() {
             router.push(`/chat/${sessionId}`);
           }
         } else {
-          const errMsg = error instanceof Error ? error.message : 'Unknown error';
+          const errMsg = t('chat.failedToSend');
           const errorMessage: Message = {
             id: 'temp-error-' + Date.now(),
             session_id: '',
             role: 'assistant',
-            content: `**Error:** ${errMsg}`,
+            content: `**${t('chat.error')}:** ${errMsg}`,
             created_at: new Date().toISOString(),
             token_usage: null,
           };
@@ -310,7 +313,7 @@ export default function NewChatPage() {
         abortControllerRef.current = null;
       }
     },
-    [isStreaming, router, workingDir, mode, currentModel, setPendingApprovalSessionId]
+    [isStreaming, router, workingDir, mode, currentModel, setPendingApprovalSessionId, t]
   );
 
   const handleCommand = useCallback((command: string) => {
@@ -320,7 +323,7 @@ export default function NewChatPage() {
           id: 'cmd-' + Date.now(),
           session_id: '',
           role: 'assistant',
-          content: `## Available Commands\n\n- **/help** - Show this help message\n- **/clear** - Clear conversation history\n- **/compact** - Compress conversation context\n- **/cost** - Show token usage statistics\n- **/doctor** - Check system health\n- **/init** - Initialize CLAUDE.md\n- **/review** - Start code review\n- **/terminal-setup** - Configure terminal\n\n**Tips:**\n- Type \`@\` to mention files\n- Use Shift+Enter for new line\n- Select a project folder to enable file operations`,
+          content: buildHelpContent(t),
           created_at: new Date().toISOString(),
           token_usage: null,
         };
@@ -335,7 +338,7 @@ export default function NewChatPage() {
           id: 'cmd-' + Date.now(),
           session_id: '',
           role: 'assistant',
-          content: `## Token Usage\n\nToken usage tracking is available after sending messages. Check the token count displayed at the bottom of each assistant response.`,
+          content: `${t('chat.tokenUsageTitle')}\n\n${t('chat.noTokenUsage')}`,
           created_at: new Date().toISOString(),
           token_usage: null,
         };
@@ -345,7 +348,7 @@ export default function NewChatPage() {
       default:
         sendFirstMessage(command);
     }
-  }, [sendFirstMessage]);
+  }, [sendFirstMessage, t]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">

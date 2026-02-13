@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import type { FileTreeNode } from "@/types";
+import { useTranslation } from "@/hooks/useTranslation";
 import {
   FileTree as AIFileTree,
   FileTreeFolder,
@@ -109,6 +110,7 @@ export function FileTree({ workingDirectory, onFileSelect, onFileAdd }: FileTree
   const [tree, setTree] = useState<FileTreeNode[]>([]);
   const [loading, setLoading] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
+  const { t } = useTranslation();
 
   const fetchTree = useCallback(async () => {
     if (!workingDirectory) {
@@ -154,7 +156,7 @@ export function FileTree({ workingDirectory, onFileSelect, onFileAdd }: FileTree
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-2 shrink-0">
         <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground" title={workingDirectory}>
-          {workingDirectory || 'No directory selected'}
+          {workingDirectory || t('fileTree.noDirectory')}
         </p>
         <Button
           variant="ghost"
@@ -164,7 +166,7 @@ export function FileTree({ workingDirectory, onFileSelect, onFileAdd }: FileTree
           className="h-6 w-6 shrink-0"
         >
           <HugeiconsIcon icon={RefreshIcon} className={cn("h-3 w-3", loading && "animate-spin")} />
-          <span className="sr-only">Refresh</span>
+          <span className="sr-only">{t('fileTree.refresh')}</span>
         </Button>
       </div>
 
@@ -173,7 +175,7 @@ export function FileTree({ workingDirectory, onFileSelect, onFileAdd }: FileTree
         <div className="relative">
           <HugeiconsIcon icon={Search01Icon} className="absolute left-2.5 top-1/2 h-3 w-3 -translate-y-1/2 text-muted-foreground pointer-events-none" />
           <Input
-            placeholder="Filter files..."
+            placeholder={t('fileTree.filterPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="h-7 pl-7 text-xs"
@@ -189,7 +191,7 @@ export function FileTree({ workingDirectory, onFileSelect, onFileAdd }: FileTree
           </div>
         ) : tree.length === 0 ? (
           <p className="py-4 text-center text-xs text-muted-foreground">
-            {workingDirectory ? 'No files found' : 'Select a project folder to view files'}
+            {workingDirectory ? t('fileTree.noFiles') : t('fileTree.selectFolder')}
           </p>
         ) : (
           <AIFileTree

@@ -10,6 +10,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { usePanel } from "@/hooks/usePanel";
+import { useTranslation } from "@/hooks/useTranslation";
 import { FileTree } from "@/components/project/FileTree";
 
 interface RightPanelProps {
@@ -18,6 +19,7 @@ interface RightPanelProps {
 
 export function RightPanel({ width }: RightPanelProps) {
   const { panelOpen, setPanelOpen, workingDirectory, previewFile, setPreviewFile } = usePanel();
+  const { t } = useTranslation();
 
   const handleFileAdd = useCallback((path: string) => {
     window.dispatchEvent(new CustomEvent('attach-file-to-chat', { detail: { path } }));
@@ -56,10 +58,10 @@ export function RightPanel({ width }: RightPanelProps) {
               onClick={() => setPanelOpen(true)}
             >
               <HugeiconsIcon icon={StructureFolderIcon} className="h-4 w-4" />
-              <span className="sr-only">Open panel</span>
+              <span className="sr-only">{t('rightPanel.openPanel')}</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="left">Open panel</TooltipContent>
+          <TooltipContent side="left">{t('rightPanel.openPanel')}</TooltipContent>
         </Tooltip>
       </div>
     );
@@ -69,7 +71,7 @@ export function RightPanel({ width }: RightPanelProps) {
     <aside className="hidden h-full shrink-0 flex-col overflow-hidden bg-background lg:flex" style={{ width: width ?? 288 }}>
       {/* Header */}
       <div className="flex h-12 mt-5 shrink-0 items-center justify-between px-4">
-        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">Files</span>
+        <span className="text-[11px] font-semibold uppercase tracking-wider text-muted-foreground">{t('rightPanel.files')}</span>
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
@@ -78,10 +80,10 @@ export function RightPanel({ width }: RightPanelProps) {
               onClick={() => setPanelOpen(false)}
             >
               <HugeiconsIcon icon={PanelRightCloseIcon} className="h-4 w-4" />
-              <span className="sr-only">Close panel</span>
+              <span className="sr-only">{t('rightPanel.closePanel')}</span>
             </Button>
           </TooltipTrigger>
-          <TooltipContent side="left">Close panel</TooltipContent>
+          <TooltipContent side="left">{t('rightPanel.closePanel')}</TooltipContent>
         </Tooltip>
       </div>
 

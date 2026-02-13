@@ -23,7 +23,8 @@ import {
   FileImportIcon,
   MessageAddIcon,
 } from "@hugeicons/core-free-icons";
-import { cn } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/utils";
+import { useTranslation } from "@/hooks/useTranslation";
 
 interface ClaudeSessionInfo {
   sessionId: string;
@@ -45,21 +46,6 @@ interface ImportSessionDialogProps {
   onOpenChange: (open: boolean) => void;
 }
 
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr);
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  const diffHr = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHr / 24);
-
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m ago`;
-  if (diffHr < 24) return `${diffHr}h ago`;
-  if (diffDay < 7) return `${diffDay}d ago`;
-  return date.toLocaleDateString();
-}
-
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
@@ -71,6 +57,7 @@ export function ImportSessionDialog({
   onOpenChange,
 }: ImportSessionDialogProps) {
   const router = useRouter();
+  const { t, locale } = useTranslation();
   const [sessions, setSessions] = useState<ClaudeSessionInfo[]>([]);
   const [loading, setLoading] = useState(false);
   const [importing, setImporting] = useState<string | null>(null);
@@ -84,16 +71,16 @@ export function ImportSessionDialog({
       const res = await fetch("/api/claude-sessions");
       if (!res.ok) {
         const data = await res.json();
-        throw new Error(data.error || "Failed to fetch sessions");
+        throw new Error(data.error || t('import.errorFetch'));
       }
       const data = await res.json();
       setSessions(data.sessions || []);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load sessions");
+      setError(err instanceof Error ? err.message : t('import.errorLoad'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     if (open) {
@@ -121,7 +108,7 @@ export function ImportSessionDialog({
       }
 
       if (!res.ok) {
-        throw new Error(data.error || "Failed to import session");
+        throw new Error(data.error || t('import.errorImport'));
       }
 
       // Navigate to the newly imported session
@@ -129,7 +116,7 @@ export function ImportSessionDialog({
       window.dispatchEvent(new CustomEvent("session-created"));
       router.push(`/chat/${data.session.id}`);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to import session");
+      setError(err instanceof Error ? err.message : t('import.errorImport'));
     } finally {
       setImporting(null);
     }
@@ -154,11 +141,10 @@ export function ImportSessionDialog({
               icon={FileImportIcon}
               className="h-5 w-5 text-primary"
             />
-            Import CLI Session
+            {t('import.title')}
           </DialogTitle>
           <DialogDescription>
-            Browse and import conversations from Claude Code CLI. Imported
-            sessions can be resumed in CodePilot.
+            {t('import.subtitle')}
           </DialogDescription>
         </DialogHeader>
 
@@ -169,7 +155,7 @@ export function ImportSessionDialog({
             className="absolute left-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-muted-foreground"
           />
           <Input
-            placeholder="Search by project, message, or branch..."
+            placeholder={t('import.searchPlaceholder')}
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
             className="pl-8 text-sm"
@@ -193,7 +179,7 @@ export function ImportSessionDialog({
                   className="h-5 w-5 animate-spin text-muted-foreground"
                 />
                 <span className="ml-2 text-sm text-muted-foreground">
-                  Scanning CLI sessions...
+                  {t('import.scanning')}
                 </span>
               </div>
             ) : filteredSessions.length === 0 ? (
@@ -204,13 +190,13 @@ export function ImportSessionDialog({
                 />
                 <p className="text-sm">
                   {searchQuery
-                    ? "No matching sessions"
-                    : "No Claude Code CLI sessions found"}
+                    ? t('import.noMatching')
+                    : t('import.noSessions')}
                 </p>
                 <p className="text-xs mt-1 opacity-60">
                   {searchQuery
-                    ? "Try a different search term"
-                    : "Sessions are stored in ~/.claude/projects/"}
+                    ? t('import.tryDifferentSearch')
+                    : t('import.sessionsStored')}
                 </p>
               </div>
             ) : (
@@ -218,6 +204,10 @@ export function ImportSessionDialog({
                 const isImporting = importing === session.sessionId;
                 const totalMessages =
                   session.userMessageCount + session.assistantMessageCount;
+                const messageCountKey =
+                  totalMessages === 1
+                    ? 'import.messageCountSingular'
+                    : 'import.messageCountPlural';
                 return (
                   <div
                     key={session.sessionId}
@@ -264,7 +254,7 @@ export function ImportSessionDialog({
                               icon={Loading02Icon}
                               className="h-3 w-3 mr-1 animate-spin"
                             />
-                            Importing...
+                            {t('import.importing')}
                           </>
                         ) : (
                           <>
@@ -272,7 +262,7 @@ export function ImportSessionDialog({
                               icon={FileImportIcon}
                               className="h-3 w-3 mr-1"
                             />
-                            Import
+                            {t('import.import')}
                           </>
                         )}
                       </Button>
@@ -295,14 +285,14 @@ export function ImportSessionDialog({
                           icon={MessageAddIcon}
                           className="h-2.5 w-2.5"
                         />
-                        {totalMessages} msg{totalMessages !== 1 ? "s" : ""}
+                        {t(messageCountKey, { count: totalMessages })}
                       </span>
                       <span className="flex items-center gap-0.5 shrink-0">
                         <HugeiconsIcon
                           icon={ClockIcon}
                           className="h-2.5 w-2.5"
                         />
-                        {formatRelativeTime(session.updatedAt)}
+                        {formatRelativeTime(session.updatedAt, t, locale)}
                       </span>
                       <span className="shrink-0">
                         {formatFileSize(session.fileSize)}

@@ -15,6 +15,7 @@ import { math } from "@streamdown/math";
 import { mermaid } from "@streamdown/mermaid";
 import { usePanel } from "@/hooks/usePanel";
 import type { FilePreview as FilePreviewType } from "@/types";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const streamdownPlugins = { cjk, code, math, mermaid };
 
@@ -53,6 +54,7 @@ export function DocPreview({
   width,
 }: DocPreviewProps) {
   const { resolvedTheme } = useTheme();
+  const { t } = useTranslation();
   const { workingDirectory } = usePanel();
   const isDark = resolvedTheme === "dark";
   const [preview, setPreview] = useState<FilePreviewType | null>(null);
@@ -72,7 +74,7 @@ export function DocPreview({
         );
         if (!res.ok) {
           const data = await res.json();
-          throw new Error(data.error || "Failed to load file");
+          throw new Error(data.error || t('docPreview.failedToLoad'));
         }
         const data = await res.json();
         if (!cancelled) {
@@ -80,7 +82,7 @@ export function DocPreview({
         }
       } catch (err) {
         if (!cancelled) {
-          setError(err instanceof Error ? err.message : "Failed to load file");
+          setError(err instanceof Error ? err.message : t('docPreview.failedToLoad'));
         }
       } finally {
         if (!cancelled) {
@@ -93,7 +95,7 @@ export function DocPreview({
     return () => {
       cancelled = true;
     };
-  }, [filePath]);
+  }, [filePath, t]);
 
   const handleCopyContent = async () => {
     const text = preview?.content || filePath;
@@ -135,12 +137,12 @@ export function DocPreview({
           ) : (
             <HugeiconsIcon icon={Copy01Icon} className="h-3.5 w-3.5" />
           )}
-          <span className="sr-only">Copy content</span>
+          <span className="sr-only">{t('docPreview.copyPath')}</span>
         </Button>
 
         <Button variant="ghost" size="icon-sm" onClick={onClose}>
           <HugeiconsIcon icon={Cancel01Icon} className="h-3.5 w-3.5" />
-          <span className="sr-only">Close preview</span>
+          <span className="sr-only">{t('docPreview.closePreview')}</span>
         </Button>
       </div>
 
@@ -189,6 +191,8 @@ function ViewModeToggle({
   value: ViewMode;
   onChange: (v: ViewMode) => void;
 }) {
+  const { t } = useTranslation();
+
   return (
     <div className="flex h-6 items-center rounded-full bg-muted p-0.5 text-[11px]">
       <button
@@ -199,7 +203,7 @@ function ViewModeToggle({
         }`}
         onClick={() => onChange("source")}
       >
-        Source
+        {t('docPreview.source')}
       </button>
       <button
         className={`rounded-full px-2 py-0.5 font-medium transition-colors ${
@@ -209,7 +213,7 @@ function ViewModeToggle({
         }`}
         onClick={() => onChange("rendered")}
       >
-        Preview
+        {t('docPreview.preview')}
       </button>
     </div>
   );
@@ -252,13 +256,15 @@ function RenderedView({
   content: string;
   filePath: string;
 }) {
+  const { t } = useTranslation();
+
   if (isHtml(filePath)) {
     return (
       <iframe
         srcDoc={content}
         sandbox=""
         className="h-full w-full border-0"
-        title="HTML Preview"
+        title={t('docPreview.htmlPreview')}
       />
     );
   }

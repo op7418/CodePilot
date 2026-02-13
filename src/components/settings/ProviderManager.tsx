@@ -26,6 +26,7 @@ import {
 import { ProviderForm } from "./ProviderForm";
 import type { ProviderFormData } from "./ProviderForm";
 import type { ApiProvider } from "@/types";
+import { useTranslation } from "@/hooks/useTranslation";
 
 const QUICK_PRESETS = [
   { name: "Anthropic", provider_type: "anthropic", base_url: "https://api.anthropic.com" },
@@ -42,6 +43,7 @@ const QUICK_PRESETS = [
 ];
 
 export function ProviderManager() {
+  const { t } = useTranslation();
   const [providers, setProviders] = useState<ApiProvider[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -71,11 +73,11 @@ export function ProviderManager() {
       setProviders(data.providers || []);
       setEnvDetected(data.env_detected || {});
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to load providers");
+      setError(t("provider.failedToLoad"));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchProviders();
@@ -200,7 +202,7 @@ export function ProviderManager() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-2">
-            <h3 className="text-sm font-medium">API Providers</h3>
+            <h3 className="text-sm font-medium">{t("provider.title")}</h3>
             {providers.length > 0 && (
               <span className="text-xs text-muted-foreground">
                 ({providers.length})
@@ -208,12 +210,12 @@ export function ProviderManager() {
             )}
           </div>
           <p className="text-xs text-muted-foreground mt-0.5">
-            Manage API providers for Claude Code. The active provider will be used for all sessions.
+            {t("provider.desc")}
           </p>
         </div>
         <Button size="sm" className="gap-1" onClick={handleAdd}>
           <HugeiconsIcon icon={PlusSignIcon} className="h-3.5 w-3.5" />
-          Add Provider
+          {t("provider.addProvider")}
         </Button>
       </div>
 
@@ -239,15 +241,15 @@ export function ProviderManager() {
                   ? "text-muted-foreground"
                   : "text-green-700 dark:text-green-400"
               }`}>
-                Environment variables detected
+                {t("provider.envDetected")}
               </p>
               {hasActiveProvider ? (
                 <Badge variant="secondary" className="text-[10px] px-1.5 py-0 text-muted-foreground">
-                  Overridden
+                  {t("provider.envOverridden")}
                 </Badge>
               ) : (
                 <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-green-600 dark:text-green-400 border-green-500/30">
-                  In use
+                  {t("provider.envInUse")}
                 </Badge>
               )}
             </div>
@@ -262,7 +264,7 @@ export function ProviderManager() {
             </div>
             {hasActiveProvider && (
               <p className="text-xs text-muted-foreground mt-1.5">
-                Active provider takes priority. Disable it to use environment variables.
+                {t("provider.envOverriddenHint")}
               </p>
             )}
           </div>
@@ -273,7 +275,7 @@ export function ProviderManager() {
       {loading && (
         <div className="flex items-center justify-center gap-2 py-8 text-muted-foreground">
           <HugeiconsIcon icon={Loading02Icon} className="h-4 w-4 animate-spin" />
-          <p className="text-sm">Loading providers...</p>
+          <p className="text-sm">{t("provider.loadingProviders")}</p>
         </div>
       )}
 
@@ -282,11 +284,11 @@ export function ProviderManager() {
         <div className="flex flex-col items-center gap-3 py-8 text-muted-foreground">
           <HugeiconsIcon icon={ServerStack01Icon} className="h-10 w-10 opacity-30" />
           <div className="text-center">
-            <p className="text-sm font-medium">No providers configured</p>
+            <p className="text-sm font-medium">{t("provider.noProviders")}</p>
             <p className="text-xs mt-0.5">
               {Object.keys(envDetected).length > 0
-                ? "Using environment variables. Add a provider below to override."
-                : "Add a provider to use a custom API endpoint with Claude Code."}
+                ? t("provider.emptyWithEnv")
+                : t("provider.emptyNoEnv")}
             </p>
           </div>
           {/* Quick preset buttons */}
@@ -334,7 +336,7 @@ export function ProviderManager() {
                       </Badge>
                       {isActive && (
                         <Badge variant="outline" className="text-[10px] px-1.5 py-0 text-green-600 dark:text-green-400 border-green-500/30">
-                          Active
+                          {t("provider.active")}
                         </Badge>
                       )}
                     </div>
@@ -360,7 +362,7 @@ export function ProviderManager() {
                         ) : (
                           <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3" />
                         )}
-                        Disable
+                        {t("provider.disable")}
                       </Button>
                     ) : (
                       <Button
@@ -375,13 +377,13 @@ export function ProviderManager() {
                         ) : (
                           <HugeiconsIcon icon={Tick01Icon} className="h-3 w-3" />
                         )}
-                        Apply
+                        {t("provider.apply")}
                       </Button>
                     )}
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      title="Edit"
+                      title={t("provider.edit")}
                       onClick={() => handleEdit(provider)}
                     >
                       <HugeiconsIcon icon={PencilEdit01Icon} className="h-3 w-3" />
@@ -389,7 +391,7 @@ export function ProviderManager() {
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      title="Delete"
+                      title={t("provider.delete")}
                       onClick={() => setDeleteTarget(provider)}
                     >
                       <HugeiconsIcon icon={Delete02Icon} className="h-3 w-3 text-destructive" />
@@ -405,7 +407,7 @@ export function ProviderManager() {
       {/* Quick presets row (when providers exist) */}
       {!loading && providers.length > 0 && (
         <div className="flex items-center gap-1.5 flex-wrap">
-          <span className="text-xs text-muted-foreground mr-1">Quick add:</span>
+          <span className="text-xs text-muted-foreground mr-1">{t("provider.quickAdd")}</span>
           {QUICK_PRESETS.map((preset) => (
             <Button
               key={preset.name}
@@ -435,19 +437,19 @@ export function ProviderManager() {
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete Provider</AlertDialogTitle>
+            <AlertDialogTitle>{t("provider.deleteTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              Are you sure you want to delete &quot;{deleteTarget?.name}&quot;? This action cannot be undone.
+              {t("provider.deleteDesc", { name: deleteTarget?.name || "" })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleting}>{t("provider.cancel")}</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleDelete}
               disabled={deleting}
               className="bg-destructive text-white hover:bg-destructive/90"
             >
-              {deleting ? "Deleting..." : "Delete"}
+              {deleting ? t("provider.deleting") : t("provider.delete")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

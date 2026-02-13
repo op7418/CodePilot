@@ -8,6 +8,7 @@ import { HugeiconsIcon } from "@hugeicons/react";
 import { Loading02Icon, PencilEdit01Icon } from "@hugeicons/core-free-icons";
 import { Input } from '@/components/ui/input';
 import { usePanel } from '@/hooks/usePanel';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface ChatSessionPageProps {
   params: Promise<{ id: string }>;
@@ -27,9 +28,10 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
   const [editTitle, setEditTitle] = useState('');
   const titleInputRef = useRef<HTMLInputElement>(null);
   const { setWorkingDirectory, setSessionId, setSessionTitle: setPanelSessionTitle, setPanelOpen } = usePanel();
+  const { t } = useTranslation();
 
   const handleStartEditTitle = useCallback(() => {
-    setEditTitle(sessionTitle || 'New Conversation');
+    setEditTitle(sessionTitle || t('chatSession.newConversation'));
     setIsEditingTitle(true);
   }, [sessionTitle]);
 
@@ -84,7 +86,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
           }
           setSessionId(id);
           setPanelOpen(true);
-          const title = data.session.title || 'New Conversation';
+          const title = data.session.title || t('chatSession.newConversation');
           setSessionTitle(title);
           setPanelSessionTitle(title);
           setSessionModel(data.session.model || '');
@@ -114,7 +116,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
         if (cancelled) return;
         if (!res.ok) {
           if (res.status === 404) {
-            setError('Session not found');
+            setError(t('chatSession.sessionNotFound'));
             return;
           }
           throw new Error('Failed to load messages');
@@ -125,7 +127,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
         setHasMore(data.hasMore ?? false);
       } catch (err) {
         if (cancelled) return;
-        setError(err instanceof Error ? err.message : 'Failed to load messages');
+        setError(t('chatSession.failedToLoad'));
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -150,7 +152,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
         <div className="text-center space-y-2">
           <p className="text-destructive font-medium">{error}</p>
           <Link href="/chat" className="text-sm text-muted-foreground hover:underline">
-            Start a new chat
+            {t('chatSession.startNewChat')}
           </Link>
         </div>
       </div>

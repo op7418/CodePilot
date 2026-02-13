@@ -17,6 +17,7 @@ import {
   ConfirmationAction,
 } from '@/components/ai-elements/confirmation';
 import { Shimmer } from '@/components/ai-elements/shimmer';
+import { useTranslation } from '@/hooks/useTranslation';
 import type { ToolUIPart } from 'ai';
 import type { PermissionRequestEvent } from '@/types';
 
@@ -52,6 +53,9 @@ function ElapsedTimer() {
   useEffect(() => {
     startRef.current = Date.now();
     const interval = setInterval(() => {
+      if (!startRef.current) {
+        startRef.current = Date.now();
+      }
       setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
     }, 1000);
     return () => clearInterval(interval);
@@ -68,7 +72,8 @@ function ElapsedTimer() {
 }
 
 function StreamingStatusBar({ statusText, onForceStop }: { statusText?: string; onForceStop?: () => void }) {
-  const displayText = statusText || 'Thinking';
+  const { t } = useTranslation();
+  const displayText = statusText || t('streaming.thinking');
 
   // Parse elapsed seconds from statusText like "Running bash... (45s)"
   const elapsedMatch = statusText?.match(/\((\d+)s\)/);
@@ -116,6 +121,7 @@ export function StreamingMessage({
   permissionResolved,
   onForceStop,
 }: StreamingMessageProps) {
+  const { t } = useTranslation();
   const runningTools = toolUses.filter(
     (tool) => !toolResults.some((r) => r.tool_use_id === tool.id)
   );
@@ -161,7 +167,7 @@ export function StreamingMessage({
     }
     if (input.file_path) return `${tool.name}: ${String(input.file_path)}`;
     if (input.path) return `${tool.name}: ${String(input.path)}`;
-    return `Running ${tool.name}...`;
+    return t('streaming.running', { tool: tool.name });
   };
 
   return (
@@ -212,31 +218,31 @@ export function StreamingMessage({
                   variant="outline"
                   onClick={() => onPermissionResponse?.('deny')}
                 >
-                  Deny
+                  {t('streaming.deny')}
                 </ConfirmationAction>
                 <ConfirmationAction
                   variant="outline"
                   onClick={() => onPermissionResponse?.('allow')}
                 >
-                  Allow Once
+                  {t('streaming.allowOnce')}
                 </ConfirmationAction>
                 {pendingPermission?.suggestions && pendingPermission.suggestions.length > 0 && (
                   <ConfirmationAction
                     variant="default"
                     onClick={() => onPermissionResponse?.('allow_session')}
                   >
-                    Allow for Session
+                    {t('streaming.allowSession')}
                   </ConfirmationAction>
                 )}
               </ConfirmationActions>
             </ConfirmationRequest>
 
             <ConfirmationAccepted>
-              <p className="text-xs text-green-600 dark:text-green-400">Allowed</p>
+              <p className="text-xs text-green-600 dark:text-green-400">{t('streaming.allowed')}</p>
             </ConfirmationAccepted>
 
             <ConfirmationRejected>
-              <p className="text-xs text-red-600 dark:text-red-400">Denied</p>
+              <p className="text-xs text-red-600 dark:text-red-400">{t('streaming.denied')}</p>
             </ConfirmationRejected>
           </Confirmation>
         )}
@@ -249,7 +255,7 @@ export function StreamingMessage({
         {/* Loading indicator when no content yet */}
         {isStreaming && !content && toolUses.length === 0 && !pendingPermission && (
           <div className="py-2">
-            <Shimmer>Thinking...</Shimmer>
+            <Shimmer>{t('streaming.thinkingEllipsis')}</Shimmer>
           </div>
         )}
 

@@ -10,7 +10,7 @@
  * 4. Data persists across close/reopen cycles
  */
 
-import { describe, it, before, afterEach } from 'node:test';
+import { describe, it, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'path';
 import os from 'os';
@@ -23,7 +23,6 @@ process.env.CLAUDE_GUI_DATA_DIR = tmpDir;
 // Use require to avoid top-level await issues with CJS output
 /* eslint-disable @typescript-eslint/no-require-imports */
 const { getDb, closeDb, createSession, getSession } = require('../../lib/db') as typeof import('../../lib/db');
-
 describe('closeDb', () => {
   afterEach(() => {
     // Ensure DB is closed after each test

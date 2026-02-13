@@ -9,6 +9,7 @@ import { getSetting, setSetting } from '@/lib/db';
 const ALLOWED_KEYS = [
   'anthropic_auth_token',
   'anthropic_base_url',
+  'locale',
   'dangerously_skip_permissions',
 ];
 

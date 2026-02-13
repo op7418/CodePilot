@@ -5,6 +5,8 @@ import type { Message, MessagesResponse, PermissionRequestEvent, FileAttachment 
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { usePanel } from '@/hooks/usePanel';
+import { useTranslation } from '@/hooks/useTranslation';
+import { buildHelpContent } from '@/lib/help-content';
 import { consumeSSEStream } from '@/hooks/useSSEStream';
 
 interface ToolUseInfo {
@@ -28,6 +30,7 @@ interface ChatViewProps {
 
 export function ChatView({ sessionId, initialMessages = [], initialHasMore = false, modelName, initialMode }: ChatViewProps) {
   const { setStreamingSessionId, workingDirectory, setWorkingDirectory, setPanelOpen, setPendingApprovalSessionId } = usePanel();
+  const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -243,7 +246,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
             });
           },
           onToolProgress: (toolName, elapsed) => {
-            setStatusText(`Running ${toolName}... (${elapsed}s)`);
+            setStatusText(t('chat.running', { tool: toolName, seconds: elapsed }));
           },
           onStatus: (text) => {
             if (text?.startsWith('Connected (')) {
@@ -327,19 +330,22 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
               id: 'temp-assistant-' + Date.now(),
               session_id: sessionId,
               role: 'assistant',
-              content: accumulated.trim() + '\n\n*(generation stopped)*',
+              content: accumulated.trim() + '\n\n' + t('chat.generationStopped'),
               created_at: new Date().toISOString(),
               token_usage: null,
             };
             setMessages((prev) => [...prev, partialMessage]);
           }
         } else {
-          const errMsg = error instanceof Error ? error.message : 'Unknown error';
+          const detail = error instanceof Error ? error.message : '';
+          const errMsg = detail
+            ? `${t('chat.failedToSend')}: ${detail}`
+            : t('chat.failedToSend');
           const errorMessage: Message = {
             id: 'temp-error-' + Date.now(),
             session_id: sessionId,
             role: 'assistant',
-            content: `**Error:** ${errMsg}`,
+            content: `**${t('chat.error')}:** ${errMsg}`,
             created_at: new Date().toISOString(),
             token_usage: null,
           };
@@ -363,7 +369,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         window.dispatchEvent(new CustomEvent('refresh-file-tree'));
       }
     },
-    [sessionId, isStreaming, setStreamingSessionId, setPendingApprovalSessionId, mode, currentModel]
+    [sessionId, isStreaming, setStreamingSessionId, setPendingApprovalSessionId, mode, currentModel, t]
   );
 
   // Keep sendMessageRef in sync so timeout auto-retry can call it
@@ -376,7 +382,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
           id: 'cmd-' + Date.now(),
           session_id: sessionId,
           role: 'assistant',
-          content: `## Available Commands\n\n### Instant Commands\n- **/help** — Show this help message\n- **/clear** — Clear conversation history\n- **/cost** — Show token usage statistics\n\n### Prompt Commands (shown as badge, add context then send)\n- **/compact** — Compress conversation context\n- **/doctor** — Diagnose project health\n- **/init** — Initialize CLAUDE.md for project\n- **/review** — Review code quality\n- **/terminal-setup** — Configure terminal settings\n- **/memory** — Edit project memory file\n\n### Custom Skills\nSkills from \`~/.claude/commands/\` and project \`.claude/commands/\` are also available via \`/\`.\n\n**Tips:**\n- Type \`/\` to browse commands and skills\n- Type \`@\` to mention files\n- Use Shift+Enter for new line\n- Select a project folder to enable file operations`,
+          content: buildHelpContent(t),
           created_at: new Date().toISOString(),
           token_usage: null,
         };
@@ -421,9 +427,9 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         let content: string;
 
         if (turnCount === 0) {
-          content = `## Token Usage\n\nNo token usage data yet. Send a message first.`;
+          content = `${t('chat.tokenUsageTitle')}\n\n${t('chat.noTokenUsage')}`;
         } else {
-          content = `## Token Usage\n\n| Metric | Count |\n|--------|-------|\n| Input tokens | ${totalInput.toLocaleString()} |\n| Output tokens | ${totalOutput.toLocaleString()} |\n| Cache read | ${totalCacheRead.toLocaleString()} |\n| Cache creation | ${totalCacheCreation.toLocaleString()} |\n| **Total tokens** | **${totalTokens.toLocaleString()}** |\n| Turns | ${turnCount} |${totalCost > 0 ? `\n| **Estimated cost** | **$${totalCost.toFixed(4)}** |` : ''}`;
+          content = `${t('chat.tokenUsageTitle')}\n\n| ${t('chat.metric')} | ${t('chat.count')} |\n|--------|-------|\n| ${t('chat.inputTokens')} | ${totalInput.toLocaleString()} |\n| ${t('chat.outputTokens')} | ${totalOutput.toLocaleString()} |\n| ${t('chat.cacheRead')} | ${totalCacheRead.toLocaleString()} |\n| ${t('chat.cacheCreation')} | ${totalCacheCreation.toLocaleString()} |\n| **${t('chat.totalTokens')}** | **${totalTokens.toLocaleString()}** |\n| ${t('chat.turns')} | ${turnCount} |${totalCost > 0 ? `\n| **${t('chat.estimatedCost')}** | **$${totalCost.toFixed(4)}** |` : ''}`;
         }
 
         const costMessage: Message = {
@@ -441,7 +447,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         // This shouldn't be reached since non-immediate commands are handled via badge
         sendMessage(command);
     }
-  }, [sessionId, sendMessage]);
+  }, [sessionId, sendMessage, t, messages]);
 
   return (
     <div className="flex h-full min-h-0 flex-col">

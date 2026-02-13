@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
@@ -15,6 +15,7 @@ import {
 } from '@/components/ui/dialog';
 import { HugeiconsIcon } from "@hugeicons/react";
 import { ServerStack01Icon, Wifi01Icon, GlobeIcon, CodeIcon } from "@hugeicons/core-free-icons";
+import { useTranslation } from "@/hooks/useTranslation";
 import type { MCPServer } from '@/types';
 
 type ServerType = 'stdio' | 'sse' | 'http';
@@ -49,44 +50,19 @@ export function McpServerEditor({
     initialServer?.env ? JSON.stringify(initialServer.env, null, 2) : '{}'
   );
   const [jsonMode, setJsonMode] = useState(false);
-  const [jsonText, setJsonText] = useState('');
+  const [jsonText, setJsonText] = useState(
+    initialServer
+      ? JSON.stringify(initialServer, null, 2)
+      : '{\n  "command": "",\n  "args": []\n}'
+  );
   const [error, setError] = useState<string | null>(null);
-
-  // Reset form when dialog opens with new data
-  /* eslint-disable react-hooks/set-state-in-effect -- intentional form reset when dialog opens with new props */
-  useEffect(() => {
-    if (open) {
-      setName(initialName || '');
-      setServerType(initialServer?.type || 'stdio');
-      setCommand(initialServer?.command || '');
-      setArgs(initialServer?.args?.join('\n') || '');
-      setUrl(initialServer?.url || '');
-      setHeadersText(
-        initialServer?.headers
-          ? JSON.stringify(initialServer.headers, null, 2)
-          : '{}'
-      );
-      setEnvText(
-        initialServer?.env
-          ? JSON.stringify(initialServer.env, null, 2)
-          : '{}'
-      );
-      setJsonMode(false);
-      setJsonText(
-        initialServer
-          ? JSON.stringify(initialServer, null, 2)
-          : '{\n  "command": "",\n  "args": []\n}'
-      );
-      setError(null);
-    }
-  }, [open, initialName, initialServer]);
-  /* eslint-enable react-hooks/set-state-in-effect */
+  const { t } = useTranslation();
 
   function handleSave() {
     setError(null);
 
     if (!name.trim()) {
-      setError('Server name is required');
+      setError(t('mcpEditor.nameRequired'));
       return;
     }
 
@@ -94,13 +70,13 @@ export function McpServerEditor({
       try {
         const parsed = JSON.parse(jsonText);
         if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-          setError('JSON must be an object');
+          setError(t('mcpEditor.jsonMustBeObject'));
           return;
         }
         onSave(name.trim(), parsed as MCPServer);
         onOpenChange(false);
       } catch {
-        setError('Invalid JSON configuration');
+        setError(t('mcpEditor.invalidJsonConfig'));
       }
       return;
     }
@@ -108,12 +84,12 @@ export function McpServerEditor({
     // Validate based on server type
     if (serverType === 'stdio') {
       if (!command.trim()) {
-        setError('Command is required for stdio servers');
+        setError(t('mcpEditor.commandRequired'));
         return;
       }
     } else {
       if (!url.trim()) {
-        setError('URL is required for SSE/HTTP servers');
+        setError(t('mcpEditor.urlRequired'));
         return;
       }
     }
@@ -124,11 +100,11 @@ export function McpServerEditor({
       if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
         env = Object.keys(parsed).length > 0 ? parsed : undefined;
       } else {
-        setError('Environment must be a JSON object');
+        setError(t('mcpEditor.envMustBeObject'));
         return;
       }
     } catch {
-      setError('Invalid JSON in environment variables');
+      setError(t('mcpEditor.invalidEnvJson'));
       return;
     }
 
@@ -139,11 +115,11 @@ export function McpServerEditor({
         if (typeof parsed === 'object' && parsed !== null && !Array.isArray(parsed)) {
           headers = Object.keys(parsed).length > 0 ? parsed : undefined;
         } else {
-          setError('Headers must be a JSON object');
+          setError(t('mcpEditor.headersMustBeObject'));
           return;
         }
       } catch {
-        setError('Invalid JSON in headers');
+        setError(t('mcpEditor.invalidHeadersJson'));
         return;
       }
     }
@@ -177,13 +153,13 @@ export function McpServerEditor({
       <DialogContent className="sm:max-w-[550px] max-h-[85vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {isEditing ? `Edit MCP Server: ${initialName}` : 'Add MCP Server'}
+            {isEditing ? t('mcpEditor.editTitle', { name: initialName }) : t('mcpEditor.addTitle')}
           </DialogTitle>
         </DialogHeader>
 
         <div className="space-y-4 py-2">
           <div className="space-y-2">
-            <Label htmlFor="server-name">Server Name</Label>
+            <Label htmlFor="server-name">{t('mcpEditor.serverName')}</Label>
             <Input
               id="server-name"
               value={name}
@@ -191,13 +167,13 @@ export function McpServerEditor({
                 setName(e.target.value);
                 setError(null);
               }}
-              placeholder="my-mcp-server"
+              placeholder={t('mcpEditor.serverNamePlaceholder')}
               disabled={isEditing}
             />
           </div>
 
           <div className="flex items-center gap-2">
-            <Label className="shrink-0">Edit Mode:</Label>
+            <Label className="shrink-0">{t('mcpEditor.editMode')}</Label>
             <Button
               variant={jsonMode ? 'outline' : 'default'}
               size="sm"
@@ -206,7 +182,7 @@ export function McpServerEditor({
                 setError(null);
               }}
             >
-              Form
+              {t('mcpEditor.form')}
             </Button>
             <Button
               variant={jsonMode ? 'default' : 'outline'}
@@ -243,7 +219,7 @@ export function McpServerEditor({
 
           {jsonMode ? (
             <div className="space-y-2">
-              <Label>Server Configuration (JSON)</Label>
+              <Label>{t('mcpEditor.serverConfig')}</Label>
               <Textarea
                 value={jsonText}
                 onChange={(e) => {
@@ -251,13 +227,13 @@ export function McpServerEditor({
                   setError(null);
                 }}
                 className="font-mono text-sm min-h-[250px]"
-                placeholder='{"command": "npx", "args": ["-y", "@server/name"]}'
+                placeholder={'{"command": "npx", "args": ["-y", "@server/name"]}'}
               />
             </div>
           ) : (
             <>
               <div className="space-y-2">
-                <Label>Server Type</Label>
+                <Label>{t('mcpEditor.serverType')}</Label>
                 <Tabs
                   value={serverType}
                   onValueChange={(v) => {
@@ -285,7 +261,7 @@ export function McpServerEditor({
               {serverType === 'stdio' ? (
                 <>
                   <div className="space-y-2">
-                    <Label htmlFor="server-command">Command</Label>
+                    <Label htmlFor="server-command">{t('mcpEditor.command')}</Label>
                     <Input
                       id="server-command"
                       value={command}
@@ -293,13 +269,13 @@ export function McpServerEditor({
                         setCommand(e.target.value);
                         setError(null);
                       }}
-                      placeholder="npx -y @modelcontextprotocol/server-name"
+                      placeholder={t('mcpEditor.commandPlaceholder')}
                       className="font-mono text-sm"
                     />
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="server-args">Arguments (one per line)</Label>
+                    <Label htmlFor="server-args">{t('mcpEditor.arguments')}</Label>
                     <Textarea
                       id="server-args"
                       value={args}
@@ -312,7 +288,7 @@ export function McpServerEditor({
               ) : (
                 <>
                   <div className="space-y-2">
-                    <Label htmlFor="server-url">URL</Label>
+                    <Label htmlFor="server-url">{t('mcpEditor.url')}</Label>
                     <Input
                       id="server-url"
                       value={url}
@@ -330,7 +306,7 @@ export function McpServerEditor({
                   </div>
 
                   <div className="space-y-2">
-                    <Label htmlFor="server-headers">Headers (JSON)</Label>
+                    <Label htmlFor="server-headers">{t('mcpEditor.headers')}</Label>
                     <Textarea
                       id="server-headers"
                       value={headersText}
@@ -338,7 +314,7 @@ export function McpServerEditor({
                         setHeadersText(e.target.value);
                         setError(null);
                       }}
-                      placeholder='{"Authorization": "Bearer ..."}'
+                      placeholder={'{"Authorization": "Bearer ..."}'}
                       className="font-mono text-sm min-h-[80px]"
                     />
                   </div>
@@ -346,7 +322,7 @@ export function McpServerEditor({
               )}
 
               <div className="space-y-2">
-                <Label htmlFor="server-env">Environment Variables (JSON)</Label>
+                <Label htmlFor="server-env">{t('mcpEditor.envVars')}</Label>
                 <Textarea
                   id="server-env"
                   value={envText}
@@ -354,7 +330,7 @@ export function McpServerEditor({
                     setEnvText(e.target.value);
                     setError(null);
                   }}
-                  placeholder='{"API_KEY": "..."}'
+                  placeholder={'{"API_KEY": "..."}'}
                   className="font-mono text-sm min-h-[80px]"
                 />
               </div>
@@ -366,10 +342,10 @@ export function McpServerEditor({
 
         <DialogFooter>
           <Button variant="outline" onClick={() => onOpenChange(false)}>
-            Cancel
+            {t('mcpEditor.cancel')}
           </Button>
           <Button onClick={handleSave}>
-            {isEditing ? 'Save Changes' : 'Add Server'}
+            {isEditing ? t('mcpEditor.saveChanges') : t('mcpEditor.addServer')}
           </Button>
         </DialogFooter>
       </DialogContent>

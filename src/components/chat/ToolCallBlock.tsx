@@ -16,6 +16,7 @@ import {
   CancelCircleIcon,
 } from "@hugeicons/core-free-icons";
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/hooks/useTranslation';
 import { CodeBlock } from './CodeBlock';
 
 type ToolStatus = 'running' | 'success' | 'error';
@@ -151,6 +152,7 @@ export function ToolCallBlock({
   duration,
 }: ToolCallBlockProps) {
   const [expanded, setExpanded] = useState(false);
+  const { t } = useTranslation();
   const category = getToolCategory(name);
   const toolIconData = getToolIcon(category);
   const summary = getToolSummary(name, input, category);
@@ -174,7 +176,7 @@ export function ToolCallBlock({
             {!result && status === 'running' && (
               <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
                 <HugeiconsIcon icon={Loading02Icon} className="h-3 w-3 animate-spin" />
-                Reading file...
+                {t('toolCall.readingFile')}
               </div>
             )}
           </div>
@@ -225,7 +227,7 @@ export function ToolCallBlock({
             {!result && status === 'running' && (
               <div className="flex items-center gap-2 py-2 text-xs text-muted-foreground">
                 <HugeiconsIcon icon={Loading02Icon} className="h-3 w-3 animate-spin" />
-                Executing...
+                {t('toolCall.executing')}
               </div>
             )}
           </div>
@@ -239,7 +241,7 @@ export function ToolCallBlock({
           <div className="space-y-2">
             {pattern && (
               <div className="text-xs font-mono text-muted-foreground px-1">
-                Pattern: <span className="text-foreground">{pattern}</span>
+                {t('toolCall.pattern')} <span className="text-foreground">{pattern}</span>
               </div>
             )}
             {result && (
@@ -250,7 +252,7 @@ export function ToolCallBlock({
                   </div>
                 ))}
                 {result.split('\n').length > 50 && (
-                  <div className="pt-1 text-zinc-500">... and {result.split('\n').length - 50} more lines</div>
+                  <div className="pt-1 text-zinc-500">{t('toolCall.moreLines', { count: result.split('\n').length - 50 })}</div>
                 )}
               </div>
             )}
@@ -262,14 +264,14 @@ export function ToolCallBlock({
         return (
           <div className="space-y-2">
             <div>
-              <div className="text-xs font-medium text-muted-foreground mb-1">Input</div>
+              <div className="text-xs font-medium text-muted-foreground mb-1">{t('toolCall.input')}</div>
               <pre className="overflow-x-auto whitespace-pre-wrap text-xs font-mono text-muted-foreground bg-muted/50 rounded p-2">
                 {JSON.stringify(input, null, 2)}
               </pre>
             </div>
             {result && (
               <div>
-                <div className="text-xs font-medium text-muted-foreground mb-1">Output</div>
+                <div className="text-xs font-medium text-muted-foreground mb-1">{t('toolCall.output')}</div>
                 <pre className="overflow-x-auto whitespace-pre-wrap text-xs font-mono text-muted-foreground bg-muted/50 rounded p-2 max-h-60 overflow-auto">
                   {result.slice(0, 3000)}
                 </pre>

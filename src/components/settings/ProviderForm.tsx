@@ -23,6 +23,8 @@ import {
 import { HugeiconsIcon } from "@hugeicons/react";
 import { Loading02Icon, ArrowDown01Icon, ArrowUp01Icon } from "@hugeicons/core-free-icons";
 import type { ApiProvider } from "@/types";
+import { useTranslation } from "@/hooks/useTranslation";
+import type { TranslationKey } from "@/i18n";
 
 const PROVIDER_PRESETS: Record<string, { base_url: string; extra_env: string }> = {
   anthropic: { base_url: "https://api.anthropic.com", extra_env: "{}" },
@@ -32,12 +34,12 @@ const PROVIDER_PRESETS: Record<string, { base_url: string; extra_env: string }> 
   custom: { base_url: "", extra_env: "{}" },
 };
 
-const PROVIDER_TYPES = [
-  { value: "anthropic", label: "Anthropic" },
-  { value: "openrouter", label: "OpenRouter" },
-  { value: "bedrock", label: "AWS Bedrock" },
-  { value: "vertex", label: "Google Vertex" },
-  { value: "custom", label: "Custom" },
+const PROVIDER_TYPES: { value: string; labelKey: TranslationKey }[] = [
+  { value: "anthropic", labelKey: "providerForm.typeAnthropic" },
+  { value: "openrouter", labelKey: "providerForm.typeOpenRouter" },
+  { value: "bedrock", labelKey: "providerForm.typeBedrock" },
+  { value: "vertex", labelKey: "providerForm.typeVertex" },
+  { value: "custom", labelKey: "providerForm.typeCustom" },
 ];
 
 interface ProviderFormProps {
@@ -66,6 +68,7 @@ export function ProviderForm({
   onSave,
   initialPreset,
 }: ProviderFormProps) {
+  const { t } = useTranslation();
   const [name, setName] = useState("");
   const [providerType, setProviderType] = useState("anthropic");
   const [baseUrl, setBaseUrl] = useState("");
@@ -140,7 +143,7 @@ export function ProviderForm({
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) {
-      setError("Name is required");
+      setError(t("providerForm.nameRequired"));
       return;
     }
 
@@ -148,7 +151,7 @@ export function ProviderForm({
     try {
       JSON.parse(extraEnv);
     } catch {
-      setError("Extra environment variables must be valid JSON");
+      setError(t("providerForm.invalidEnvJson"));
       return;
     }
 
@@ -165,7 +168,7 @@ export function ProviderForm({
       });
       onOpenChange(false);
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Failed to save provider");
+      setError(t("providerForm.failedToSave"));
     } finally {
       setSaving(false);
     }
@@ -178,23 +181,23 @@ export function ProviderForm({
       <DialogContent className="max-w-[28rem] overflow-hidden">
         <DialogHeader>
           <DialogTitle>
-            {mode === "edit" ? "Edit Provider" : "Add Provider"}
+            {mode === "edit" ? t("providerForm.editTitle") : t("providerForm.addTitle")}
           </DialogTitle>
           <DialogDescription>
             {mode === "edit"
-              ? "Update the API provider configuration."
-              : "Configure a new API provider for Claude Code."}
+              ? t("providerForm.editDesc")
+              : t("providerForm.addDesc")}
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4 min-w-0">
           <div className="space-y-2">
             <Label htmlFor="provider-name" className="text-xs text-muted-foreground">
-              Name
+              {t("providerForm.name")}
             </Label>
             <Input
               id="provider-name"
-              placeholder="My API Provider"
+              placeholder={t("providerForm.namePlaceholder")}
               value={name}
               onChange={(e) => setName(e.target.value)}
               className="text-sm"
@@ -203,16 +206,16 @@ export function ProviderForm({
 
           <div className="space-y-2">
             <Label htmlFor="provider-type" className="text-xs text-muted-foreground">
-              Provider Type
+              {t("providerForm.providerType")}
             </Label>
             <Select value={providerType} onValueChange={handleTypeChange}>
               <SelectTrigger className="w-full text-sm">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {PROVIDER_TYPES.map((t) => (
-                  <SelectItem key={t.value} value={t.value}>
-                    {t.label}
+                {PROVIDER_TYPES.map((pt) => (
+                  <SelectItem key={pt.value} value={pt.value}>
+                    {t(pt.labelKey)}
                   </SelectItem>
                 ))}
               </SelectContent>
@@ -221,7 +224,7 @@ export function ProviderForm({
 
           <div className="space-y-2">
             <Label htmlFor="provider-base-url" className="text-xs text-muted-foreground">
-              API Base URL
+              {t("providerForm.baseUrl")}
             </Label>
             <Input
               id="provider-base-url"
@@ -234,12 +237,12 @@ export function ProviderForm({
 
           <div className="space-y-2">
             <Label htmlFor="provider-api-key" className="text-xs text-muted-foreground">
-              API Key
+              {t("providerForm.apiKey")}
             </Label>
             <Input
               id="provider-api-key"
               type="password"
-              placeholder={isMaskedKey ? "Leave empty to keep current key" : "sk-ant-..."}
+              placeholder={isMaskedKey ? t("providerForm.apiKeyEditPlaceholder") : t("providerForm.apiKeyPlaceholder")}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
               className="font-mono text-sm"
@@ -256,14 +259,14 @@ export function ProviderForm({
               icon={showAdvanced ? ArrowUp01Icon : ArrowDown01Icon}
               className="h-3 w-3"
             />
-            Advanced Options
+            {t("providerForm.advancedOptions")}
           </button>
 
           {showAdvanced && (
             <div className="space-y-4 border-t border-border/50 pt-4">
               <div className="space-y-2">
                 <Label htmlFor="provider-extra-env" className="text-xs text-muted-foreground">
-                  Extra Environment Variables (JSON)
+                  {t("providerForm.extraEnv")}
                 </Label>
                 <Textarea
                   id="provider-extra-env"
@@ -277,11 +280,11 @@ export function ProviderForm({
 
               <div className="space-y-2">
                 <Label htmlFor="provider-notes" className="text-xs text-muted-foreground">
-                  Notes
+                  {t("providerForm.notes")}
                 </Label>
                 <Textarea
                   id="provider-notes"
-                  placeholder="Optional notes about this provider..."
+                  placeholder={t("providerForm.notesPlaceholder")}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
                   className="text-sm"
@@ -302,13 +305,13 @@ export function ProviderForm({
               onClick={() => onOpenChange(false)}
               disabled={saving}
             >
-              Cancel
+              {t("providerForm.cancel")}
             </Button>
             <Button type="submit" disabled={saving} className="gap-2">
               {saving && (
                 <HugeiconsIcon icon={Loading02Icon} className="h-4 w-4 animate-spin" />
               )}
-              {saving ? "Saving..." : mode === "edit" ? "Update" : "Add Provider"}
+              {saving ? t("providerForm.saving") : mode === "edit" ? t("providerForm.update") : t("providerForm.add")}
             </Button>
           </DialogFooter>
         </form>

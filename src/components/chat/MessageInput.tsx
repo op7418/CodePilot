@@ -22,6 +22,8 @@ import {
   GlobalIcon,
 } from "@hugeicons/core-free-icons";
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/hooks/useTranslation';
+import type { TranslationKey } from '@/i18n';
 import {
   PromptInput,
   PromptInputTextarea,
@@ -77,11 +79,33 @@ interface CommandBadge {
   command: string;
   label: string;
   description: string;
+  descriptionKey?: TranslationKey;
   isSkill: boolean;
   installedSource?: "agents" | "claude";
 }
 
 type PopoverMode = 'file' | 'skill' | null;
+
+function dedupePopoverItems(items: PopoverItem[]) {
+  const seen = new Map<string, PopoverItem>();
+  for (const item of items) {
+    const existing = seen.get(item.value);
+    if (!existing) {
+      seen.set(item.value, item);
+      continue;
+    }
+    const existingBuiltIn = !!existing.builtIn;
+    const incomingBuiltIn = !!item.builtIn;
+    if (!existingBuiltIn && incomingBuiltIn) {
+      seen.set(item.value, item);
+      continue;
+    }
+    if (!existing.description && item.description) {
+      seen.set(item.value, item);
+    }
+  }
+  return Array.from(seen.values());
+}
 
 // Expansion prompts for CLI-only commands (not natively supported by SDK).
 // SDK-native commands (/compact, /init, /review) are sent as-is — the SDK handles them directly.
@@ -236,11 +260,12 @@ function FileAwareSubmitButton({
  */
 function AttachFileButton() {
   const attachments = usePromptInputAttachments();
+  const { t } = useTranslation();
 
   return (
     <PromptInputButton
       onClick={() => attachments.openFileDialog()}
-      tooltip="Attach files"
+      tooltip={t('input.attachFiles')}
     >
       <HugeiconsIcon icon={PlusSignIcon} className="h-3.5 w-3.5" />
     </PromptInputButton>
@@ -330,6 +355,30 @@ function FileAttachmentsCapsules() {
   );
 }
 
+const CMD_DESC_KEYS: Record<string, TranslationKey> = {
+  '/help': 'input.cmd.help',
+  '/clear': 'input.cmd.clear',
+  '/cost': 'input.cmd.cost',
+  '/compact': 'input.cmd.compact',
+  '/doctor': 'input.cmd.doctor',
+  '/init': 'input.cmd.init',
+  '/review': 'input.cmd.review',
+  '/terminal-setup': 'input.cmd.terminalSetup',
+  '/memory': 'input.cmd.memory',
+};
+
+const MODE_DESC_KEYS: Record<string, TranslationKey> = {
+  'code': 'input.modeCodeDesc',
+  'plan': 'input.modePlanDesc',
+  'ask': 'input.modeAskDesc',
+};
+
+const MODE_LABEL_KEYS: Record<string, TranslationKey> = {
+  'code': 'input.modeCode',
+  'plan': 'input.modePlan',
+  'ask': 'input.modeAsk',
+};
+
 export function MessageInput({
   onSend,
   onCommand,
@@ -344,6 +393,7 @@ export function MessageInput({
   onModeChange,
 }: MessageInputProps) {
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const { t } = useTranslation();
   const popoverRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const modeMenuRef = useRef<HTMLDivElement>(null);
@@ -405,7 +455,7 @@ export function MessageInput({
         }
       }
       flattenTree(tree);
-      return items.slice(0, 20);
+      return dedupePopoverItems(items).slice(0, 20);
     } catch {
       return [];
     }
@@ -469,10 +519,12 @@ export function MessageInput({
 
     // Non-immediate commands (prompt-based built-ins and skills): show as badge
     if (popoverMode === 'skill') {
+      const descriptionKey = item.builtIn ? CMD_DESC_KEYS[item.value] : undefined;
       setBadge({
         command: item.value,
         label: item.label,
-        description: item.description || '',
+        description: descriptionKey ? '' : (item.description || ''),
+        descriptionKey,
         isSkill: !item.builtIn,
         installedSource: item.installedSource,
       });
@@ -620,10 +672,12 @@ export function MessageInput({
           return;
         }
         // Non-immediate: show as badge for user to add context
+        const descriptionKey = CMD_DESC_KEYS[cmd.value];
         setBadge({
           command: cmd.value,
           label: cmd.label,
-          description: cmd.description || '',
+          description: descriptionKey ? '' : (cmd.description || ''),
+          descriptionKey,
           isSkill: false,
         });
         setInputValue('');
@@ -644,9 +698,9 @@ export function MessageInput({
       }
     }
 
-    onSend(content || 'Please review the attached file(s).', hasFiles ? files : undefined);
+    onSend(content || t('input.reviewAttached'), hasFiles ? files : undefined);
     setInputValue('');
-  }, [inputValue, onSend, onCommand, disabled, isStreaming, closePopover, badge]);
+  }, [inputValue, onSend, onCommand, disabled, closePopover, badge, t]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -773,12 +827,14 @@ export function MessageInput({
                 <span className="font-mono text-xs truncate">{item.label}</span>
                 {item.description && (
                   <span className="text-xs text-muted-foreground truncate max-w-[200px]">
-                    {item.description}
+                    {CMD_DESC_KEYS[item.value] ? t(CMD_DESC_KEYS[item.value]) : item.description}
                   </span>
                 )}
                 {!item.builtIn && item.installedSource && (
                   <span className="text-xs text-muted-foreground shrink-0 ml-auto">
-                    {item.installedSource === 'claude' ? 'Personal' : 'Agents'}
+                    {item.installedSource === 'claude'
+                      ? t('input.sourcePersonal')
+                      : t('input.sourceAgents')}
                   </span>
                 )}
               </button>
@@ -794,7 +850,7 @@ export function MessageInput({
                     <input
                       ref={searchInputRef}
                       type="text"
-                      placeholder="Search..."
+                      placeholder={t('input.search')}
                       value={popoverFilter}
                       onChange={(e) => {
                         const val = e.target.value;
@@ -830,7 +886,7 @@ export function MessageInput({
                   </div>
                 ) : (
                   <div className="px-3 py-2 text-xs font-medium text-muted-foreground border-b">
-                    Files
+                    {t('input.files')}
                   </div>
                 )}
                 <div className="max-h-48 overflow-y-auto py-1">
@@ -841,7 +897,7 @@ export function MessageInput({
                       {builtInItems.length > 0 && (
                         <>
                           <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                            Commands
+                            {t('input.commands')}
                           </div>
                           {builtInItems.map((item) => {
                             const idx = globalIdx++;
@@ -852,7 +908,7 @@ export function MessageInput({
                       {skillItems.length > 0 && (
                         <>
                           <div className="px-3 py-1.5 text-xs font-medium text-muted-foreground">
-                            Skills
+                            {t('input.skills')}
                           </div>
                           {skillItems.map((item) => {
                             const idx = globalIdx++;
@@ -881,8 +937,10 @@ export function MessageInput({
               <div className="flex w-full items-center gap-1.5 px-3 pt-2.5 pb-0 order-first">
                 <span className="inline-flex items-center gap-1.5 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400 pl-2.5 pr-1.5 py-1 text-xs font-medium border border-blue-500/20">
                   <span className="font-mono">{badge.command}</span>
-                  {badge.description && (
-                    <span className="text-blue-500/60 dark:text-blue-400/60 text-[10px]">{badge.description}</span>
+                  {(badge.descriptionKey || badge.description) && (
+                    <span className="text-blue-500/60 dark:text-blue-400/60 text-[10px]">
+                      {badge.descriptionKey ? t(badge.descriptionKey) : badge.description}
+                    </span>
                   )}
                   <button
                     type="button"
@@ -900,7 +958,7 @@ export function MessageInput({
             <FileAttachmentsCapsules />
             <PromptInputTextarea
               ref={textareaRef}
-              placeholder={badge ? "Add details (optional), then press Enter..." : "Message Claude..."}
+              placeholder={badge ? t('input.placeholderBadge') : t('input.placeholder')}
               value={inputValue}
               onChange={(e) => handleInputChange(e.currentTarget.value)}
               onKeyDown={handleKeyDown}
@@ -912,12 +970,14 @@ export function MessageInput({
                 {/* Attach file button */}
                 <AttachFileButton />
 
+
                 {/* Mode selector */}
                 <div className="relative" ref={modeMenuRef}>
                   <PromptInputButton
                     onClick={() => setModeMenuOpen((prev) => !prev)}
                   >
-                    <span className="text-xs">{currentMode.label}</span>
+                    <HugeiconsIcon icon={currentMode.icon} className="h-3.5 w-3.5" />
+                    <span className="text-xs">{MODE_LABEL_KEYS[currentMode.value] ? t(MODE_LABEL_KEYS[currentMode.value]) : currentMode.label}</span>
                     <HugeiconsIcon icon={ArrowDown01Icon} className={cn("h-2.5 w-2.5 transition-transform duration-200", modeMenuOpen && "rotate-180")} />
                   </PromptInputButton>
 
@@ -941,9 +1001,9 @@ export function MessageInput({
                             >
                               <HugeiconsIcon icon={opt.icon} className="h-4 w-4 shrink-0" />
                               <div className="flex flex-col min-w-0">
-                                <span className="font-medium text-xs">{opt.label}</span>
+                                <span className="font-medium text-xs">{MODE_LABEL_KEYS[opt.value] ? t(MODE_LABEL_KEYS[opt.value]) : opt.label}</span>
                                 <span className="text-[10px] text-muted-foreground truncate">
-                                  {opt.description}
+                                  {MODE_DESC_KEYS[opt.value] ? t(MODE_DESC_KEYS[opt.value]) : opt.description}
                                 </span>
                               </div>
                             </button>
