@@ -74,6 +74,7 @@ const de: Record<TranslationKey, string> = {
   'connection.authenticate': '2. Authentifizieren',
   'connection.verify': '3. Installation überprüfen',
   'connection.refresh': 'Aktualisieren',
+  'connection.installAuto': 'Claude Code automatisch installieren',
 
   // Right Panel
   'rightPanel.chatInfo': 'Chat-Info',
@@ -129,6 +130,8 @@ const de: Record<TranslationKey, string> = {
   'chat.mode.code': 'Code',
   'chat.mode.plan': 'Plan',
   'chat.mode.ask': 'Ask',
+  'messageList.loadingMore': 'Wird geladen...',
+  'messageList.loadEarlier': 'Frühere Nachrichten laden',
 
   // Message Input
   'input.placeholder': 'Nachricht an Claude...',
@@ -172,6 +175,8 @@ const de: Record<TranslationKey, string> = {
   'streaming.allowed': 'Erlaubt',
   'streaming.denied': 'Abgelehnt',
   'streaming.running': '{tool} wird ausgeführt...',
+  'streaming.slowWarning': 'Dauert länger als üblich',
+  'streaming.stuckWarning': 'Das Tool hängt möglicherweise fest',
 
   // Folder Picker
   'folder.selectProjectFolder': 'Projektordner auswählen',

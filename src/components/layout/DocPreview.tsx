@@ -95,7 +95,7 @@ export function DocPreview({
     return () => {
       cancelled = true;
     };
-  }, [filePath, t]);
+  }, [filePath, workingDirectory, t]);
 
   const handleCopyContent = async () => {
     const text = preview?.content || filePath;
@@ -281,3 +281,4 @@ function RenderedView({
     </div>
   );
 }
+

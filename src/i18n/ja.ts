@@ -74,6 +74,7 @@ const ja: Record<TranslationKey, string> = {
   'connection.authenticate': '2. 認証',
   'connection.verify': '3. インストールを確認',
   'connection.refresh': '更新',
+  'connection.installAuto': 'Claude Code を自動インストール',
 
   // Right Panel
   'rightPanel.chatInfo': 'チャット情報',
@@ -129,6 +130,8 @@ const ja: Record<TranslationKey, string> = {
   'chat.mode.code': 'Code',
   'chat.mode.plan': 'Plan',
   'chat.mode.ask': 'Ask',
+  'messageList.loadingMore': '読み込み中...',
+  'messageList.loadEarlier': '以前のメッセージを読み込む',
 
   // Message Input
   'input.placeholder': 'Claude にメッセージを送信...',
@@ -172,6 +175,8 @@ const ja: Record<TranslationKey, string> = {
   'streaming.allowed': '許可済み',
   'streaming.denied': '拒否済み',
   'streaming.running': '{tool} を実行中...',
+  'streaming.slowWarning': '通常より時間がかかっています',
+  'streaming.stuckWarning': 'ツールが停止している可能性があります',
 
   // Folder Picker
   'folder.selectProjectFolder': 'プロジェクトフォルダーを選択',

@@ -74,6 +74,7 @@ const ru: Record<TranslationKey, string> = {
   'connection.authenticate': '2. Авторизуйтесь',
   'connection.verify': '3. Проверьте установку',
   'connection.refresh': 'Обновить',
+  'connection.installAuto': 'Установить Claude Code автоматически',
 
   // Right Panel
   'rightPanel.chatInfo': 'Информация о чате',
@@ -129,6 +130,8 @@ const ru: Record<TranslationKey, string> = {
   'chat.mode.code': 'Code',
   'chat.mode.plan': 'Plan',
   'chat.mode.ask': 'Ask',
+  'messageList.loadingMore': 'Загрузка...',
+  'messageList.loadEarlier': 'Загрузить более ранние сообщения',
 
   // Message Input
   'input.placeholder': 'Написать Claude...',
@@ -172,6 +175,8 @@ const ru: Record<TranslationKey, string> = {
   'streaming.allowed': 'Разрешено',
   'streaming.denied': 'Отклонено',
   'streaming.running': 'Выполняется {tool}...',
+  'streaming.slowWarning': 'Выполняется дольше обычного',
+  'streaming.stuckWarning': 'Возможно, инструмент завис',
 
   // Folder Picker
   'folder.selectProjectFolder': 'Выбрать папку проекта',

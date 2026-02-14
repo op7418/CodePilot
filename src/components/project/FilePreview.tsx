@@ -39,7 +39,7 @@ export function FilePreview({ filePath, onBack }: FilePreviewProps) {
         }
         const data = await res.json();
         setPreview(data.preview);
-      } catch (err) {
+      } catch {
         setError(t('filePreview.failedToLoad'));
       } finally {
         setLoading(false);
@@ -47,16 +47,13 @@ export function FilePreview({ filePath, onBack }: FilePreviewProps) {
     }
 
     loadPreview();
-  }, [filePath]);
+  }, [filePath, workingDirectory, t]);
 
   const handleCopyPath = async () => {
     await navigator.clipboard.writeText(filePath);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  // Extract filename from path
-  const fileName = filePath.split("/").pop() || filePath;
 
   // Build breadcrumb segments
   const segments = filePath.split("/").filter(Boolean);

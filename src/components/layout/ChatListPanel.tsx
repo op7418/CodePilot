@@ -23,7 +23,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { cn } from "@/lib/utils";
+import { cn, formatRelativeTime } from "@/lib/utils";
 import { usePanel } from "@/hooks/usePanel";
 import { useTranslation } from "@/hooks/useTranslation";
 import { ConnectionStatus } from "./ConnectionStatus";
@@ -34,21 +34,6 @@ import type { ChatSession } from "@/types";
 interface ChatListPanelProps {
   open: boolean;
   width?: number;
-}
-
-function formatRelativeTime(dateStr: string): string {
-  const date = new Date(dateStr.includes("T") ? dateStr : dateStr + "Z");
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffMin = Math.floor(diffMs / 60000);
-  const diffHr = Math.floor(diffMin / 60);
-  const diffDay = Math.floor(diffHr / 24);
-
-  if (diffMin < 1) return "just now";
-  if (diffMin < 60) return `${diffMin}m`;
-  if (diffHr < 24) return `${diffHr}h`;
-  if (diffDay < 7) return `${diffDay}d`;
-  return date.toLocaleDateString();
 }
 
 const COLLAPSED_PROJECTS_KEY = "codepilot:collapsed-projects";
@@ -109,16 +94,16 @@ function groupSessionsByProject(sessions: ChatSession[]): ProjectGroup[] {
 }
 
 const MODE_BADGE_CONFIG = {
-  code: { label: "Code", className: "bg-blue-500/10 text-blue-500" },
-  plan: { label: "Plan", className: "bg-sky-500/10 text-sky-500" },
-  ask: { label: "Ask", className: "bg-green-500/10 text-green-500" },
+  code: { labelKey: "chat.mode.code", className: "bg-blue-500/10 text-blue-500" },
+  plan: { labelKey: "chat.mode.plan", className: "bg-sky-500/10 text-sky-500" },
+  ask: { labelKey: "chat.mode.ask", className: "bg-green-500/10 text-green-500" },
 } as const;
 
 export function ChatListPanel({ open, width }: ChatListPanelProps) {
   const pathname = usePathname();
   const router = useRouter();
   const { streamingSessionId, pendingApprovalSessionId } = usePanel();
-  const { t } = useTranslation();
+  const { t, locale } = useTranslation();
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [hoveredSession, setHoveredSession] = useState<string | null>(null);
   const [deletingSession, setDeletingSession] = useState<string | null>(null);
@@ -504,10 +489,10 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
                                     badgeCfg.className
                                   )}
                                 >
-                                  {badgeCfg.label}
+                                  {t(badgeCfg.labelKey)}
                                 </span>
                                 <span className="text-[10px] text-muted-foreground/40">
-                                  {formatRelativeTime(session.updated_at)}
+                                  {formatRelativeTime(session.updated_at, t, locale)}
                                 </span>
                               </div>
                             </Link>

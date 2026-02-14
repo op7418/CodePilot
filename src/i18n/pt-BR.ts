@@ -74,6 +74,7 @@ const ptBR: Record<TranslationKey, string> = {
   'connection.authenticate': '2. Autenticar',
   'connection.verify': '3. Verificar instalação',
   'connection.refresh': 'Atualizar',
+  'connection.installAuto': 'Instalar Claude Code automaticamente',
 
   // Right Panel
   'rightPanel.chatInfo': 'Info do chat',
@@ -129,6 +130,8 @@ const ptBR: Record<TranslationKey, string> = {
   'chat.mode.code': 'Code',
   'chat.mode.plan': 'Plan',
   'chat.mode.ask': 'Ask',
+  'messageList.loadingMore': 'Carregando...',
+  'messageList.loadEarlier': 'Carregar mensagens anteriores',
 
   // Message Input
   'input.placeholder': 'Mensagem para o Claude...',
@@ -172,6 +175,8 @@ const ptBR: Record<TranslationKey, string> = {
   'streaming.allowed': 'Permitido',
   'streaming.denied': 'Negado',
   'streaming.running': 'Executando {tool}...',
+  'streaming.slowWarning': 'Demorando mais que o normal',
+  'streaming.stuckWarning': 'A ferramenta pode estar travada',
 
   // Folder Picker
   'folder.selectProjectFolder': 'Selecionar pasta do projeto',

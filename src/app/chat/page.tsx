@@ -87,7 +87,7 @@ export default function NewChatPage() {
           id: 'hint-' + Date.now(),
           session_id: '',
           role: 'assistant',
-          content: '**Please select a project directory first.** Use the folder picker in the toolbar below to choose a working directory before sending a message.',
+          content: `**${t('input.selectProjectFolder')}**`,
           created_at: new Date().toISOString(),
           token_usage: null,
         };
