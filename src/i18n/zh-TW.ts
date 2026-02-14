@@ -74,6 +74,7 @@ const zhTW: Record<TranslationKey, string> = {
   'connection.authenticate': '2. 登入驗證',
   'connection.verify': '3. 驗證安裝',
   'connection.refresh': '重新整理',
+  'connection.installAuto': '自動安裝 Claude Code',
 
   // Right Panel
   'rightPanel.chatInfo': '對話資訊',
@@ -129,6 +130,8 @@ const zhTW: Record<TranslationKey, string> = {
   'chat.mode.code': 'Code',
   'chat.mode.plan': 'Plan',
   'chat.mode.ask': 'Ask',
+  'messageList.loadingMore': '載入中...',
+  'messageList.loadEarlier': '載入更早的訊息',
 
   // Message Input
   'input.placeholder': '向 Claude 傳送訊息...',
@@ -172,6 +175,8 @@ const zhTW: Record<TranslationKey, string> = {
   'streaming.allowed': '已允許',
   'streaming.denied': '已拒絕',
   'streaming.running': '正在執行 {tool}...',
+  'streaming.slowWarning': '執行時間比平時更長',
+  'streaming.stuckWarning': '工具可能卡住了',
 
   // Folder Picker
   'folder.selectProjectFolder': '選擇專案資料夾',

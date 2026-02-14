@@ -106,7 +106,7 @@ export function MessageList({
               disabled={loadingMore}
               className="text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
             >
-              {loadingMore ? 'Loading...' : 'Load earlier messages'}
+              {loadingMore ? t('messageList.loadingMore') : t('messageList.loadEarlier')}
             </button>
           </div>
         )}

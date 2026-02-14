@@ -74,6 +74,7 @@ const zh: Record<TranslationKey, string> = {
   'connection.authenticate': '2. 登录认证',
   'connection.verify': '3. 验证安装',
   'connection.refresh': '刷新',
+  'connection.installAuto': '自动安装 Claude Code',
 
   // Right Panel
   'rightPanel.chatInfo': '对话信息',
@@ -129,6 +130,8 @@ const zh: Record<TranslationKey, string> = {
   'chat.mode.code': 'Code',
   'chat.mode.plan': 'Plan',
   'chat.mode.ask': 'Ask',
+  'messageList.loadingMore': '加载中...',
+  'messageList.loadEarlier': '加载更早的消息',
 
   // Message Input
   'input.placeholder': '向 Claude 发送消息...',
@@ -172,6 +175,8 @@ const zh: Record<TranslationKey, string> = {
   'streaming.allowed': '已允许',
   'streaming.denied': '已拒绝',
   'streaming.running': '正在运行 {tool}...',
+  'streaming.slowWarning': '运行时间比平时更长',
+  'streaming.stuckWarning': '工具可能卡住了',
 
   // Folder Picker
   'folder.selectProjectFolder': '选择项目文件夹',

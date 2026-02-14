@@ -388,7 +388,6 @@ export function MessageInput({
   sessionId,
   modelName,
   onModelChange,
-  workingDirectory,
   mode = 'code',
   onModeChange,
 }: MessageInputProps) {
@@ -409,7 +408,6 @@ export function MessageInput({
   const [inputValue, setInputValue] = useState('');
   const [badge, setBadge] = useState<CommandBadge | null>(null);
   const [activeProviderBaseUrl, setActiveProviderBaseUrl] = useState<string | null>(null);
-  const [activeProviderName, setActiveProviderName] = useState<string | null>(null);
 
   // Fetch active provider to adapt model labels
   useEffect(() => {
@@ -419,10 +417,8 @@ export function MessageInput({
         const active = (data.providers || []).find((p: { is_active: number }) => p.is_active === 1);
         if (active) {
           setActiveProviderBaseUrl(active.base_url || null);
-          setActiveProviderName(active.name || null);
         } else {
           setActiveProviderBaseUrl(null);
-          setActiveProviderName(null);
         }
       })
       .catch(() => {});
@@ -700,26 +696,30 @@ export function MessageInput({
 
     onSend(content || t('input.reviewAttached'), hasFiles ? files : undefined);
     setInputValue('');
-  }, [inputValue, onSend, onCommand, disabled, closePopover, badge, t]);
+  }, [inputValue, onSend, onCommand, disabled, isStreaming, closePopover, badge, t]);
 
   const handleKeyDown = useCallback(
     (e: KeyboardEvent<HTMLTextAreaElement>) => {
+      const currentFilteredItems = popoverItems.filter((item) =>
+        item.label.toLowerCase().includes(popoverFilter.toLowerCase())
+      );
+
       // Popover navigation
       if (popoverMode && popoverItems.length > 0) {
         if (e.key === 'ArrowDown') {
           e.preventDefault();
-          setSelectedIndex((prev) => (prev + 1) % filteredItems.length);
+          setSelectedIndex((prev) => (prev + 1) % currentFilteredItems.length);
           return;
         }
         if (e.key === 'ArrowUp') {
           e.preventDefault();
-          setSelectedIndex((prev) => (prev - 1 + filteredItems.length) % filteredItems.length);
+          setSelectedIndex((prev) => (prev - 1 + currentFilteredItems.length) % currentFilteredItems.length);
           return;
         }
         if (e.key === 'Enter' || e.key === 'Tab') {
           e.preventDefault();
-          if (filteredItems[selectedIndex]) {
-            insertItem(filteredItems[selectedIndex]);
+          if (currentFilteredItems[selectedIndex]) {
+            insertItem(currentFilteredItems[selectedIndex]);
           }
           return;
         }

@@ -72,6 +72,7 @@ const en = {
   'connection.authenticate': '2. Authenticate',
   'connection.verify': '3. Verify Installation',
   'connection.refresh': 'Refresh',
+  'connection.installAuto': 'Install Claude Code Automatically',
 
   // Right Panel
   'rightPanel.chatInfo': 'Chat Info',
@@ -127,6 +128,8 @@ const en = {
   'chat.mode.code': 'Code',
   'chat.mode.plan': 'Plan',
   'chat.mode.ask': 'Ask',
+  'messageList.loadingMore': 'Loading...',
+  'messageList.loadEarlier': 'Load earlier messages',
 
   // Message Input
   'input.placeholder': 'Message Claude...',
@@ -170,6 +173,8 @@ const en = {
   'streaming.allowed': 'Allowed',
   'streaming.denied': 'Denied',
   'streaming.running': 'Running {tool}...',
+  'streaming.slowWarning': 'Running longer than usual',
+  'streaming.stuckWarning': 'Tool may be stuck',
 
   // Folder Picker
   'folder.selectProjectFolder': 'Select Project Folder',

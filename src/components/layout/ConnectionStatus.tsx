@@ -77,9 +77,12 @@ export function ConnectionStatus() {
     schedule();
   }, [schedule]);
 
-  checkStatusRef.current = checkStatus;
+  useEffect(() => {
+    checkStatusRef.current = checkStatus;
+  }, [checkStatus]);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async status check updates state after fetch resolves
     checkStatus();
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);
@@ -104,7 +107,7 @@ export function ConnectionStatus() {
       const dismissed = localStorage.getItem("codepilot:install-wizard-dismissed");
       if (!dismissed) {
         autoPromptedRef.current = true;
-        setWizardOpen(true); // eslint-disable-line react-hooks/set-state-in-effect -- intentional: auto-prompt on first disconnect
+        setWizardOpen(true); // eslint-disable-line react-hooks/set-state-in-effect -- intentional auto-prompt on first disconnect
       }
     }
   }, [status, isElectron, dialogOpen, wizardOpen]);
@@ -209,7 +212,7 @@ export function ConnectionStatus() {
                     }}
                     className="w-full"
                   >
-                    Install Claude Code Automatically
+                    {t('connection.installAuto')}
                   </Button>
                 </div>
               )}

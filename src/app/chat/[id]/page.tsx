@@ -33,7 +33,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
   const handleStartEditTitle = useCallback(() => {
     setEditTitle(sessionTitle || t('chatSession.newConversation'));
     setIsEditingTitle(true);
-  }, [sessionTitle]);
+  }, [sessionTitle, t]);
 
   const handleSaveTitle = useCallback(async () => {
     const trimmed = editTitle.trim();
@@ -99,7 +99,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
     }
 
     loadSession();
-  }, [id, setWorkingDirectory, setSessionId, setPanelSessionTitle, setPanelOpen]);
+  }, [id, setWorkingDirectory, setSessionId, setPanelSessionTitle, setPanelOpen, t]);
 
   useEffect(() => {
     // Reset state when switching sessions
@@ -125,7 +125,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
         if (cancelled) return;
         setMessages(data.messages);
         setHasMore(data.hasMore ?? false);
-      } catch (err) {
+      } catch {
         if (cancelled) return;
         setError(t('chatSession.failedToLoad'));
       } finally {
@@ -136,7 +136,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
     loadMessages();
 
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, t]);
 
   if (loading) {
     return (

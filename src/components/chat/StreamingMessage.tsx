@@ -88,10 +88,10 @@ function StreamingStatusBar({ statusText, onForceStop }: { statusText?: string; 
           <Shimmer duration={1.5}>{displayText}</Shimmer>
         </span>
         {isWarning && !isCritical && (
-          <span className="text-yellow-500 text-[10px]">Running longer than usual</span>
+          <span className="text-yellow-500 text-[10px]">{t('streaming.slowWarning')}</span>
         )}
         {isCritical && (
-          <span className="text-red-500 text-[10px]">Tool may be stuck</span>
+          <span className="text-red-500 text-[10px]">{t('streaming.stuckWarning')}</span>
         )}
       </div>
       <span className="text-muted-foreground/50">|</span>
