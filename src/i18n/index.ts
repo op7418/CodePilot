@@ -1,14 +1,15 @@
 import en from './en';
 import zh from './zh';
+import ru from './ru';
 import type { TranslationKey } from './en';
 
-export type Locale = 'en' | 'zh';
+export type Locale = 'en' | 'zh' | 'ru';
 export type { TranslationKey };
 
-export const SUPPORTED_LOCALES: Locale[] = ['en', 'zh'];
+export const SUPPORTED_LOCALES: Locale[] = ['en', 'zh', 'ru'];
 
 const dictionaries: Record<Locale, Record<TranslationKey, string>> = {
-  en, zh,
+  en, zh, ru,
 };
 
 function escapeRegExp(value: string): string {
