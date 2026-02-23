@@ -148,6 +148,7 @@ export function GeneralSection() {
           <SelectContent>
             <SelectItem value="en">English</SelectItem>
             <SelectItem value="zh">中文 (简体)</SelectItem>
+            <SelectItem value="zh-TW">中文 (繁體)</SelectItem>
           </SelectContent>
         </Select>
       </div>
