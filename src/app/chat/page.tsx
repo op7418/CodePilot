@@ -20,9 +20,17 @@ interface ToolResultInfo {
   content: string;
 }
 
+type UserFacingError = Error & { userMessage?: string };
+
+function makeUserFacingError(userMessage: string, technicalMessage?: string): UserFacingError {
+  const error = new Error(technicalMessage || userMessage) as UserFacingError;
+  error.userMessage = userMessage;
+  return error;
+}
+
 export default function NewChatPage() {
   const router = useRouter();
-  const { setWorkingDirectory, setPanelOpen, setPendingApprovalSessionId } = usePanel();
+  const { setPendingApprovalSessionId } = usePanel();
   const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
@@ -30,7 +38,7 @@ export default function NewChatPage() {
   const [toolUses, setToolUses] = useState<ToolUseInfo[]>([]);
   const [toolResults, setToolResults] = useState<ToolResultInfo[]>([]);
   const [statusText, setStatusText] = useState<string | undefined>();
-  const [workingDir, setWorkingDir] = useState('');
+  const workingDir = '';
   const [mode, setMode] = useState('code');
   const [currentModel, setCurrentModel] = useState('sonnet');
   const [pendingPermission, setPendingPermission] = useState<PermissionRequestEvent | null>(null);
@@ -122,7 +130,13 @@ export default function NewChatPage() {
 
         if (!createRes.ok) {
           const errBody = await createRes.json().catch(() => ({}));
-          throw new Error(errBody.error || 'Failed to create session');
+          const technicalMessage = typeof errBody.error === 'string'
+            ? errBody.error
+            : `Failed to create session (${createRes.status})`;
+          throw makeUserFacingError(
+            t('chat.failedToCreateSession', { status: createRes.status }),
+            technicalMessage,
+          );
         }
 
         const { session }: SessionResponse = await createRes.json();
@@ -151,8 +165,11 @@ export default function NewChatPage() {
         });
 
         if (!response.ok) {
-          const err = await response.json();
-          throw new Error(err.error || 'Failed to send message');
+          const err = await response.json().catch(() => ({}));
+          const technicalMessage = typeof err.error === 'string'
+            ? err.error
+            : `Failed to send message (${response.status})`;
+          throw makeUserFacingError(t('chat.failedToSend'), technicalMessage);
         }
 
         const reader = response.body?.getReader();
@@ -289,7 +306,13 @@ export default function NewChatPage() {
             router.push(`/chat/${sessionId}`);
           }
         } else {
-          const errMsg = t('chat.failedToSend');
+          const errMsg =
+            typeof error === 'object' &&
+            error !== null &&
+            'userMessage' in error &&
+            typeof (error as UserFacingError).userMessage === 'string'
+              ? (error as UserFacingError).userMessage!
+              : t('chat.failedToSend');
           const errorMessage: Message = {
             id: 'temp-error-' + Date.now(),
             session_id: '',
