@@ -61,7 +61,7 @@ function UpdateCard() {
             <div className="flex items-center gap-2">
               <span className="h-2 w-2 rounded-full bg-blue-500" />
               <span className="text-sm">
-                {t("settings.updateAvailable")}: <span className="font-medium">v{updateInfo.latestVersion}</span>
+                {t("settings.updateAvailable")}<span className="font-medium ml-1">v{updateInfo.latestVersion}</span>
               </span>
               <Button
                 variant="link"
