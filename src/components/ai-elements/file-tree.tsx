@@ -24,6 +24,9 @@ import {
   useState,
 } from "react";
 
+const TREE_PATH_MIME = "application/x-codepilot-path";
+const TREE_PATH_FALLBACK_MIME = "text/x-codepilot-path";
+
 interface FileTreeContextType {
   expandedPaths: Set<string>;
   togglePath: (path: string) => void;
@@ -132,6 +135,17 @@ export const FileTreeFolder = ({
     togglePath(path);
   }, [togglePath, path]);
 
+  const handleDragStart = useCallback(
+    (e: React.DragEvent) => {
+      const payload = JSON.stringify({ path, name, type: "directory" });
+      e.dataTransfer.setData(TREE_PATH_MIME, payload);
+      e.dataTransfer.setData(TREE_PATH_FALLBACK_MIME, payload);
+      e.dataTransfer.setData("text/plain", path);
+      e.dataTransfer.effectAllowed = "copy";
+    },
+    [path, name]
+  );
+
   const folderContextValue = useMemo(
     () => ({ isExpanded, name, path }),
     [isExpanded, name, path]
@@ -148,6 +162,8 @@ export const FileTreeFolder = ({
         >
           <div
             className="flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50"
+            draggable
+            onDragStart={handleDragStart}
           >
             <CollapsibleTrigger asChild>
               <button
@@ -232,6 +248,17 @@ export const FileTreeFile = ({
 
   const fileContextValue = useMemo(() => ({ name, path }), [name, path]);
 
+  const handleDragStart = useCallback(
+    (e: React.DragEvent) => {
+      const payload = JSON.stringify({ path, name, type: "file" });
+      e.dataTransfer.setData(TREE_PATH_MIME, payload);
+      e.dataTransfer.setData(TREE_PATH_FALLBACK_MIME, payload);
+      e.dataTransfer.setData("text/plain", path);
+      e.dataTransfer.effectAllowed = "copy";
+    },
+    [path, name]
+  );
+
   return (
     <FileTreeFileContext.Provider value={fileContextValue}>
       <div
@@ -242,6 +269,8 @@ export const FileTreeFile = ({
         )}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
+        draggable
+        onDragStart={handleDragStart}
         role="treeitem"
         tabIndex={0}
         {...props}
@@ -255,7 +284,10 @@ export const FileTreeFile = ({
             {onAdd && (
               <button
                 type="button"
+                draggable={false}
                 className="ml-auto flex size-5 shrink-0 items-center justify-center rounded opacity-0 transition-opacity hover:bg-muted group-hover/file:opacity-100"
+                onMouseDown={(e) => e.stopPropagation()}
+                onPointerDown={(e) => e.stopPropagation()}
                 onClick={handleAdd}
                 title="Add to chat"
               >
