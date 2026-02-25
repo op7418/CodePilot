@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
 import type { Message, MessagesResponse, FileAttachment, SessionStreamSnapshot } from '@/types';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
@@ -59,6 +59,13 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
   const statusText = streamSnapshot?.statusText;
   const pendingPermission = streamSnapshot?.pendingPermission ?? null;
   const permissionResolved = streamSnapshot?.permissionResolved ?? null;
+  const snapshotContextWindow = streamSnapshot?.contextWindow;
+  const contextWindowMax = (snapshotContextWindow && snapshotContextWindow.total > 0)
+    ? snapshotContextWindow.total
+    : 200000;
+  const snapshotIsCompacting = streamSnapshot?.isCompacting ?? false;
+  const snapshotStreamingContextTokens = streamSnapshot?.streamingContextTokens ?? null;
+  const snapshotContextTokensPendingRefresh = streamSnapshot?.contextTokensPendingRefresh ?? false;
 
   // Pending image generation notices — flushed into the next user message so the LLM knows about generated images
   const pendingImageNoticesRef = useRef<string[]>([]);
@@ -207,6 +214,31 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
   const stopStreaming = useCallback(() => {
     stopStream(sessionId);
   }, [sessionId]);
+
+  const contextTokens = useMemo(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role === 'assistant' && msg.token_usage) {
+        try {
+          const usage = typeof msg.token_usage === 'string'
+            ? JSON.parse(msg.token_usage) : msg.token_usage;
+          if (usage.last_input_tokens) {
+            return (usage.last_input_tokens as number) + (usage.output_tokens || 0);
+          }
+          const input = (usage.input_tokens || 0)
+            + (usage.cache_read_input_tokens || 0)
+            + (usage.cache_creation_input_tokens || 0);
+          const output = usage.output_tokens || 0;
+          return input + output;
+        } catch { /* skip */ }
+      }
+    }
+    return 0;
+  }, [messages]);
+
+  const effectiveContextTokens = snapshotStreamingContextTokens
+    ? snapshotStreamingContextTokens.used
+    : contextTokens;
 
   // Permission response — delegates to manager
   const handlePermissionResponse = useCallback(
@@ -420,6 +452,10 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         workingDirectory={workingDirectory}
         mode={mode}
         onModeChange={handleModeChange}
+        contextTokens={effectiveContextTokens}
+        contextStale={snapshotContextTokensPendingRefresh}
+        maxContext={contextWindowMax}
+        isCompacting={snapshotIsCompacting}
       />
     </div>
   );

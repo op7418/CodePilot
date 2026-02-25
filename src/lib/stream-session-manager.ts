@@ -95,6 +95,10 @@ function buildSnapshot(stream: ActiveStream): SessionStreamSnapshot {
     completedAt: stream.snapshot.completedAt,
     error: stream.snapshot.error,
     finalMessageContent: stream.snapshot.finalMessageContent,
+    contextWindow: stream.snapshot.contextWindow,
+    isCompacting: stream.snapshot.isCompacting,
+    streamingContextTokens: stream.snapshot.streamingContextTokens,
+    contextTokensPendingRefresh: stream.snapshot.contextTokensPendingRefresh,
   };
 }
 
@@ -163,6 +167,10 @@ export function startStream(params: StartStreamParams): void {
       completedAt: null,
       error: null,
       finalMessageContent: null,
+      contextWindow: null,
+      isCompacting: false,
+      streamingContextTokens: null,
+      contextTokensPendingRefresh: false,
     },
     listeners: existing?.listeners ?? new Set(),
     idleCheckTimer: null,
@@ -286,7 +294,15 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
       },
       onResult: (usage) => {
         markActive();
-        stream.snapshot = { ...stream.snapshot, tokenUsage: usage };
+        const total = usage?.context_window ?? 0;
+        stream.snapshot = {
+          ...stream.snapshot,
+          tokenUsage: usage,
+          contextWindow: total > 0
+            ? { used: total, total }
+            : stream.snapshot.contextWindow,
+        };
+        emit(stream, 'snapshot-updated');
       },
       onPermissionRequest: (permData) => {
         markActive();
@@ -317,6 +333,30 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
       onError: (acc) => {
         markActive();
         stream.accumulatedText = acc;
+        emit(stream, 'snapshot-updated');
+      },
+      onCompactBoundary: () => {
+        markActive();
+        stream.snapshot = {
+          ...stream.snapshot,
+          isCompacting: false,
+          contextTokensPendingRefresh: true,
+        };
+        emit(stream, 'snapshot-updated');
+      },
+      onCompacting: () => {
+        markActive();
+        stream.snapshot = { ...stream.snapshot, isCompacting: true };
+        emit(stream, 'snapshot-updated');
+      },
+      onContextTokens: (tokens) => {
+        markActive();
+        const total = stream.snapshot.tokenUsage?.context_window ?? 0;
+        stream.snapshot = {
+          ...stream.snapshot,
+          streamingContextTokens: { used: tokens, total },
+          contextTokensPendingRefresh: false,
+        };
         emit(stream, 'snapshot-updated');
       },
     });

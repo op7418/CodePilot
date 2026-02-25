@@ -26,6 +26,9 @@ export interface SSECallbacks {
   onTaskUpdate: (sessionId: string) => void;
   onKeepAlive: () => void;
   onError: (accumulated: string) => void;
+  onCompactBoundary?: () => void;
+  onCompacting?: () => void;
+  onContextTokens?: (tokens: number) => void;
 }
 
 /**
@@ -88,8 +91,13 @@ function handleSSEEvent(
     case 'status': {
       try {
         const statusData = JSON.parse(event.data);
-        if (statusData.session_id) {
+        if (statusData.context_tokens) {
+          callbacks.onContextTokens?.(statusData.context_tokens);
+          return accumulated;
+        } else if (statusData.session_id) {
           callbacks.onStatus(`Connected (${statusData.model || 'claude'})`);
+        } else if (statusData.compacting) {
+          callbacks.onCompacting?.();
         } else if (statusData.notification) {
           callbacks.onStatus(statusData.message || statusData.title || undefined);
         } else {
@@ -98,6 +106,11 @@ function handleSSEEvent(
       } catch {
         callbacks.onStatus(event.data || undefined);
       }
+      return accumulated;
+    }
+
+    case 'compact_boundary': {
+      callbacks.onCompactBoundary?.();
       return accumulated;
     }
 
@@ -240,6 +253,9 @@ export function useSSEStream() {
         onTaskUpdate: (s) => callbacksRef.current?.onTaskUpdate(s),
         onKeepAlive: () => callbacksRef.current?.onKeepAlive(),
         onError: (a) => callbacksRef.current?.onError(a),
+        onCompactBoundary: () => callbacksRef.current?.onCompactBoundary?.(),
+        onCompacting: () => callbacksRef.current?.onCompacting?.(),
+        onContextTokens: (t) => callbacksRef.current?.onContextTokens?.(t),
       };
 
       return consumeSSEStream(reader, proxied);

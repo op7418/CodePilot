@@ -47,6 +47,8 @@ const en = {
   'messageInput.modeCode': 'Code',
   'messageInput.modePlan': 'Plan',
   'messageInput.aiSuggested': 'AI Suggested',
+  'messageInput.compacting': 'Compacting...',
+  'messageInput.contextRefreshPending': 'Context compacted. Token gauge updates on the next turn.',
 
   // ── Streaming message ───────────────────────────────────────
   'streaming.thinking': 'Thinking...',

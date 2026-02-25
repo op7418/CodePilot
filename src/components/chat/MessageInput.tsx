@@ -38,6 +38,7 @@ import { nanoid } from 'nanoid';
 import { ImageGenToggle } from './ImageGenToggle';
 import { useImageGen } from '@/hooks/useImageGen';
 import { PENDING_KEY, setRefImages, deleteRefImages } from '@/lib/image-ref-store';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 
 const IMAGE_AGENT_SYSTEM_PROMPT = `你是一个图像生成助手。当用户请求生成图片时，分析用户意图并以结构化格式输出。
 
@@ -97,6 +98,10 @@ interface MessageInputProps {
   workingDirectory?: string;
   mode?: string;
   onModeChange?: (mode: string) => void;
+  contextTokens?: number;
+  contextStale?: boolean;
+  maxContext?: number;
+  isCompacting?: boolean;
 }
 
 interface PopoverItem {
@@ -373,6 +378,10 @@ export function MessageInput({
   workingDirectory,
   mode = 'code',
   onModeChange,
+  contextTokens = 0,
+  contextStale = false,
+  maxContext = 200000,
+  isCompacting = false,
 }: MessageInputProps) {
   const { t } = useTranslation();
   const imageGen = useImageGen();
@@ -1177,6 +1186,60 @@ export function MessageInput({
                     </div>
                   )}
                 </div>
+
+                {/* Context usage ring */}
+                {(() => {
+                  const circumference = 2 * Math.PI * 8; // r=8
+                  const isContextStale = contextStale && !isCompacting;
+                  const ratio = isContextStale ? 0 : Math.min(contextTokens / maxContext, 1);
+                  const offset = circumference * (1 - ratio);
+                  const color = isCompacting
+                    ? '#a855f7'
+                    : isContextStale
+                      ? '#64748b'
+                      : ratio > 0.7 ? '#ef4444' : ratio > 0.5 ? '#eab308' : '#22c55e';
+                  const formatTokens = (n: number) => {
+                    if (n >= 1000000) return `${(n / 1000000).toFixed(1)}M`;
+                    if (n >= 1000) return `${(n / 1000).toFixed(0)}k`;
+                    return `${n}`;
+                  };
+                  const label = formatTokens(contextTokens);
+                  const maxLabel = formatTokens(maxContext);
+                  const tooltipText = isCompacting
+                    ? t('messageInput.compacting')
+                    : isContextStale
+                      ? t('messageInput.contextRefreshPending')
+                    : `${label} / ${maxLabel}`;
+                  return (
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <button type="button" className="flex items-center justify-center h-7 w-7 rounded-md hover:bg-accent/50 transition-colors">
+                          <svg width="20" height="20" viewBox="0 0 20 20" className="-rotate-90">
+                            <circle cx="10" cy="10" r="8" fill="none" stroke="currentColor" strokeWidth="2.5" className="text-muted-foreground/15" />
+                            <circle
+                              cx="10"
+                              cy="10"
+                              r="8"
+                              fill="none"
+                              stroke={color}
+                              strokeWidth="2.5"
+                              strokeLinecap="round"
+                              strokeDasharray={isContextStale ? `${circumference * 0.35} ${circumference}` : `${circumference}`}
+                              strokeDashoffset={isCompacting ? circumference * 0.25 : offset}
+                              style={{
+                                transition: 'stroke-dashoffset 0.4s ease, stroke 0.4s ease',
+                                ...(isCompacting ? { animation: 'spin 1.5s linear infinite', transformOrigin: 'center' } : {}),
+                              }}
+                            />
+                          </svg>
+                        </button>
+                      </TooltipTrigger>
+                      <TooltipContent side="top">
+                        <span className="text-xs">{tooltipText}</span>
+                      </TooltipContent>
+                    </Tooltip>
+                  );
+                })()}
 
                 {/* Image Agent toggle */}
                 <ImageGenToggle />

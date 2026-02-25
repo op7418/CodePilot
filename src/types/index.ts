@@ -162,6 +162,8 @@ export interface TokenUsage {
   cache_read_input_tokens?: number;
   cache_creation_input_tokens?: number;
   cost_usd?: number;
+  context_window?: number;
+  last_input_tokens?: number;
 }
 
 // ==========================================
@@ -357,6 +359,7 @@ export type SSEEventType =
   | 'mode_changed'       // SDK permission mode changed (e.g. plan → code)
   | 'task_update'        // SDK TodoWrite task sync
   | 'keep_alive'         // SDK keep-alive heartbeat (resets idle timer)
+  | 'compact_boundary'   // context compaction boundary
   | 'done';              // stream complete
 
 export interface SSEEvent {
@@ -652,6 +655,10 @@ export interface SessionStreamSnapshot {
   error: string | null;
   /** Final message content built at stream completion for ChatView to consume */
   finalMessageContent: string | null;
+  contextWindow?: { used: number; total: number } | null;
+  isCompacting?: boolean;
+  streamingContextTokens?: { used: number; total: number } | null;
+  contextTokensPendingRefresh?: boolean;
 }
 
 export interface StreamEvent {

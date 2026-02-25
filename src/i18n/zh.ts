@@ -44,6 +44,8 @@ const zh: Record<TranslationKey, string> = {
   'messageInput.modeCode': '代码',
   'messageInput.modePlan': '计划',
   'messageInput.aiSuggested': 'AI 推荐',
+  'messageInput.compacting': '压缩中...',
+  'messageInput.contextRefreshPending': '上下文已压缩，Token 指示将在下一轮对话刷新。',
 
   // ── Streaming message ───────────────────────────────────────
   'streaming.thinking': '思考中...',

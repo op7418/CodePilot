@@ -31,7 +31,7 @@ import path from 'path';
  * Removes null bytes and control characters that cause spawn EINVAL.
  */
 function sanitizeEnvValue(value: string): string {
-  // eslint-disable-next-line no-control-regex
+   
   return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 }
 
@@ -183,13 +183,31 @@ function extractTextFromMessage(msg: SDKAssistantMessage): string {
  */
 function extractTokenUsage(msg: SDKResultMessage): TokenUsage | null {
   if (!msg.usage) return null;
-  return {
+  const usage: TokenUsage = {
     input_tokens: msg.usage.input_tokens,
     output_tokens: msg.usage.output_tokens,
     cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
     cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
     cost_usd: 'total_cost_usd' in msg ? msg.total_cost_usd : undefined,
   };
+  // Extract context window size from modelUsage if available
+  const modelUsage = (msg as Record<string, unknown>).modelUsage as
+    | Record<string, { contextWindow?: number }>
+    | { contextWindow?: number }
+    | undefined;
+  if (modelUsage && typeof modelUsage === 'object') {
+    const direct = (modelUsage as { contextWindow?: number }).contextWindow;
+    if (direct) {
+      usage.context_window = direct;
+    } else {
+      const values = Object.values(modelUsage as Record<string, { contextWindow?: number }>);
+      const found = values.find((entry) => entry?.contextWindow);
+      if (found?.contextWindow) {
+        usage.context_window = found.contextWindow;
+      }
+    }
+  }
+  return usage;
 }
 
 /**
@@ -733,6 +751,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
 
         let lastAssistantText = '';
         let tokenUsage: TokenUsage | null = null;
+        let lastTurnInputTokens = 0;
 
         for await (const message of conversation) {
           if (abortController?.signal.aborted) {
@@ -803,6 +822,26 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                   controller.enqueue(formatSSE({ type: 'text', data: delta.text }));
                 }
               }
+              // Capture single-turn input tokens from message_start usage
+              if (evt.type === 'message_start' && 'message' in evt) {
+                const msgUsage = (evt.message as { usage?: {
+                  input_tokens?: number;
+                  cache_read_input_tokens?: number;
+                  cache_creation_input_tokens?: number;
+                } }).usage;
+                if (msgUsage) {
+                  const totalContextTokens = (msgUsage.input_tokens || 0)
+                    + (msgUsage.cache_read_input_tokens || 0)
+                    + (msgUsage.cache_creation_input_tokens || 0);
+                  if (totalContextTokens > 0) {
+                    lastTurnInputTokens = totalContextTokens;
+                    controller.enqueue(formatSSE({
+                      type: 'status',
+                      data: JSON.stringify({ context_tokens: totalContextTokens }),
+                    }));
+                  }
+                }
+              }
               break;
             }
 
@@ -820,13 +859,25 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                   }));
                 } else if (sysMsg.subtype === 'status') {
                   // SDK sends status messages when permission mode changes (e.g. ExitPlanMode)
-                  const statusMsg = sysMsg as SDKSystemMessage & { permissionMode?: string };
+                  const statusMsg = sysMsg as SDKSystemMessage & { permissionMode?: string; status?: string };
                   if (statusMsg.permissionMode) {
                     controller.enqueue(formatSSE({
                       type: 'mode_changed',
                       data: statusMsg.permissionMode,
                     }));
                   }
+                  // Handle compacting status
+                  if (statusMsg.status === 'compacting') {
+                    controller.enqueue(formatSSE({
+                      type: 'status',
+                      data: JSON.stringify({ compacting: true }),
+                    }));
+                  }
+                } else if (sysMsg.subtype === 'compact_boundary') {
+                  controller.enqueue(formatSSE({
+                    type: 'compact_boundary',
+                    data: '',
+                  }));
                 }
               }
               break;
@@ -860,6 +911,10 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             case 'result': {
               const resultMsg = message as SDKResultMessage;
               tokenUsage = extractTokenUsage(resultMsg);
+              // Attach last-turn input tokens for accurate context size display
+              if (tokenUsage && lastTurnInputTokens > 0) {
+                tokenUsage.last_input_tokens = lastTurnInputTokens;
+              }
               controller.enqueue(formatSSE({
                 type: 'result',
                 data: JSON.stringify({
