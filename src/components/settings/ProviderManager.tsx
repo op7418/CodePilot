@@ -274,6 +274,18 @@ const QUICK_PRESETS: QuickPreset[] = [
     fields: ["api_key", "base_url"],
   },
   {
+    key: "gemini-image-thirdparty",
+    name: "Gemini Image Third-party API",
+    description: "Gemini-compatible image API — provide URL and Key",
+    descriptionZh: "Gemini 兼容第三方图片 API — 填写地址和密钥",
+    icon: <Google size={18} />,
+    provider_type: "gemini-image",
+    base_url: "",
+    extra_env: '{"GEMINI_API_KEY":""}',
+    fields: ["api_key", "base_url"],
+    category: "media",
+  },
+  {
     key: "gemini-image",
     name: "Google Gemini (Image)",
     description: "Nano Banana Pro — AI image generation by Google Gemini",
