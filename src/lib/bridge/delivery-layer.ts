@@ -274,7 +274,7 @@ export async function deliverRendered(
   adapter: BaseChannelAdapter,
   address: ChannelAddress,
   chunks: TelegramChunk[],
-  opts?: { sessionId?: string; dedupKey?: string },
+  opts?: { sessionId?: string; dedupKey?: string; replyToMessageId?: string },
 ): Promise<SendResult> {
   // Dedup check
   if (opts?.dedupKey) {
@@ -299,6 +299,8 @@ export async function deliverRendered(
       address,
       text: chunk.html,
       parseMode: 'HTML',
+      // Only reply to the original message on the first chunk
+      ...(i === 0 && opts?.replyToMessageId ? { replyToMessageId: opts.replyToMessageId } : {}),
     };
 
     // Try HTML first, fall back to plain text on parse error

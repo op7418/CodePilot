@@ -51,6 +51,20 @@ export interface InboundMessage {
   updateId?: number;
   /** File attachments (images, documents) from the IM channel */
   attachments?: import('@/types').FileAttachment[];
+  /** Context from a quoted/replied-to message (when user uses reply in IM) */
+  replyContext?: ReplyContext;
+}
+
+/** Context from a quoted/replied-to message */
+export interface ReplyContext {
+  /** Platform-specific message ID of the quoted message */
+  messageId: string;
+  /** Text content of the quoted message (may be truncated) */
+  text: string;
+  /** Who sent the quoted message */
+  senderName?: string;
+  /** Whether the quoted message was sent by the bot itself */
+  isBot?: boolean;
 }
 
 /** Outbound message to send to an IM channel */

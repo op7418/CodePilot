@@ -7,7 +7,7 @@
  * Uses globalThis to survive Next.js HMR in development.
  */
 
-import type { BridgeStatus, InboundMessage, OutboundMessage } from './types';
+import type { BridgeStatus, InboundMessage, OutboundMessage, ReplyContext } from './types';
 import { createAdapter, getRegisteredTypes } from './channel-adapter';
 import type { BaseChannelAdapter } from './channel-adapter';
 // Side-effect import: triggers self-registration of all adapter factories
@@ -291,6 +291,22 @@ function runAdapterLoop(adapter: BaseChannelAdapter): void {
 }
 
 /**
+ * Prepend reply context to a prompt so Claude knows what the user is replying to.
+ * If the quoted message was from the bot itself, labels it as "Your previous response".
+ */
+function prependReplyContext(prompt: string, replyContext?: ReplyContext): string {
+  if (!replyContext?.text) return prompt;
+
+  const sender = replyContext.isBot
+    ? 'Your previous response'
+    : replyContext.senderName
+      ? `@${replyContext.senderName}`
+      : 'Someone';
+
+  return `[Replying to ${sender}]: "${replyContext.text}"\n\n${prompt}`;
+}
+
+/**
  * Handle a single inbound message.
  */
 async function handleMessage(
@@ -369,7 +385,10 @@ async function handleMessage(
     // Pass permission callback so requests are forwarded to IM immediately
     // during streaming (the stream blocks until permission is resolved).
     // Use text or empty string for image-only messages (prompt is still required by streamClaude)
-    const promptText = text || (hasAttachments ? 'Describe this image.' : '');
+    let promptText = text || (hasAttachments ? 'Describe this image.' : '');
+
+    // Prepend reply context so Claude knows what the user is replying to
+    promptText = prependReplyContext(promptText, msg.replyContext);
 
     const result = await engine.processMessage(binding, promptText, async (perm) => {
       await broker.forwardPermissionRequest(
@@ -384,11 +403,13 @@ async function handleMessage(
     }, taskAbort.signal, hasAttachments ? msg.attachments : undefined);
 
     // Send response text — render Markdown to Telegram HTML
+    // When the user replied to a specific message, reply back to their message
     if (result.responseText) {
       const chunks = markdownToTelegramChunks(result.responseText, 4096);
       if (chunks.length > 0) {
         await deliverRendered(adapter, msg.address, chunks, {
           sessionId: binding.codepilotSessionId,
+          replyToMessageId: msg.messageId,
         });
       }
     } else if (result.hasError) {
@@ -396,6 +417,7 @@ async function handleMessage(
         address: msg.address,
         text: `<b>Error:</b> ${escapeHtml(result.errorMessage)}`,
         parseMode: 'HTML',
+        replyToMessageId: msg.messageId,
       };
       await deliver(adapter, errorResponse);
     }

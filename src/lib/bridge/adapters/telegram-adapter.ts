@@ -48,6 +48,14 @@ interface TelegramUpdate {
     document?: TelegramDocument;
     media_group_id?: string;
     date: number;
+    /** Present when this message is a reply to another message */
+    reply_to_message?: {
+      message_id: number;
+      from?: { id: number; first_name: string; username?: string; is_bot?: boolean };
+      text?: string;
+      caption?: string;
+      date: number;
+    };
   };
   callback_query?: {
     id: string;
@@ -524,6 +532,7 @@ export class TelegramAdapter extends BaseChannelAdapter {
             } else if (messageText) {
               // Text/caption message (covers: pure text, image_enabled=false + caption,
               // unsupported document + caption)
+              const replyContext = this.extractReplyContext(m.reply_to_message);
               const msg: InboundMessage = {
                 messageId: String(m.message_id),
                 address: {
@@ -536,6 +545,7 @@ export class TelegramAdapter extends BaseChannelAdapter {
                 timestamp: m.date * 1000,
                 raw: update,
                 updateId: update.update_id,
+                ...(replyContext ? { replyContext } : {}),
               };
 
               // Audit log
@@ -584,6 +594,30 @@ export class TelegramAdapter extends BaseChannelAdapter {
       if (mime && isSupportedImageMime(mime)) return true;
     }
     return false;
+  }
+
+  /**
+   * Extract reply context from a Telegram message's reply_to_message field.
+   * Returns undefined if the message is not a reply.
+   */
+  private extractReplyContext(
+    replyTo?: NonNullable<TelegramUpdate['message']>['reply_to_message'],
+  ): import('../types').ReplyContext | undefined {
+    if (!replyTo) return undefined;
+
+    const text = replyTo.text ?? replyTo.caption ?? '';
+    if (!text) return undefined;
+
+    const senderName = replyTo.from?.username
+      || replyTo.from?.first_name
+      || undefined;
+
+    return {
+      messageId: String(replyTo.message_id),
+      text: text.slice(0, 1000), // Truncate to avoid bloating the prompt
+      senderName,
+      isBot: replyTo.from?.is_bot ?? false,
+    };
   }
 
   /**
@@ -655,6 +689,7 @@ export class TelegramAdapter extends BaseChannelAdapter {
       });
     } catch { /* best effort */ }
 
+    const replyContext = this.extractReplyContext(m.reply_to_message);
     const msg: InboundMessage = {
       messageId: String(m.message_id),
       address,
@@ -663,6 +698,7 @@ export class TelegramAdapter extends BaseChannelAdapter {
       raw: update,
       updateId: update.update_id,
       attachments: attachments.length > 0 ? attachments : undefined,
+      ...(replyContext ? { replyContext } : {}),
     };
 
     this.enqueue(msg);
@@ -805,6 +841,10 @@ export class TelegramAdapter extends BaseChannelAdapter {
       this.recentUpdateIds.add(uid);
     }
 
+    // Extract reply context from the first update in the group
+    const firstReply = entry.updates[0]?.message?.reply_to_message;
+    const replyContext = this.extractReplyContext(firstReply);
+
     const msg: InboundMessage = {
       messageId: firstMessageId,
       address,
@@ -812,6 +852,7 @@ export class TelegramAdapter extends BaseChannelAdapter {
       timestamp: firstDate * 1000,
       updateId: maxUpdateId,
       attachments: attachments.length > 0 ? attachments : undefined,
+      ...(replyContext ? { replyContext } : {}),
     };
 
     this.enqueue(msg);
