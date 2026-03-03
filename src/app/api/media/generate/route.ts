@@ -50,6 +50,16 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error('[media/generate] Failed:', error);
 
+    // Extract detailed info from AI SDK APICallError
+    const apiError = error as { url?: string; statusCode?: number; responseBody?: string };
+    if (apiError.url || apiError.responseBody) {
+      console.error('[media/generate] API details:', {
+        url: apiError.url,
+        statusCode: apiError.statusCode,
+        responseBody: apiError.responseBody?.slice(0, 2000),
+      });
+    }
+
     if (NoImageGeneratedError.isInstance(error)) {
       return new Response(
         JSON.stringify({ error: 'No images were generated. Try a different prompt.' }),
