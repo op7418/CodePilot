@@ -27,6 +27,7 @@ import {
   sanitizeInput,
   validateMode,
 } from './security/validators';
+import { findCustomCommand, loadCustomCommands } from './command-loader';
 
 const GLOBAL_KEY = '__bridge_manager__';
 
@@ -253,9 +254,10 @@ function runAdapterLoop(adapter: BaseChannelAdapter): void {
         const msg = await adapter.consumeOne();
         if (!msg) continue; // Adapter stopped
 
-        // Callback queries and commands are lightweight — process inline.
-        // Regular messages use per-session locking for concurrency.
-        if (msg.callbackData || msg.text.trim().startsWith('/')) {
+        // Callback queries are lightweight — process inline.
+        // Slash commands may be forwarded to Claude (custom/unknown commands),
+        // so they also use per-session locking like regular messages.
+        if (msg.callbackData) {
           await handleMessage(adapter, msg);
         } else {
           const binding = router.resolve(msg.address);
@@ -422,6 +424,39 @@ async function handleMessage(
 }
 
 /**
+ * Build help text including built-in commands and any custom commands.
+ */
+function buildHelpText(title: string, workingDirectory?: string): string {
+  const lines = [
+    `<b>${escapeHtml(title)}</b>`,
+    '',
+    'Send any message to interact with Claude.',
+    '',
+    '<b>Bridge Commands:</b>',
+    '/new [path] - Start new session',
+    '/bind &lt;session_id&gt; - Bind to existing session',
+    '/cwd /path - Change working directory',
+    '/mode plan|code|ask - Change mode',
+    '/status - Show current status',
+    '/sessions - List recent sessions',
+    '/stop - Stop current session',
+    '/help - Show this help',
+  ];
+
+  const customCommands = loadCustomCommands(workingDirectory);
+  if (customCommands.length > 0) {
+    lines.push('', '<b>Custom Commands:</b>');
+    for (const cmd of customCommands) {
+      lines.push(`/${escapeHtml(cmd.name)} - ${escapeHtml(cmd.description)}`);
+    }
+  }
+
+  lines.push('', '<i>Unrecognized /commands are forwarded directly to Claude.</i>');
+
+  return lines.join('\n');
+}
+
+/**
  * Handle IM slash commands.
  */
 async function handleCommand(
@@ -456,23 +491,11 @@ async function handleCommand(
   let response = '';
 
   switch (command) {
-    case '/start':
-      response = [
-        '<b>CodePilot Bridge</b>',
-        '',
-        'Send any message to interact with Claude.',
-        '',
-        '<b>Commands:</b>',
-        '/new [path] - Start new session',
-        '/bind &lt;session_id&gt; - Bind to existing session',
-        '/cwd /path - Change working directory',
-        '/mode plan|code|ask - Change mode',
-        '/status - Show current status',
-        '/sessions - List recent sessions',
-        '/stop - Stop current session',
-        '/help - Show this help',
-      ].join('\n');
+    case '/start': {
+      const startBinding = router.resolve(msg.address);
+      response = buildHelpText('CodePilot Bridge', startBinding.workingDirectory);
       break;
+    }
 
     case '/new': {
       let workDir: string | undefined;
@@ -576,23 +599,37 @@ async function handleCommand(
       break;
     }
 
-    case '/help':
-      response = [
-        '<b>CodePilot Bridge Commands</b>',
-        '',
-        '/new [path] - Start new session',
-        '/bind &lt;session_id&gt; - Bind to existing session',
-        '/cwd /path - Change working directory',
-        '/mode plan|code|ask - Change mode',
-        '/status - Show current status',
-        '/sessions - List recent sessions',
-        '/stop - Stop current session',
-        '/help - Show this help',
-      ].join('\n');
+    case '/help': {
+      const helpBinding = router.resolve(msg.address);
+      response = buildHelpText('CodePilot Bridge Commands', helpBinding.workingDirectory);
       break;
+    }
 
-    default:
-      response = `Unknown command: ${escapeHtml(command)}\nType /help for available commands.`;
+    default: {
+      // Try to resolve as a custom command or forward directly to Claude
+      const commandName = command.slice(1); // Remove leading '/'
+      const binding = router.resolve(msg.address);
+
+      // Try exact name first, then underscore→colon fallback
+      // (Telegram converts "review:pr" to "review_pr" in command names)
+      const customCmd = findCustomCommand(commandName, binding.workingDirectory)
+        ?? findCustomCommand(commandName.replace(/_/g, ':'), binding.workingDirectory);
+
+      if (customCmd) {
+        // Custom command found — expand the .md content as prompt,
+        // appending any user-provided args as context
+        const prompt = args
+          ? `${customCmd.content}\n\nUser context: ${args}`
+          : customCmd.content;
+
+        await forwardToConversation(adapter, msg, binding, prompt);
+      } else {
+        // No matching custom command — forward the raw slash command text
+        // directly to Claude (SDK may handle it natively, e.g. /compact, /init)
+        await forwardToConversation(adapter, msg, binding, text);
+      }
+      return; // Response is handled by forwardToConversation
+    }
   }
 
   if (response) {
@@ -601,5 +638,66 @@ async function handleCommand(
       text: response,
       parseMode: 'HTML',
     });
+  }
+}
+
+/**
+ * Forward a prompt to the conversation engine and deliver the response.
+ * Used for custom commands and unrecognized slash commands.
+ */
+async function forwardToConversation(
+  adapter: BaseChannelAdapter,
+  msg: InboundMessage,
+  binding: import('./types').ChannelBinding,
+  prompt: string,
+): Promise<void> {
+  // Notify adapter that message processing is starting
+  adapter.onMessageStart?.(msg.address.chatId);
+
+  const taskAbort = new AbortController();
+  const state = getState();
+  state.activeTasks.set(binding.codepilotSessionId, taskAbort);
+
+  try {
+    const result = await engine.processMessage(binding, prompt, async (perm) => {
+      await broker.forwardPermissionRequest(
+        adapter,
+        msg.address,
+        perm.permissionRequestId,
+        perm.toolName,
+        perm.toolInput,
+        binding.codepilotSessionId,
+        perm.suggestions,
+      );
+    }, taskAbort.signal);
+
+    if (result.responseText) {
+      const chunks = markdownToTelegramChunks(result.responseText, 4096);
+      if (chunks.length > 0) {
+        await deliverRendered(adapter, msg.address, chunks, {
+          sessionId: binding.codepilotSessionId,
+        });
+      }
+    } else if (result.hasError) {
+      await deliver(adapter, {
+        address: msg.address,
+        text: `<b>Error:</b> ${escapeHtml(result.errorMessage)}`,
+        parseMode: 'HTML',
+      });
+    }
+
+    // Persist SDK session ID for future resume
+    if (binding.id) {
+      try {
+        if (result.sdkSessionId) {
+          updateChannelBinding(binding.id, { sdkSessionId: result.sdkSessionId });
+        } else if (result.hasError && binding.sdkSessionId) {
+          updateChannelBinding(binding.id, { sdkSessionId: '' });
+        }
+      } catch { /* best effort */ }
+    }
+  } finally {
+    state.activeTasks.delete(binding.codepilotSessionId);
+    adapter.onMessageEnd?.(msg.address.chatId);
   }
 }

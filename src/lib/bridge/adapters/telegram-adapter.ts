@@ -25,6 +25,7 @@ import {
 import type { TelegramPhotoSize, TelegramDocument, MediaDownloadResult } from './telegram-media';
 import { getChannelOffset, setChannelOffset, insertAuditLog } from '../../db';
 import { getSetting } from '../../db';
+import { loadCustomCommands } from '../command-loader';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 
@@ -294,23 +295,41 @@ export class TelegramAdapter extends BaseChannelAdapter {
 
   /**
    * Register slash commands with Telegram Bot API so they appear in the menu.
+   * Includes built-in bridge commands plus any custom commands from ~/.claude/commands/.
+   *
+   * Note: Telegram limits setMyCommands to 100 commands. Custom commands are
+   * scanned from global directory only (project commands vary per binding).
    */
   private async registerCommands(): Promise<void> {
     const token = this.botToken;
     if (!token) return;
 
-    await callTelegramApi(token, 'setMyCommands', {
-      commands: [
-        { command: 'new', description: 'Start new session (optionally specify path)' },
-        { command: 'bind', description: 'Bind to existing session' },
-        { command: 'cwd', description: 'Change working directory' },
-        { command: 'mode', description: 'Switch mode: plan / code / ask' },
-        { command: 'status', description: 'Show current session status' },
-        { command: 'sessions', description: 'List recent sessions' },
-        { command: 'stop', description: 'Stop current task' },
-        { command: 'help', description: 'Show available commands' },
-      ],
-    });
+    const builtinCommands = [
+      { command: 'new', description: 'Start new session (optionally specify path)' },
+      { command: 'bind', description: 'Bind to existing session' },
+      { command: 'cwd', description: 'Change working directory' },
+      { command: 'mode', description: 'Switch mode: plan / code / ask' },
+      { command: 'status', description: 'Show current session status' },
+      { command: 'sessions', description: 'List recent sessions' },
+      { command: 'stop', description: 'Stop current task' },
+      { command: 'help', description: 'Show available commands' },
+    ];
+
+    // Load global custom commands (no project-specific working directory at startup)
+    const customCommands = loadCustomCommands();
+    const customTelegramCommands = customCommands
+      .map(cmd => ({
+        // Telegram command names: lowercase, no special chars except underscores
+        // Colon-separated names (e.g. "review:pr") become "review_pr"
+        command: cmd.name.replace(/:/g, '_').toLowerCase().replace(/[^a-z0-9_]/g, ''),
+        description: cmd.description.slice(0, 256),
+      }))
+      .filter(cmd => cmd.command.length > 0 && cmd.command.length <= 32);
+
+    // Telegram API limits: max 100 commands
+    const allCommands = [...builtinCommands, ...customTelegramCommands].slice(0, 100);
+
+    await callTelegramApi(token, 'setMyCommands', { commands: allCommands });
   }
 
   private enqueue(msg: InboundMessage): void {
