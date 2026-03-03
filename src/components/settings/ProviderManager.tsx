@@ -282,7 +282,7 @@ const QUICK_PRESETS: QuickPreset[] = [
     provider_type: "gemini-image",
     base_url: "",
     extra_env: '{"GEMINI_API_KEY":""}',
-    fields: ["api_key", "base_url"],
+    fields: ["api_key", "base_url", "model_names"],
     category: "media",
   },
   {
@@ -376,7 +376,8 @@ function PresetConnectDialog({
     if (preset.fields.includes("model_names") && modelName.trim()) {
       try {
         const envObj = JSON.parse(finalExtraEnv);
-        envObj["ANTHROPIC_MODEL"] = modelName.trim();
+        const modelKey = preset.provider_type === "gemini-image" ? "GEMINI_IMAGE_MODEL" : "ANTHROPIC_MODEL";
+        envObj[modelKey] = modelName.trim();
         finalExtraEnv = JSON.stringify(envObj);
       } catch { /* use as-is */ }
     }
