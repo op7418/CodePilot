@@ -24,6 +24,7 @@ export interface SSECallbacks {
   onToolTimeout: (toolName: string, elapsedSeconds: number) => void;
   onModeChanged: (mode: string) => void;
   onTaskUpdate: (sessionId: string) => void;
+  onKeepAlive: () => void;
   onError: (accumulated: string) => void;
 }
 
@@ -146,6 +147,11 @@ function handleSSEEvent(
       return accumulated;
     }
 
+    case 'keep_alive': {
+      callbacks.onKeepAlive();
+      return accumulated;
+    }
+
     case 'error': {
       const next = accumulated + '\n\n**Error:** ' + event.data;
       callbacks.onError(next);
@@ -232,6 +238,7 @@ export function useSSEStream() {
         onToolTimeout: (n, s) => callbacksRef.current?.onToolTimeout(n, s),
         onModeChanged: (m) => callbacksRef.current?.onModeChanged(m),
         onTaskUpdate: (s) => callbacksRef.current?.onTaskUpdate(s),
+        onKeepAlive: () => callbacksRef.current?.onKeepAlive(),
         onError: (a) => callbacksRef.current?.onError(a),
       };
 
