@@ -873,6 +873,13 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
               }));
               break;
             }
+
+            default: {
+              if ((message as { type: string }).type === 'keep_alive') {
+                controller.enqueue(formatSSE({ type: 'keep_alive', data: '' }));
+              }
+              break;
+            }
           }
         }
 

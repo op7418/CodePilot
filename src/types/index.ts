@@ -356,6 +356,7 @@ export type SSEEventType =
   | 'permission_request' // permission approval needed
   | 'mode_changed'       // SDK permission mode changed (e.g. plan → code)
   | 'task_update'        // SDK TodoWrite task sync
+  | 'keep_alive'         // SDK keep-alive heartbeat (resets idle timer)
   | 'done';              // stream complete
 
 export interface SSEEvent {

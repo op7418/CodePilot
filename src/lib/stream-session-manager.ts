@@ -311,6 +311,9 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
         markActive();
         window.dispatchEvent(new CustomEvent('tasks-updated'));
       },
+      onKeepAlive: () => {
+        markActive();
+      },
       onError: (acc) => {
         markActive();
         stream.accumulatedText = acc;
