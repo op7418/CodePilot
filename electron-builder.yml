@@ -48,6 +48,11 @@ mac:
   icon: build/icon.icns
   category: public.app-category.developer-tools
   artifactName: "${productName}-${version}-${arch}.${ext}"
+  hardenedRuntime: true
+  gatekeeperAssess: false
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.inherit.plist
+  notarize: false
   target:
     - target: dmg
       arch: [x64, arm64]

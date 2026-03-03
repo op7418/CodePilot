@@ -2,6 +2,7 @@
 
 import { useRef, useEffect } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
+import { useStickToBottomContext } from 'use-stick-to-bottom';
 import type { Message, PermissionRequestEvent } from '@/types';
 import {
   Conversation,
@@ -12,6 +13,33 @@ import {
 import { MessageItem } from './MessageItem';
 import { StreamingMessage } from './StreamingMessage';
 import { CodePilotLogo } from './CodePilotLogo';
+
+/**
+ * Scrolls to bottom when streaming starts or new messages are appended.
+ * Must be rendered inside <Conversation> (StickToBottom provider).
+ */
+function ScrollOnStream({ isStreaming, messageCount }: { isStreaming: boolean; messageCount: number }) {
+  const { scrollToBottom } = useStickToBottomContext();
+  const wasStreaming = useRef(false);
+  const prevCount = useRef(messageCount);
+
+  // Scroll when new messages are appended (covers optimistic user message + assistant completion)
+  useEffect(() => {
+    if (messageCount > prevCount.current) {
+      scrollToBottom();
+    }
+    prevCount.current = messageCount;
+  }, [messageCount, scrollToBottom]);
+
+  useEffect(() => {
+    if (isStreaming && !wasStreaming.current) {
+      scrollToBottom();
+    }
+    wasStreaming.current = isStreaming;
+  }, [isStreaming, scrollToBottom]);
+
+  return null;
+}
 
 interface ToolUseInfo {
   id: string;
@@ -97,6 +125,7 @@ export function MessageList({
 
   return (
     <Conversation>
+      <ScrollOnStream isStreaming={isStreaming} messageCount={messages.length} />
       <ConversationContent className="mx-auto max-w-3xl px-4 py-6 gap-6">
         {hasMore && (
           <div className="flex justify-center">

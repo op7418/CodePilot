@@ -43,6 +43,7 @@ export async function POST(request: NextRequest) {
       body.system_prompt,
       body.working_directory,
       body.mode,
+      body.provider_id,
     );
     const response: SessionResponse = { session };
     return Response.json(response, { status: 201 });

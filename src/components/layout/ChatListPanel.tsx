@@ -131,12 +131,20 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
   const [hoveredFolder, setHoveredFolder] = useState<string | null>(null);
   const [creatingChat, setCreatingChat] = useState(false);
 
+  /** Read current model + provider_id from localStorage for new session creation */
+  const getCurrentModelAndProvider = useCallback(() => {
+    const model = typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-model') || '' : '';
+    const provider_id = typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-provider-id') || '' : '';
+    return { model, provider_id };
+  }, []);
+
   const handleFolderSelect = useCallback(async (path: string) => {
     try {
+      const { model, provider_id } = getCurrentModelAndProvider();
       const res = await fetch("/api/chat/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ working_directory: path }),
+        body: JSON.stringify({ working_directory: path, model, provider_id }),
       });
       if (res.ok) {
         const data = await res.json();
@@ -146,7 +154,7 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
     } catch {
       // Silently fail
     }
-  }, [router]);
+  }, [router, getCurrentModelAndProvider]);
 
   const openFolderPicker = useCallback(async (defaultPath?: string) => {
     if (isElectron) {
@@ -180,10 +188,11 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
         return;
       }
 
+      const { model, provider_id } = getCurrentModelAndProvider();
       const res = await fetch("/api/chat/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ working_directory: lastDir, model: localStorage.getItem('codepilot:last-model') || '' }),
+        body: JSON.stringify({ working_directory: lastDir, model, provider_id }),
       });
       if (!res.ok) {
         // Backend rejected it (e.g. INVALID_DIRECTORY) — prompt user
@@ -259,6 +268,14 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
     };
   }, [debouncedFetchSessions]);
 
+  // Periodic poll to catch sessions created server-side (e.g. bridge)
+  useEffect(() => {
+    const interval = setInterval(() => {
+      fetchSessions();
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [fetchSessions]);
+
   const handleDeleteSession = async (
     e: React.MouseEvent,
     sessionId: string
@@ -294,10 +311,11 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
   ) => {
     e.stopPropagation();
     try {
+      const { model, provider_id } = getCurrentModelAndProvider();
       const res = await fetch("/api/chat/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ working_directory: workingDirectory }),
+        body: JSON.stringify({ working_directory: workingDirectory, model, provider_id }),
       });
       if (res.ok) {
         const data = await res.json();

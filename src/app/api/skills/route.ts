@@ -24,6 +24,10 @@ function getProjectCommandsDir(cwd?: string): string {
   return path.join(cwd || process.cwd(), ".claude", "commands");
 }
 
+function getProjectSkillsDir(cwd?: string): string {
+  return path.join(cwd || process.cwd(), ".claude", "skills");
+}
+
 function getPluginCommandsDirs(): string[] {
   const dirs: string[] = [];
   const marketplacesDir = path.join(os.homedir(), ".claude", "plugins", "marketplaces");
@@ -55,6 +59,40 @@ function getInstalledSkillsDir(): string {
 
 function getClaudeSkillsDir(): string {
   return path.join(os.homedir(), ".claude", "skills");
+}
+
+/**
+ * Scan project-level skills from .claude/skills/{name}/SKILL.md.
+ * Each subdirectory may contain a SKILL.md with optional YAML front matter.
+ */
+function scanProjectSkills(dir: string): SkillFile[] {
+  const skills: SkillFile[] = [];
+  if (!fs.existsSync(dir)) return skills;
+
+  try {
+    const entries = fs.readdirSync(dir, { withFileTypes: true });
+    for (const entry of entries) {
+      if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+      const skillMdPath = path.join(dir, entry.name, "SKILL.md");
+      if (!fs.existsSync(skillMdPath)) continue;
+
+      const content = fs.readFileSync(skillMdPath, "utf-8");
+      const meta = parseSkillFrontMatter(content);
+      const name = meta.name || entry.name;
+      const description = meta.description || `Skill: /${name}`;
+
+      skills.push({
+        name,
+        description,
+        content,
+        source: "project",
+        filePath: skillMdPath,
+      });
+    }
+  } catch {
+    // ignore read errors
+  }
+  return skills;
 }
 
 function computeContentHash(content: string): string {
@@ -240,6 +278,18 @@ export async function GET(request: NextRequest) {
     const globalSkills = scanDirectory(globalDir, "global");
     const projectSkills = scanDirectory(projectDir, "project");
 
+    // Scan project-level skills (.claude/skills/*/SKILL.md)
+    const projectSkillsDir = getProjectSkillsDir(cwd);
+    console.log(`[skills] Scanning project skills: ${projectSkillsDir} (exists: ${fs.existsSync(projectSkillsDir)})`);
+    const projectLevelSkills = scanProjectSkills(projectSkillsDir);
+    console.log(`[skills] Found ${projectLevelSkills.length} project-level skills`);
+
+    // Deduplicate: project commands take priority over project skills with the same name
+    const projectCommandNames = new Set(projectSkills.map((s) => s.name));
+    const dedupedProjectSkills = projectLevelSkills.filter(
+      (s) => !projectCommandNames.has(s.name)
+    );
+
     const agentsSkillsDir = getInstalledSkillsDir();
     const claudeSkillsDir = getClaudeSkillsDir();
     console.log(`[skills] Scanning installed: ${agentsSkillsDir} (exists: ${fs.existsSync(agentsSkillsDir)})`);
@@ -267,8 +317,8 @@ export async function GET(request: NextRequest) {
       pluginSkills.push(...scanDirectory(dir, "plugin"));
     }
 
-    const all = [...globalSkills, ...projectSkills, ...installedSkills, ...pluginSkills];
-    console.log(`[skills] Found: global=${globalSkills.length}, project=${projectSkills.length}, installed=${installedSkills.length}, plugin=${pluginSkills.length}`);
+    const all = [...globalSkills, ...projectSkills, ...dedupedProjectSkills, ...installedSkills, ...pluginSkills];
+    console.log(`[skills] Found: global=${globalSkills.length}, project=${projectSkills.length}, projectSkills=${dedupedProjectSkills.length}, installed=${installedSkills.length}, plugin=${pluginSkills.length}`);
 
     return NextResponse.json({ skills: all });
   } catch (error) {

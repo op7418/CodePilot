@@ -12,6 +12,10 @@ function getProjectCommandsDir(cwd?: string): string {
   return path.join(cwd || process.cwd(), ".claude", "commands");
 }
 
+function getProjectSkillsDir(cwd?: string): string {
+  return path.join(cwd || process.cwd(), ".claude", "skills");
+}
+
 function getInstalledSkillsDir(): string {
   return path.join(os.homedir(), ".agents", "skills");
 }
@@ -157,11 +161,39 @@ function findSkillFile(
   const installedSource = options?.installedSource;
 
   if (!options?.installedOnly) {
-    // Check project first, then global, then installed (~/.agents/skills/ and ~/.claude/skills/)
+    // Check project commands → project skills → global commands → installed
     const projectPath = path.join(getProjectCommandsDir(options?.cwd), `${name}.md`);
     if (fs.existsSync(projectPath)) {
       return { filePath: projectPath, source: "project" };
     }
+
+    // Check project-level .claude/skills/{name}/SKILL.md
+    const projectSkillPath = path.join(getProjectSkillsDir(options?.cwd), name, "SKILL.md");
+    if (fs.existsSync(projectSkillPath)) {
+      return { filePath: projectSkillPath, source: "project" };
+    }
+
+    // Check project-level skills by front matter name (scan all subdirs)
+    const projectSkillsDir = getProjectSkillsDir(options?.cwd);
+    if (fs.existsSync(projectSkillsDir)) {
+      try {
+        const entries = fs.readdirSync(projectSkillsDir, { withFileTypes: true });
+        for (const entry of entries) {
+          if (!entry.isDirectory() || entry.name.startsWith(".")) continue;
+          if (entry.name === name) continue; // already checked above
+          const skillMdPath = path.join(projectSkillsDir, entry.name, "SKILL.md");
+          if (!fs.existsSync(skillMdPath)) continue;
+          const skillContent = fs.readFileSync(skillMdPath, "utf-8");
+          const meta = parseSkillFrontMatter(skillContent);
+          if (meta.name === name) {
+            return { filePath: skillMdPath, source: "project" };
+          }
+        }
+      } catch {
+        // ignore read errors
+      }
+    }
+
     const globalPath = path.join(getGlobalCommandsDir(), `${name}.md`);
     if (fs.existsSync(globalPath)) {
       return { filePath: globalPath, source: "global" };
@@ -238,9 +270,16 @@ export async function GET(
 
     const content = fs.readFileSync(found.filePath, "utf-8");
     const firstLine = content.split("\n")[0]?.trim() || "";
-    const description = firstLine.startsWith("#")
-      ? firstLine.replace(/^#+\s*/, "")
-      : firstLine || `Skill: /${name}`;
+    let description: string;
+
+    if (found.filePath.endsWith("SKILL.md")) {
+      const meta = parseSkillFrontMatter(content);
+      description = meta.description || (firstLine.startsWith("#") ? firstLine.replace(/^#+\s*/, "") : firstLine || `Skill: /${name}`);
+    } else {
+      description = firstLine.startsWith("#")
+        ? firstLine.replace(/^#+\s*/, "")
+        : firstLine || `Skill: /${name}`;
+    }
 
     return NextResponse.json({
       skill: {
@@ -271,6 +310,7 @@ export async function PUT(
 
     const url = new URL(request.url);
     const sourceParam = url.searchParams.get("source");
+    const cwdParam = url.searchParams.get("cwd") || undefined;
     const installedSource =
       sourceParam === "agents" || sourceParam === "claude"
         ? (sourceParam as InstalledSource)
@@ -283,8 +323,8 @@ export async function PUT(
     }
 
     const found = installedSource
-      ? findSkillFile(name, { installedSource, installedOnly: true })
-      : findSkillFile(name);
+      ? findSkillFile(name, { installedSource, installedOnly: true, cwd: cwdParam })
+      : findSkillFile(name, { cwd: cwdParam });
     if (found && "conflict" in found) {
       return NextResponse.json(
         { error: "Multiple skills with different content", sources: found.sources },

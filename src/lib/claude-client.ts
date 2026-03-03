@@ -21,6 +21,7 @@ import { registerPendingPermission } from './permission-registry';
 import { registerConversation, unregisterConversation } from './conversation-registry';
 import { getSetting, getActiveProvider, updateSdkSessionId, createPermissionRequest } from './db';
 import { findClaudeBinary, findGitBash, getExpandedPath } from './platform';
+import { notifyPermissionRequest, notifyGeneric } from './telegram-bot';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -489,6 +490,9 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             data: JSON.stringify(permEvent),
           }));
 
+          // Notify via Telegram (fire-and-forget)
+          notifyPermissionRequest(toolName, input as Record<string, unknown>, telegramOpts).catch(() => {});
+
           // Notify runtime status change
           onRuntimeStatusChange?.('waiting_permission');
 
@@ -500,6 +504,13 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           onRuntimeStatusChange?.('running');
 
           return result;
+        };
+
+        // Telegram notification context for hooks
+        const telegramOpts = {
+          sessionId,
+          sessionTitle: undefined as string | undefined,
+          workingDirectory,
         };
 
         // Hooks: capture notifications and tool completion events
@@ -515,6 +526,8 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                   message: notif.message,
                 }),
               }));
+              // Forward to Telegram (fire-and-forget)
+              notifyGeneric(notif.title || '', notif.message || '', telegramOpts).catch(() => {});
               return {};
             }],
           }],

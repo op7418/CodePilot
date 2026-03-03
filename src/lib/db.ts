@@ -4,6 +4,7 @@ import crypto from 'crypto';
 import fs from 'fs';
 import os from 'os';
 import type { ChatSession, Message, SettingsMap, TaskItem, TaskStatus, ApiProvider, CreateProviderRequest, UpdateProviderRequest, MediaJob, MediaJobStatus, MediaJobItem, MediaJobItemStatus, MediaContextEvent, BatchConfig } from '@/types';
+import type { ChannelType, ChannelBinding } from './bridge/types';
 
 const dataDir = process.env.CLAUDE_GUI_DATA_DIR || path.join(os.homedir(), '.codepilot');
 const DB_PATH = path.join(dataDir, 'codepilot.db');
@@ -200,6 +201,79 @@ function initDb(db: Database.Database): void {
     CREATE INDEX IF NOT EXISTS idx_media_job_items_job_id ON media_job_items(job_id);
     CREATE INDEX IF NOT EXISTS idx_media_job_items_status ON media_job_items(status);
     CREATE INDEX IF NOT EXISTS idx_media_context_events_job_id ON media_context_events(job_id);
+
+    -- Bridge: IM channel bindings
+    CREATE TABLE IF NOT EXISTS channel_bindings (
+      id TEXT PRIMARY KEY,
+      channel_type TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      codepilot_session_id TEXT NOT NULL,
+      sdk_session_id TEXT NOT NULL DEFAULT '',
+      working_directory TEXT NOT NULL DEFAULT '',
+      model TEXT NOT NULL DEFAULT '',
+      mode TEXT NOT NULL DEFAULT 'code' CHECK(mode IN ('code', 'plan', 'ask')),
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (codepilot_session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE,
+      UNIQUE(channel_type, chat_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_channel_bindings_session ON channel_bindings(codepilot_session_id);
+    CREATE INDEX IF NOT EXISTS idx_channel_bindings_lookup ON channel_bindings(channel_type, chat_id);
+
+    -- Bridge: polling offset watermarks per adapter
+    CREATE TABLE IF NOT EXISTS channel_offsets (
+      channel_type TEXT PRIMARY KEY,
+      offset_value TEXT NOT NULL DEFAULT '0',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    -- Bridge: idempotent message dedup
+    CREATE TABLE IF NOT EXISTS channel_dedupe (
+      dedup_key TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_channel_dedupe_expires ON channel_dedupe(expires_at);
+
+    -- Bridge: outbound message references (for editing/deleting sent messages)
+    CREATE TABLE IF NOT EXISTS channel_outbound_refs (
+      id TEXT PRIMARY KEY,
+      channel_type TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      codepilot_session_id TEXT NOT NULL,
+      platform_message_id TEXT NOT NULL,
+      purpose TEXT NOT NULL DEFAULT 'response',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_outbound_refs_session ON channel_outbound_refs(codepilot_session_id);
+
+    -- Bridge: audit log
+    CREATE TABLE IF NOT EXISTS channel_audit_logs (
+      id TEXT PRIMARY KEY,
+      channel_type TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK(direction IN ('inbound', 'outbound')),
+      message_id TEXT NOT NULL DEFAULT '',
+      summary TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_chat ON channel_audit_logs(channel_type, chat_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON channel_audit_logs(created_at);
+
+    -- Bridge: permission request → IM message links
+    CREATE TABLE IF NOT EXISTS channel_permission_links (
+      id TEXT PRIMARY KEY,
+      permission_request_id TEXT NOT NULL,
+      channel_type TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      tool_name TEXT NOT NULL DEFAULT '',
+      suggestions TEXT NOT NULL DEFAULT '',
+      resolved INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_perm_links_request ON channel_permission_links(permission_request_id);
   `);
 
   // Run migrations for existing databases
@@ -497,6 +571,89 @@ function migrateDb(db: Database.Database): void {
       ).run(id, 'Default', 'anthropic', baseUrlRow?.value || '', tokenRow?.value || '', 1, 0, '{}', 'Migrated from settings', now, now);
     }
   }
+
+  // Ensure bridge tables exist for databases created before bridge feature
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS channel_bindings (
+      id TEXT PRIMARY KEY,
+      channel_type TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      codepilot_session_id TEXT NOT NULL,
+      sdk_session_id TEXT NOT NULL DEFAULT '',
+      working_directory TEXT NOT NULL DEFAULT '',
+      model TEXT NOT NULL DEFAULT '',
+      mode TEXT NOT NULL DEFAULT 'code' CHECK(mode IN ('code', 'plan', 'ask')),
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (codepilot_session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE,
+      UNIQUE(channel_type, chat_id)
+    );
+    CREATE INDEX IF NOT EXISTS idx_channel_bindings_session ON channel_bindings(codepilot_session_id);
+    CREATE INDEX IF NOT EXISTS idx_channel_bindings_lookup ON channel_bindings(channel_type, chat_id);
+
+    CREATE TABLE IF NOT EXISTS channel_offsets (
+      channel_type TEXT PRIMARY KEY,
+      offset_value TEXT NOT NULL DEFAULT '0',
+      updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+
+    CREATE TABLE IF NOT EXISTS channel_dedupe (
+      dedup_key TEXT PRIMARY KEY,
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      expires_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_channel_dedupe_expires ON channel_dedupe(expires_at);
+
+    CREATE TABLE IF NOT EXISTS channel_outbound_refs (
+      id TEXT PRIMARY KEY,
+      channel_type TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      codepilot_session_id TEXT NOT NULL,
+      platform_message_id TEXT NOT NULL,
+      purpose TEXT NOT NULL DEFAULT 'response',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_outbound_refs_session ON channel_outbound_refs(codepilot_session_id);
+
+    CREATE TABLE IF NOT EXISTS channel_audit_logs (
+      id TEXT PRIMARY KEY,
+      channel_type TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      direction TEXT NOT NULL CHECK(direction IN ('inbound', 'outbound')),
+      message_id TEXT NOT NULL DEFAULT '',
+      summary TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_chat ON channel_audit_logs(channel_type, chat_id);
+    CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON channel_audit_logs(created_at);
+
+    CREATE TABLE IF NOT EXISTS channel_permission_links (
+      id TEXT PRIMARY KEY,
+      permission_request_id TEXT NOT NULL,
+      channel_type TEXT NOT NULL,
+      chat_id TEXT NOT NULL,
+      message_id TEXT NOT NULL,
+      tool_name TEXT NOT NULL DEFAULT '',
+      suggestions TEXT NOT NULL DEFAULT '',
+      resolved INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_perm_links_request ON channel_permission_links(permission_request_id);
+  `);
+
+  // Migrate channel_permission_links for databases created before these columns were added
+  const permLinkCols = db.prepare("PRAGMA table_info(channel_permission_links)").all() as { name: string }[];
+  const permLinkColNames = permLinkCols.map(c => c.name);
+  if (permLinkColNames.length > 0 && !permLinkColNames.includes('tool_name')) {
+    db.exec("ALTER TABLE channel_permission_links ADD COLUMN tool_name TEXT NOT NULL DEFAULT ''");
+  }
+  if (permLinkColNames.length > 0 && !permLinkColNames.includes('suggestions')) {
+    db.exec("ALTER TABLE channel_permission_links ADD COLUMN suggestions TEXT NOT NULL DEFAULT ''");
+  }
+  if (permLinkColNames.length > 0 && !permLinkColNames.includes('resolved')) {
+    db.exec("ALTER TABLE channel_permission_links ADD COLUMN resolved INTEGER NOT NULL DEFAULT 0");
+  }
 }
 
 // ==========================================
@@ -506,6 +663,16 @@ function migrateDb(db: Database.Database): void {
 export function getAllSessions(): ChatSession[] {
   const db = getDb();
   return db.prepare('SELECT * FROM chat_sessions ORDER BY updated_at DESC').all() as ChatSession[];
+}
+
+/**
+ * Get sessions that are currently running or waiting for permission.
+ */
+export function getActiveSessions(): ChatSession[] {
+  const db = getDb();
+  return db.prepare(
+    "SELECT * FROM chat_sessions WHERE runtime_status IN ('running', 'waiting_permission') ORDER BY runtime_updated_at DESC"
+  ).all() as ChatSession[];
 }
 
 export function getSession(id: string): ChatSession | undefined {
@@ -519,6 +686,7 @@ export function createSession(
   systemPrompt?: string,
   workingDirectory?: string,
   mode?: string,
+  providerId?: string,
 ): ChatSession {
   const db = getDb();
   const id = crypto.randomBytes(16).toString('hex');
@@ -527,8 +695,8 @@ export function createSession(
   const projectName = path.basename(wd);
 
   db.prepare(
-    'INSERT INTO chat_sessions (id, title, created_at, updated_at, model, system_prompt, working_directory, sdk_session_id, project_name, status, mode, sdk_cwd) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, title || 'New Chat', now, now, model || '', systemPrompt || '', wd, '', projectName, 'active', mode || 'code', wd);
+    'INSERT INTO chat_sessions (id, title, created_at, updated_at, model, system_prompt, working_directory, sdk_session_id, project_name, status, mode, sdk_cwd, provider_id) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
+  ).run(id, title || 'New Chat', now, now, model || '', systemPrompt || '', wd, '', projectName, 'active', mode || 'code', wd, providerId || '');
 
   return getSession(id)!;
 }
@@ -1373,6 +1541,337 @@ export function getPermissionRequest(id: string): {
 } | undefined {
   const db = getDb();
   return db.prepare('SELECT * FROM permission_requests WHERE id = ?').get(id) as ReturnType<typeof getPermissionRequest>;
+}
+
+// ==========================================
+// Bridge: Channel Binding Operations
+// ==========================================
+
+export function getChannelBinding(channelType: ChannelType, chatId: string): ChannelBinding | undefined {
+  const db = getDb();
+  const row = db.prepare(
+    'SELECT * FROM channel_bindings WHERE channel_type = ? AND chat_id = ?'
+  ).get(channelType, chatId) as {
+    id: string; channel_type: string; chat_id: string; codepilot_session_id: string;
+    sdk_session_id: string; working_directory: string; model: string; mode: string;
+    active: number; created_at: string; updated_at: string;
+  } | undefined;
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    channelType: row.channel_type as ChannelType,
+    chatId: row.chat_id,
+    codepilotSessionId: row.codepilot_session_id,
+    sdkSessionId: row.sdk_session_id,
+    workingDirectory: row.working_directory,
+    model: row.model,
+    mode: row.mode as 'code' | 'plan' | 'ask',
+    active: row.active === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
+}
+
+export function upsertChannelBinding(params: {
+  channelType: ChannelType;
+  chatId: string;
+  codepilotSessionId: string;
+  sdkSessionId?: string;
+  workingDirectory?: string;
+  model?: string;
+  mode?: 'code' | 'plan' | 'ask';
+}): ChannelBinding {
+  const db = getDb();
+  const now = new Date().toISOString().replace('T', ' ').split('.')[0];
+  const existing = getChannelBinding(params.channelType, params.chatId);
+
+  if (existing) {
+    db.prepare(
+      `UPDATE channel_bindings SET codepilot_session_id = ?, sdk_session_id = ?, working_directory = ?, model = ?, mode = ?, updated_at = ?
+       WHERE channel_type = ? AND chat_id = ?`
+    ).run(
+      params.codepilotSessionId,
+      params.sdkSessionId ?? existing.sdkSessionId,
+      params.workingDirectory ?? existing.workingDirectory,
+      params.model ?? existing.model,
+      params.mode ?? existing.mode,
+      now,
+      params.channelType,
+      params.chatId,
+    );
+  } else {
+    const id = crypto.randomBytes(16).toString('hex');
+    db.prepare(
+      `INSERT INTO channel_bindings (id, channel_type, chat_id, codepilot_session_id, sdk_session_id, working_directory, model, mode, active, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, ?, ?)`
+    ).run(
+      id,
+      params.channelType,
+      params.chatId,
+      params.codepilotSessionId,
+      params.sdkSessionId || '',
+      params.workingDirectory || '',
+      params.model || '',
+      params.mode || 'code',
+      now,
+      now,
+    );
+  }
+
+  return getChannelBinding(params.channelType, params.chatId)!;
+}
+
+export function listChannelBindings(channelType?: ChannelType): ChannelBinding[] {
+  const db = getDb();
+  let rows: Array<{
+    id: string; channel_type: string; chat_id: string; codepilot_session_id: string;
+    sdk_session_id: string; working_directory: string; model: string; mode: string;
+    active: number; created_at: string; updated_at: string;
+  }>;
+
+  if (channelType) {
+    rows = db.prepare('SELECT * FROM channel_bindings WHERE channel_type = ? ORDER BY updated_at DESC').all(channelType) as typeof rows;
+  } else {
+    rows = db.prepare('SELECT * FROM channel_bindings ORDER BY updated_at DESC').all() as typeof rows;
+  }
+
+  return rows.map(row => ({
+    id: row.id,
+    channelType: row.channel_type as ChannelType,
+    chatId: row.chat_id,
+    codepilotSessionId: row.codepilot_session_id,
+    sdkSessionId: row.sdk_session_id,
+    workingDirectory: row.working_directory,
+    model: row.model,
+    mode: row.mode as 'code' | 'plan' | 'ask',
+    active: row.active === 1,
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  }));
+}
+
+export function updateChannelBinding(
+  id: string,
+  updates: Partial<Pick<ChannelBinding, 'sdkSessionId' | 'workingDirectory' | 'model' | 'mode' | 'active'>>,
+): void {
+  const db = getDb();
+  const now = new Date().toISOString().replace('T', ' ').split('.')[0];
+  const sets: string[] = ['updated_at = ?'];
+  const values: unknown[] = [now];
+
+  if (updates.sdkSessionId !== undefined) { sets.push('sdk_session_id = ?'); values.push(updates.sdkSessionId); }
+  if (updates.workingDirectory !== undefined) { sets.push('working_directory = ?'); values.push(updates.workingDirectory); }
+  if (updates.model !== undefined) { sets.push('model = ?'); values.push(updates.model); }
+  if (updates.mode !== undefined) { sets.push('mode = ?'); values.push(updates.mode); }
+  if (updates.active !== undefined) { sets.push('active = ?'); values.push(updates.active ? 1 : 0); }
+
+  values.push(id);
+  db.prepare(`UPDATE channel_bindings SET ${sets.join(', ')} WHERE id = ?`).run(...values);
+}
+
+// ==========================================
+// Bridge: Channel Offset Operations
+// ==========================================
+
+export function getChannelOffset(channelType: ChannelType | string): string {
+  const db = getDb();
+  const row = db.prepare('SELECT offset_value FROM channel_offsets WHERE channel_type = ?').get(channelType) as { offset_value: string } | undefined;
+  return row?.offset_value || '0';
+}
+
+export function setChannelOffset(channelType: ChannelType | string, offsetValue: string): void {
+  const db = getDb();
+  const now = new Date().toISOString().replace('T', ' ').split('.')[0];
+  db.prepare(
+    `INSERT INTO channel_offsets (channel_type, offset_value, updated_at)
+     VALUES (?, ?, ?)
+     ON CONFLICT(channel_type) DO UPDATE SET offset_value = excluded.offset_value, updated_at = excluded.updated_at`
+  ).run(channelType, offsetValue, now);
+}
+
+// ==========================================
+// Bridge: Dedup Operations
+// ==========================================
+
+export function checkDedup(dedupKey: string): boolean {
+  const db = getDb();
+  const row = db.prepare('SELECT 1 FROM channel_dedupe WHERE dedup_key = ?').get(dedupKey);
+  return !!row;
+}
+
+export function insertDedup(dedupKey: string, ttlMs: number = 24 * 60 * 60 * 1000): void {
+  const db = getDb();
+  const now = new Date().toISOString().replace('T', ' ').split('.')[0];
+  const expiresAt = new Date(Date.now() + ttlMs).toISOString().replace('T', ' ').split('.')[0];
+  db.prepare(
+    `INSERT OR IGNORE INTO channel_dedupe (dedup_key, created_at, expires_at) VALUES (?, ?, ?)`
+  ).run(dedupKey, now, expiresAt);
+}
+
+export function cleanupExpiredDedup(): number {
+  const db = getDb();
+  const now = new Date().toISOString().replace('T', ' ').split('.')[0];
+  const result = db.prepare('DELETE FROM channel_dedupe WHERE expires_at < ?').run(now);
+  return result.changes;
+}
+
+// ==========================================
+// Bridge: Outbound Ref Operations
+// ==========================================
+
+export function insertOutboundRef(params: {
+  channelType: ChannelType;
+  chatId: string;
+  codepilotSessionId: string;
+  platformMessageId: string;
+  purpose?: string;
+}): void {
+  const db = getDb();
+  const id = crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString().replace('T', ' ').split('.')[0];
+  db.prepare(
+    `INSERT INTO channel_outbound_refs (id, channel_type, chat_id, codepilot_session_id, platform_message_id, purpose, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, params.channelType, params.chatId, params.codepilotSessionId, params.platformMessageId, params.purpose || 'response', now);
+}
+
+export function getOutboundRefs(codepilotSessionId: string): Array<{
+  id: string;
+  channelType: ChannelType;
+  chatId: string;
+  platformMessageId: string;
+  purpose: string;
+  createdAt: string;
+}> {
+  const db = getDb();
+  const rows = db.prepare(
+    'SELECT * FROM channel_outbound_refs WHERE codepilot_session_id = ? ORDER BY created_at DESC'
+  ).all(codepilotSessionId) as Array<{
+    id: string; channel_type: string; chat_id: string; codepilot_session_id: string;
+    platform_message_id: string; purpose: string; created_at: string;
+  }>;
+  return rows.map(r => ({
+    id: r.id,
+    channelType: r.channel_type as ChannelType,
+    chatId: r.chat_id,
+    platformMessageId: r.platform_message_id,
+    purpose: r.purpose,
+    createdAt: r.created_at,
+  }));
+}
+
+// ==========================================
+// Bridge: Audit Log Operations
+// ==========================================
+
+export function insertAuditLog(params: {
+  channelType: ChannelType;
+  chatId: string;
+  direction: 'inbound' | 'outbound';
+  messageId?: string;
+  summary?: string;
+}): void {
+  const db = getDb();
+  const id = crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString().replace('T', ' ').split('.')[0];
+  db.prepare(
+    `INSERT INTO channel_audit_logs (id, channel_type, chat_id, direction, message_id, summary, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, params.channelType, params.chatId, params.direction, params.messageId || '', params.summary || '', now);
+}
+
+export function getAuditLogs(channelType: ChannelType, chatId: string, limit: number = 50): Array<{
+  id: string;
+  channelType: ChannelType;
+  chatId: string;
+  direction: 'inbound' | 'outbound';
+  messageId: string;
+  summary: string;
+  createdAt: string;
+}> {
+  const db = getDb();
+  const rows = db.prepare(
+    'SELECT * FROM channel_audit_logs WHERE channel_type = ? AND chat_id = ? ORDER BY created_at DESC LIMIT ?'
+  ).all(channelType, chatId, limit) as Array<{
+    id: string; channel_type: string; chat_id: string; direction: string;
+    message_id: string; summary: string; created_at: string;
+  }>;
+  return rows.map(r => ({
+    id: r.id,
+    channelType: r.channel_type as ChannelType,
+    chatId: r.chat_id,
+    direction: r.direction as 'inbound' | 'outbound',
+    messageId: r.message_id,
+    summary: r.summary,
+    createdAt: r.created_at,
+  }));
+}
+
+// ==========================================
+// Bridge: Permission Link Operations
+// ==========================================
+
+export function insertPermissionLink(params: {
+  permissionRequestId: string;
+  channelType: ChannelType;
+  chatId: string;
+  messageId: string;
+  toolName?: string;
+  suggestions?: string;
+}): void {
+  const db = getDb();
+  const id = crypto.randomBytes(16).toString('hex');
+  const now = new Date().toISOString().replace('T', ' ').split('.')[0];
+  db.prepare(
+    `INSERT INTO channel_permission_links (id, permission_request_id, channel_type, chat_id, message_id, tool_name, suggestions, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(id, params.permissionRequestId, params.channelType, params.chatId, params.messageId, params.toolName || '', params.suggestions || '', now);
+}
+
+export function getPermissionLink(permissionRequestId: string): {
+  id: string;
+  permissionRequestId: string;
+  channelType: ChannelType;
+  chatId: string;
+  messageId: string;
+  toolName: string;
+  suggestions: string;
+  resolved: boolean;
+  createdAt: string;
+} | undefined {
+  const db = getDb();
+  const row = db.prepare(
+    'SELECT * FROM channel_permission_links WHERE permission_request_id = ?'
+  ).get(permissionRequestId) as {
+    id: string; permission_request_id: string; channel_type: string;
+    chat_id: string; message_id: string; tool_name: string;
+    suggestions: string; resolved: number; created_at: string;
+  } | undefined;
+  if (!row) return undefined;
+  return {
+    id: row.id,
+    permissionRequestId: row.permission_request_id,
+    channelType: row.channel_type as ChannelType,
+    chatId: row.chat_id,
+    messageId: row.message_id,
+    toolName: row.tool_name,
+    suggestions: row.suggestions,
+    resolved: row.resolved === 1,
+    createdAt: row.created_at,
+  };
+}
+
+/**
+ * Atomically mark a permission link as resolved.
+ * Uses `resolved = 0` in the WHERE clause to prevent double-resolution races.
+ * Returns true if the row was actually updated (i.e., it was not already resolved).
+ */
+export function markPermissionLinkResolved(permissionRequestId: string): boolean {
+  const db = getDb();
+  const result = db.prepare(
+    'UPDATE channel_permission_links SET resolved = 1 WHERE permission_request_id = ? AND resolved = 0'
+  ).run(permissionRequestId);
+  return result.changes > 0;
 }
 
 // ==========================================

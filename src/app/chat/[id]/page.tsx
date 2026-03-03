@@ -78,11 +78,15 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
 
   // Load session info and set working directory
   useEffect(() => {
+    let cancelled = false;
+
     async function loadSession() {
       try {
         const res = await fetch(`/api/chat/sessions/${id}`);
+        if (cancelled) return;
         if (res.ok) {
           const data: { session: ChatSession } = await res.json();
+          if (cancelled) return;
           if (data.session.working_directory) {
             setWorkingDirectory(data.session.working_directory);
             setSessionWorkingDir(data.session.working_directory);
@@ -105,6 +109,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
     }
 
     loadSession();
+    return () => { cancelled = true; };
   }, [id, setWorkingDirectory, setSessionId, setPanelSessionTitle, setPanelOpen]);
 
   useEffect(() => {

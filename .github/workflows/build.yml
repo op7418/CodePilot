@@ -39,13 +39,21 @@ jobs:
         run: npm run electron:build
 
       - name: Package for Windows
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --win --config electron-builder.yml --publish always
+        run: npx electron-builder --win --config electron-builder.yml --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-windows
+          path: |
+            release/*.exe
+          retention-days: 3
 
   build-macos:
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'macos' }}
     runs-on: macos-latest
+    env:
+      HAS_CERT: ${{ secrets.MAC_CERT_P12_BASE64 != '' && 'true' || 'false' }}
     steps:
       - uses: actions/checkout@v4
 
@@ -60,11 +68,68 @@ jobs:
       - name: Build Electron app
         run: npm run electron:build
 
-      - name: Package for macOS (x64 + arm64)
+      - name: Decode signing certificate
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          CSC_IDENTITY_AUTO_DISCOVERY: "false"
-        run: npx electron-builder --mac --config electron-builder.yml --publish always
+          MAC_CERT_P12_BASE64: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          MAC_CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: |
+          if [ "${HAS_CERT}" != "true" ]; then
+            echo "::error::Missing signing certificate (MAC_CERT_P12_BASE64 secret not set)"
+            exit 1
+          fi
+          printf '%s' "$MAC_CERT_P12_BASE64" | tr -d '\r\n' | base64 --decode > /tmp/cert.p12
+          openssl pkcs12 -in /tmp/cert.p12 -passin pass:"$MAC_CERT_PASSWORD" -noout
+          echo "Certificate decoded and validated"
+
+      - name: Package for macOS (x64 + arm64, sign only)
+        timeout-minutes: 15
+        env:
+          CSC_LINK: /tmp/cert.p12
+          CSC_KEY_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+        run: npx electron-builder --mac --config electron-builder.yml --publish never
+
+      - name: Verify code signature
+        run: |
+          APPS=$(find release -name "CodePilot.app" -maxdepth 3)
+          if [ -z "$APPS" ]; then
+            echo "::error::No CodePilot.app found after build"
+            exit 1
+          fi
+
+          FAILED=0
+          while IFS= read -r APP_PATH; do
+            echo "========== Verifying: $APP_PATH =========="
+            codesign -dv --verbose=4 "$APP_PATH" 2>&1 | tee /tmp/codesign-info.txt || true
+
+            if ! grep -q 'Authority=Developer ID Application' /tmp/codesign-info.txt; then
+              echo "::error::$APP_PATH is NOT signed with Developer ID Application"
+              FAILED=1
+              continue
+            fi
+
+            if ! grep -q 'TeamIdentifier=K9X599X9Q2' /tmp/codesign-info.txt; then
+              echo "::error::$APP_PATH has unexpected TeamIdentifier"
+              FAILED=1
+              continue
+            fi
+
+            codesign --verify --deep --strict --verbose=4 "$APP_PATH"
+            echo "✓ $APP_PATH passed all checks"
+          done <<< "$APPS"
+
+          if [ "$FAILED" -ne 0 ]; then
+            echo "::error::One or more .app bundles failed signature verification"
+            exit 1
+          fi
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-macos
+          path: |
+            release/*.dmg
+            release/*.zip
+          retention-days: 3
 
   build-linux:
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'linux' }}
@@ -87,9 +152,17 @@ jobs:
         run: npm run electron:build
 
       - name: Package for Linux (${{ matrix.arch }})
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: npx electron-builder --linux --${{ matrix.arch }} --config electron-builder.yml --publish always
+        run: npx electron-builder --linux --${{ matrix.arch }} --config electron-builder.yml --publish never
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-${{ matrix.arch }}
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+          retention-days: 3
 
   release:
     if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(needs.*.result, 'cancelled') }}
@@ -99,6 +172,15 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find artifacts -type f | sort
 
       - name: Get version and previous tag
         id: meta
@@ -124,7 +206,7 @@ jobs:
             echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Update release notes
+      - name: Create release and upload assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -174,9 +256,14 @@ jobs:
           CHANGELOG_INLINE_EOF
           fi
 
-          # Update the draft release created by electron-builder with full notes
-          gh release edit "${GITHUB_REF_NAME}" \
+          # Collect release files: installers only (no blockmap / update metadata)
+          FILES=()
+          while IFS= read -r f; do
+            FILES+=("$f")
+          done < <(find artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \) | sort)
+
+          gh release create "${GITHUB_REF_NAME}" \
             --title "CodePilot v${VERSION}" \
             --notes-file release-notes.md \
             --latest \
-            --draft=false
+            "${FILES[@]}"

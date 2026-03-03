@@ -1,18 +1,12 @@
 // =============================================================================
 // Native auto-updater (electron-updater) — DISABLED
 //
-// Temporarily disabled due to macOS code signature validation failures with
-// ad-hoc signing. Users are directed to download from GitHub Releases instead.
-// The browser-mode update check (via /api/app/updates) remains active in the
-// frontend to notify users of new versions.
-//
-// TODO: Re-enable after obtaining an Apple Developer certificate for proper
-// code signing, then uncomment this file and the calls in main.ts / preload.ts.
+// macOS builds are signed with Developer ID but not notarized. Users update by
+// downloading the latest DMG from GitHub Releases. The browser-mode update
+// check (/api/app/updates) in the frontend notifies users of new versions.
 // =============================================================================
 
-// import { autoUpdater } from 'electron-updater';
 import type { BrowserWindow } from 'electron';
-// import { ipcMain, session } from 'electron';
 
 // eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function initAutoUpdater(_win: BrowserWindow) {

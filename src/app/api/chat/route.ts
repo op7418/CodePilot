@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import { streamClaude } from '@/lib/claude-client';
-import { addMessage, getMessages, getSession, updateSessionTitle, updateSdkSessionId, updateSessionModel, updateSessionProvider, updateSessionProviderId, getSetting, getProvider, getDefaultProviderId, acquireSessionLock, releaseSessionLock, setSessionRuntimeStatus, syncSdkTasks } from '@/lib/db';
+import { addMessage, getMessages, getSession, updateSessionTitle, updateSdkSessionId, updateSessionModel, updateSessionProvider, updateSessionProviderId, getSetting, getProvider, getDefaultProviderId, acquireSessionLock, renewSessionLock, releaseSessionLock, setSessionRuntimeStatus, syncSdkTasks } from '@/lib/db';
+import { notifySessionStart, notifySessionComplete, notifySessionError } from '@/lib/telegram-bot';
 import type { SendMessageRequest, SSEEvent, TokenUsage, MessageContentBlock, FileAttachment } from '@/types';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -47,6 +48,14 @@ export async function POST(request: NextRequest) {
     activeSessionId = session_id;
     activeLockId = lockId;
     setSessionRuntimeStatus(session_id, 'running');
+
+    // Telegram notification: session started (fire-and-forget)
+    const telegramNotifyOpts = {
+      sessionId: session_id,
+      sessionTitle: session.title !== 'New Chat' ? session.title : content.slice(0, 50),
+      workingDirectory: session.working_directory,
+    };
+    notifySessionStart(telegramNotifyOpts).catch(() => {});
 
     // Save user message — persist file metadata so attachments survive page reload
     let savedContent = content;
@@ -201,8 +210,14 @@ export async function POST(request: NextRequest) {
     // Tee the stream: one for client, one for collecting the response
     const [streamForClient, streamForCollect] = stream.tee();
 
+    // Periodically renew the session lock so long-running tasks don't expire
+    const lockRenewalInterval = setInterval(() => {
+      try { renewSessionLock(session_id, lockId, 600); } catch { /* best effort */ }
+    }, 60_000);
+
     // Save assistant message in background, with cleanup callback to release lock
-    collectStreamResponse(streamForCollect, session_id, () => {
+    collectStreamResponse(streamForCollect, session_id, telegramNotifyOpts, () => {
+      clearInterval(lockRenewalInterval);
       releaseSessionLock(session_id, lockId);
       setSessionRuntimeStatus(session_id, 'idle');
     });
@@ -231,11 +246,18 @@ export async function POST(request: NextRequest) {
   }
 }
 
-async function collectStreamResponse(stream: ReadableStream<string>, sessionId: string, onComplete?: () => void) {
+async function collectStreamResponse(
+  stream: ReadableStream<string>,
+  sessionId: string,
+  telegramOpts: { sessionId?: string; sessionTitle?: string; workingDirectory?: string },
+  onComplete?: () => void,
+) {
   const reader = stream.getReader();
   const contentBlocks: MessageContentBlock[] = [];
   let currentText = '';
   let tokenUsage: TokenUsage | null = null;
+  let hasError = false;
+  let errorMessage = '';
   // Dedup layer: skip duplicate tool_result events by tool_use_id
   const seenToolResultIds = new Set<string>();
 
@@ -318,11 +340,17 @@ async function collectStreamResponse(stream: ReadableStream<string>, sessionId: 
               } catch {
                 // skip malformed task_update data
               }
+            } else if (event.type === 'error') {
+              hasError = true;
+              errorMessage = event.data || 'Unknown error';
             } else if (event.type === 'result') {
               try {
                 const resultData = JSON.parse(event.data);
                 if (resultData.usage) {
                   tokenUsage = resultData.usage;
+                }
+                if (resultData.is_error) {
+                  hasError = true;
                 }
                 // Also capture session_id from result if we missed it from init
                 if (resultData.session_id) {
@@ -369,7 +397,9 @@ async function collectStreamResponse(stream: ReadableStream<string>, sessionId: 
         );
       }
     }
-  } catch {
+  } catch (e) {
+    hasError = true;
+    errorMessage = e instanceof Error ? e.message : 'Stream reading error';
     // Stream reading error - best effort save
     if (currentText.trim()) {
       contentBlocks.push({ type: 'text', text: currentText });
@@ -390,6 +420,18 @@ async function collectStreamResponse(stream: ReadableStream<string>, sessionId: 
       }
     }
   } finally {
+    // Telegram notifications: completion or error (fire-and-forget)
+    if (hasError) {
+      notifySessionError(errorMessage, telegramOpts).catch(() => {});
+    } else {
+      // Extract text summary for the completion notification
+      const textSummary = contentBlocks
+        .filter((b): b is Extract<MessageContentBlock, { type: 'text' }> => b.type === 'text')
+        .map((b) => b.text)
+        .join('')
+        .trim();
+      notifySessionComplete(textSummary || undefined, telegramOpts).catch(() => {});
+    }
     onComplete?.();
   }
 }

@@ -11,6 +11,7 @@ import {
   Plug01Icon,
   Image01Icon,
   Settings02Icon,
+  Wifi01Icon,
   Moon02Icon,
   Sun02Icon,
 } from "@hugeicons/core-free-icons";
@@ -38,6 +39,7 @@ const navItems = [
   { href: "/skills", label: "Skills", icon: ZapIcon },
   { href: "/mcp", label: "MCP", icon: Plug01Icon },
   { href: "/gallery", label: "Gallery", icon: Image01Icon },
+  { href: "/bridge", label: "Bridge", icon: Wifi01Icon },
   { href: "/settings", label: "Settings", icon: Settings02Icon },
 ] as const;
 
@@ -51,6 +53,7 @@ export function NavRail({ onToggleChatList, hasUpdate, readyToInstall, skipPermi
     'Skills': 'extensions.skills',
     'MCP': 'extensions.mcpServers',
     'Gallery': 'gallery.title',
+    'Bridge': 'nav.bridge',
     'Settings': 'nav.settings',
   };
   const emptySubscribe = useCallback(() => () => {}, []);

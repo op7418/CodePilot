@@ -1,10 +1,9 @@
-import { app, BrowserWindow, nativeImage, dialog, session, utilityProcess, ipcMain, shell } from 'electron';
+import { app, BrowserWindow, nativeImage, dialog, session, utilityProcess, ipcMain, shell, Tray, Menu } from 'electron';
 import path from 'path';
 import { execFileSync, spawn, ChildProcess } from 'child_process';
 import fs from 'fs';
 import net from 'net';
 import os from 'os';
-import { initAutoUpdater, setUpdaterWindow } from './updater';
 
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: Electron.UtilityProcess | null = null;
@@ -14,6 +13,7 @@ let serverExited = false;
 let serverExitCode: number | null = null;
 let userShellEnv: Record<string, string> = {};
 let isQuitting = false;
+let tray: Tray | null = null;
 
 // --- Install orchestrator ---
 interface InstallStep {
@@ -83,6 +83,124 @@ function killServer(): Promise<void> {
       serverProcess.kill();
     }
   });
+}
+
+/**
+ * Check if the remote bridge is currently active by querying the local API.
+ */
+async function isBridgeActive(): Promise<boolean> {
+  if (!serverPort) return false;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const http = require('http');
+    return await new Promise<boolean>((resolve) => {
+      const req = http.get(`http://127.0.0.1:${serverPort}/api/bridge`, (res: { statusCode?: number; on: (event: string, cb: (data?: Buffer) => void) => void }) => {
+        let body = '';
+        res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
+        res.on('end', () => {
+          try {
+            const data = JSON.parse(body);
+            resolve(data.running === true);
+          } catch {
+            resolve(false);
+          }
+        });
+      });
+      req.on('error', () => resolve(false));
+      req.setTimeout(2000, () => { req.destroy(); resolve(false); });
+    });
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Stop the remote bridge by posting to the local API.
+ */
+async function stopBridge(): Promise<void> {
+  if (!serverPort) return;
+  try {
+    // eslint-disable-next-line @typescript-eslint/no-require-imports
+    const http = require('http');
+    await new Promise<void>((resolve) => {
+      const postData = JSON.stringify({ action: 'stop' });
+      const req = http.request({
+        hostname: '127.0.0.1',
+        port: serverPort,
+        path: '/api/bridge',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(postData),
+        },
+      }, () => { resolve(); });
+      req.on('error', () => resolve());
+      req.setTimeout(3000, () => { req.destroy(); resolve(); });
+      req.write(postData);
+      req.end();
+    });
+  } catch {
+    // ignore — bridge may already be stopped
+  }
+}
+
+/**
+ * Create a system tray icon for background bridge mode.
+ * Called when all windows are closed but the bridge is still active.
+ */
+function createTray(): void {
+  if (tray) return;
+
+  const iconPath = getIconPath();
+  const trayIcon = nativeImage.createFromPath(iconPath).resize({ width: 16, height: 16 });
+  tray = new Tray(trayIcon);
+  tray.setToolTip('CodePilot — Bridge Active');
+
+  const contextMenu = Menu.buildFromTemplate([
+    {
+      label: 'Open CodePilot',
+      click: () => {
+        if (BrowserWindow.getAllWindows().length === 0) {
+          createWindow(`http://127.0.0.1:${serverPort || 3000}`);
+        } else {
+          mainWindow?.focus();
+        }
+      },
+    },
+    { type: 'separator' },
+    {
+      label: 'Bridge Status: Active',
+      enabled: false,
+    },
+    { type: 'separator' },
+    {
+      label: 'Stop Bridge & Quit',
+      click: async () => {
+        await stopBridge();
+        destroyTray();
+        await killServer();
+        app.quit();
+      },
+    },
+  ]);
+
+  tray.setContextMenu(contextMenu);
+
+  // Double-click on tray icon opens the window (macOS/Windows)
+  tray.on('double-click', () => {
+    if (BrowserWindow.getAllWindows().length === 0) {
+      createWindow(`http://127.0.0.1:${serverPort || 3000}`);
+    } else {
+      mainWindow?.focus();
+    }
+  });
+}
+
+function destroyTray(): void {
+  if (tray) {
+    tray.destroy();
+    tray = null;
+  }
 }
 
 /**
@@ -754,6 +872,11 @@ app.whenReady().then(async () => {
     return shell.openPath(folderPath);
   });
 
+  // Bridge status IPC
+  ipcMain.handle('bridge:is-active', async () => {
+    return isBridgeActive();
+  });
+
   // Native folder picker dialog
   ipcMain.handle('dialog:open-folder', async (_event, options?: { defaultPath?: string; title?: string }) => {
     if (!mainWindow) return { canceled: true, filePaths: [] };
@@ -788,12 +911,26 @@ app.whenReady().then(async () => {
       if (mainWindow) {
         mainWindow.loadURL(`http://127.0.0.1:${port}`);
       }
+
+      // Trigger bridge auto-start via explicit POST (only checks setting once)
+      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      const http = require('http');
+      const autoStartData = JSON.stringify({ action: 'auto-start' });
+      const autoStartReq = http.request({
+        hostname: '127.0.0.1',
+        port,
+        path: '/api/bridge',
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Length': Buffer.byteLength(autoStartData),
+        },
+      }, () => {});
+      autoStartReq.on('error', () => {});
+      autoStartReq.write(autoStartData);
+      autoStartReq.end();
     }
 
-    // Initialize auto-updater in packaged mode only
-    if (!isDev && mainWindow) {
-      initAutoUpdater(mainWindow);
-    }
   } catch (err) {
     console.error('Failed to start:', err);
     dialog.showErrorBox(
@@ -805,6 +942,15 @@ app.whenReady().then(async () => {
 });
 
 app.on('window-all-closed', async () => {
+  // If bridge is active, keep the server running and show a tray icon
+  const bridgeActive = await isBridgeActive();
+  if (bridgeActive) {
+    console.log('Bridge is active — keeping server alive in background with tray icon');
+    createTray();
+    return;
+  }
+
+  destroyTray();
   await killServer();
   if (process.platform !== 'darwin') {
     app.quit();
@@ -812,6 +958,9 @@ app.on('window-all-closed', async () => {
 });
 
 app.on('activate', async () => {
+  // If tray is active (bridge background mode), destroy it when user re-opens
+  destroyTray();
+
   if (BrowserWindow.getAllWindows().length === 0) {
     try {
       if (!isDev && !serverProcess) {
@@ -828,10 +977,6 @@ app.on('activate', async () => {
         createWindow(`http://127.0.0.1:${serverPort || 3000}`);
       }
 
-      // Re-attach updater to the new window
-      if (!isDev && mainWindow) {
-        setUpdaterWindow(mainWindow);
-      }
     } catch (err) {
       console.error('Failed to restart server:', err);
     }
@@ -852,9 +997,13 @@ app.on('before-quit', async (e) => {
     installProcess = null;
   }
 
+  destroyTray();
+
   if (serverProcess && !isQuitting) {
     isQuitting = true;
     e.preventDefault();
+    // Stop bridge gracefully before killing the server
+    await stopBridge();
     await killServer();
     app.quit();
   }

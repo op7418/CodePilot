@@ -1,24 +1,20 @@
 /* eslint-disable @typescript-eslint/no-require-imports */
 /**
- * electron-builder afterSign hook — ad-hoc code signing for macOS.
+ * electron-builder afterSign hook — code signing for macOS.
  *
- * electron-updater's ShipIt process validates code signatures when applying
- * updates. Without a valid signature the update fails with:
- *   "Code signature did not pass validation: 代码未能满足指定的代码要求"
+ * When a real Developer ID certificate is available (CSC_LINK or CSC_NAME env
+ * vars are set), electron-builder handles signing automatically. This hook only
+ * runs a strict verification to confirm the signature is intact.
  *
- * The previous approach used `codesign --force --deep -s -`, but --deep is
- * unreliable: it does not guarantee correct signing order and may miss nested
- * components, causing kSecCSStrictValidate failures.
+ * When no certificate is available (local dev builds), falls back to ad-hoc
+ * signing so that electron-updater's ShipIt process can still validate the
+ * code signature.
  *
- * This script signs each component individually from the inside out:
+ * Ad-hoc signing order (inside-out):
  *   1. All native binaries (.node, .dylib, .so)
  *   2. All Frameworks (*.framework)
  *   3. All Helper apps (*.app inside Frameworks/)
  *   4. The main .app bundle
- *
- * Runs in the afterSign hook so it executes AFTER electron-builder's own
- * signing step (which is a no-op with CSC_IDENTITY_AUTO_DISCOVERY=false)
- * and right before DMG/ZIP artifact creation.
  */
 const fs = require('fs');
 const path = require('path');
@@ -90,19 +86,55 @@ module.exports = async function afterSign(context) {
   const appPath = path.join(appOutDir, `${appName}.app`);
 
   if (!fs.existsSync(appPath)) {
-    console.warn(`[afterSign] macOS app not found at ${appPath}, skipping ad-hoc signing`);
+    console.warn(`[afterSign] macOS app not found at ${appPath}, skipping`);
     return;
   }
 
+  // ── Detect real (non-ad-hoc) code signature ───────────────────────────
+  // Check env vars first (CI path), then probe the actual signature on the
+  // .app bundle (covers the case where electron-builder auto-discovered a
+  // Developer ID certificate from the local Keychain).
+  let hasRealSignature = !!(process.env.CSC_LINK || process.env.CSC_NAME);
+
+  if (!hasRealSignature) {
+    try {
+      const info = execSync(`codesign -d --verbose=2 "${appPath}" 2>&1`, {
+        stdio: 'pipe',
+        timeout: 15000,
+        encoding: 'utf-8',
+      });
+      if (/Authority=Developer ID Application/.test(info)) {
+        hasRealSignature = true;
+      }
+    } catch {
+      // codesign -d fails if the bundle is unsigned — that's fine
+    }
+  }
+
+  if (hasRealSignature) {
+    console.log('[afterSign] Real code signing certificate detected (CSC_LINK/CSC_NAME set or Developer ID signature found).');
+    console.log('[afterSign] Skipping ad-hoc signing to preserve Developer ID signature.');
+
+    try {
+      execSync(`codesign --verify --deep --strict --verbose=4 "${appPath}"`, {
+        stdio: 'pipe',
+        timeout: 60000,
+      });
+      console.log('[afterSign] Developer ID signature verification passed.');
+    } catch (err) {
+      console.error('[afterSign] WARNING: Developer ID signature verification FAILED:', err.stderr?.toString() || err.message);
+    }
+    return;
+  }
+
+  // ── No certificate — ad-hoc signing fallback ─────────────────────────
   console.log(`[afterSign] Ad-hoc signing ${appPath} (individual component signing)...`);
 
   const contentsPath = path.join(appPath, 'Contents');
   const frameworksPath = path.join(contentsPath, 'Frameworks');
   let signed = 0;
 
-  // ── Step 1: Sign all native binaries (.node, .dylib, .so) ─────────────
-  // These are the innermost signable items. Must be signed before their
-  // enclosing bundles.
+  // Step 1: Sign all native binaries (.node, .dylib, .so)
   const nativeBinaries = collectFiles(contentsPath, ['.node', '.dylib', '.so']);
   for (const bin of nativeBinaries) {
     codesign(bin);
@@ -112,9 +144,7 @@ module.exports = async function afterSign(context) {
     console.log(`[afterSign]   Signed ${nativeBinaries.length} native binaries (.node/.dylib/.so)`);
   }
 
-  // ── Step 2: Sign all Frameworks ───────────────────────────────────────
-  // Frameworks contain nested code that was already signed in step 1 (if any
-  // .dylib/.so lived outside the framework) or that --sign covers here.
+  // Step 2: Sign all Frameworks
   const frameworks = collectBundles(frameworksPath, '.framework');
   for (const fw of frameworks) {
     codesign(fw);
@@ -124,8 +154,7 @@ module.exports = async function afterSign(context) {
     console.log(`[afterSign]   Signed ${frameworks.length} frameworks`);
   }
 
-  // ── Step 3: Sign all Helper apps ──────────────────────────────────────
-  // Electron ships multiple helper apps (GPU, Plugin, Renderer, etc.)
+  // Step 3: Sign all Helper apps
   const helperApps = collectBundles(frameworksPath, '.app');
   for (const helper of helperApps) {
     codesign(helper);
@@ -135,19 +164,19 @@ module.exports = async function afterSign(context) {
     console.log(`[afterSign]   Signed ${helperApps.length} helper apps`);
   }
 
-  // ── Step 4: Sign the main app bundle ──────────────────────────────────
+  // Step 4: Sign the main app bundle
   codesign(appPath);
   signed++;
 
   console.log(`[afterSign] Ad-hoc signing complete — ${signed} components signed`);
 
-  // ── Verify ────────────────────────────────────────────────────────────
+  // Verify
   try {
-    execSync(`codesign --verify --strict "${appPath}"`, {
+    execSync(`codesign --verify --deep --strict "${appPath}"`, {
       stdio: 'pipe',
       timeout: 30000,
     });
-    console.log('[afterSign] Signature verification passed (--strict)');
+    console.log('[afterSign] Signature verification passed (--deep --strict)');
   } catch (err) {
     console.error('[afterSign] WARNING: Signature verification FAILED:', err.stderr?.toString() || err.message);
   }

@@ -1,38 +1,8 @@
 # CLAUDE.md
 
-## Project Overview
-
 CodePilot — Claude Code 的桌面 GUI 客户端，基于 Electron + Next.js。
 
-## 本地参考项目路径（上下文共享/存储）
-
-为便于后续分析与实现对照，本机已拉取以下参考仓库：
-
-- craft-agents-oss: `/Users/op7418/Documents/code/资料/craft-agents-oss`
-- opencode: `/Users/op7418/Documents/code/资料/opencode`
-
-## Release Checklist
-
-**发版流程（CI 自动打包 + 发布）：**
-
-1. `package.json` 中的 `"version"` 字段更新为新版本号
-2. `package-lock.json` 中的对应版本（运行 `npm install` 会自动同步）
-3. 提交代码并推送到 `main` 分支
-4. 创建并推送 tag：`git tag v{版本号} && git push origin v{版本号}`
-5. **推送 tag 后 CI 会自动触发**（`.github/workflows/build.yml`）：
-   - 自动在 macOS / Windows / Linux 上构建
-   - 自动收集所有平台产物（DMG、exe、AppImage、deb、rpm）
-   - 自动创建 GitHub Release 并上传所有产物
-6. 等待 CI 完成，在 GitHub Release 页面补充 New Features / Bug Fixes 描述
-7. 可通过 `gh run list` 查看 CI 状态，`gh run rerun <id> --failed` 重试失败的任务
-
-**重要：不要手动创建 GitHub Release**，否则会与 CI 自动创建的 Release 冲突。如果需要本地打包测试，使用 `npm run electron:pack:mac` 但不要手动上传到 Release。
-
-## 发版纪律
-
-**禁止自动发版**：不要在完成代码修改后自动执行 `git push` + `git tag` + `git push origin tag` 发版流程。必须等待用户明确指示"发版"、"发布"或类似确认后才能执行。代码提交（commit）可以正常进行，但推送和打 tag 必须由用户确认。
-
-## Development Rules
+## 开发规则
 
 **提交前必须详尽测试：**
 - 每次提交代码前，必须在开发环境中充分测试所有改动的功能，确认无回归
@@ -48,31 +18,23 @@ CodePilot — Claude Code 的桌面 GUI 客户端，基于 Electron + Next.js。
 - 对不确定的技术点先做 POC 验证，不要直接在主代码中试错
 
 **Commit 信息规范：**
-- 每次 commit 必须在 message body 中写清楚每个改动的具体内容和原因
 - 标题行使用 conventional commits 格式（feat/fix/refactor/chore 等）
-- body 中按文件或功能分组，说明：改了什么、为什么改、影响范围
-- 如果是修复 bug，说明根因是什么，不只是描述现象
-- 如果涉及架构决策（如选择方案 A 而非方案 B），简要说明理由
+- body 中按文件或功能分组，说明改了什么、为什么改、影响范围
+- 修复 bug 需说明根因；架构决策需简要说明理由
 
-## Release Notes 规范
+## 发版
 
-标题：`CodePilot v{版本号}`
+**发版流程：** 更新 package.json version → `npm install` 同步 lock → 提交推送 → `git tag v{版本号} && git push origin v{版本号}` → CI 自动构建发布。不要手动创建 GitHub Release。
 
-正文必须包含：
-- **本版本更新内容**（New Features / Bug Fixes，按实际情况分区）
-- **Downloads**（各平台安装包说明）
-- **Installation**（各平台安装步骤）
-- **Requirements**（系统要求、依赖说明）
-- **Changelog**（自上一版本以来的 commit 列表）
+**发版纪律：** 禁止自动发版。`git push` + `git tag` 必须等用户明确指示后才执行。commit 可以正常进行。
 
-## Architecture Docs
+**Release Notes 格式：** 标题 `CodePilot v{版本号}`，正文包含：更新内容、Downloads、Installation、Requirements、Changelog。
 
-- [Agent Tooling & TodoWrite Bridge](docs/agent-tooling-todo-bridge.md) — SDK → SSE → DB 事件流、TodoWrite 字段映射、tool_result 三层去重策略
+**构建：** macOS 产出 DMG（arm64 + x64），Windows 产出 NSIS 安装包。`scripts/after-pack.js` 重编译 better-sqlite3 为 Electron ABI。构建前清理 `rm -rf release/ .next/`。
 
-## Build Notes
+## 文档
 
-- macOS 构建产出 DMG（arm64 + x64），Windows 产出 NSIS 安装包或 zip
-- `scripts/after-pack.js` 会在打包时显式重编译 better-sqlite3 为 Electron ABI，确保原生模块兼容
-- 构建前清理 `rm -rf release/ .next/` 可避免旧产物污染
-- 构建 Windows 包后需要 `npm rebuild better-sqlite3` 恢复本地开发环境
-- macOS 交叉编译 Windows 需要 Wine（Apple Silicon 上可能不可用），可用 zip 替代 NSIS
+- `docs/handover/` — 交接文档（架构、数据流、设计决策）
+- `docs/research/` — 调研文档（技术方案、可行性分析）
+
+**检索前先读对应目录的 README.md；增删文件后更新索引。**

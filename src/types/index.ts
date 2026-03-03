@@ -174,6 +174,7 @@ export interface CreateSessionRequest {
   system_prompt?: string;
   working_directory?: string;
   mode?: string;
+  provider_id?: string;
 }
 
 export interface SendMessageRequest {
