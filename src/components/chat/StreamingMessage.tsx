@@ -18,6 +18,13 @@ import {
   ConfirmationAction,
 } from '@/components/ai-elements/confirmation';
 import { Shimmer } from '@/components/ai-elements/shimmer';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
 import { ImageGenConfirmation } from './ImageGenConfirmation';
 import { BatchPlanInlinePreview } from './batch-image-gen/BatchPlanInlinePreview';
 import { PENDING_KEY, buildReferenceImages } from '@/lib/image-ref-store';
@@ -269,15 +276,32 @@ function AskUserQuestionUI({
   );
 }
 
+function extractPlanContent(toolUses: ToolUseInfo[]): string | null {
+  for (let i = toolUses.length - 1; i >= 0; i--) {
+    const tool = toolUses[i];
+    const input = tool.input as Record<string, unknown>;
+    if (tool.name === 'Write' && typeof input.file_path === 'string' && typeof input.content === 'string') {
+      if (input.file_path.includes('plans/') && input.file_path.endsWith('.md')) {
+        return input.content;
+      }
+    }
+  }
+  return null;
+}
+
 function ExitPlanModeUI({
   toolInput,
+  toolUses,
   onApprove,
   onDeny,
 }: {
   toolInput: Record<string, unknown>;
+  toolUses: ToolUseInfo[];
   onApprove: () => void;
   onDeny: () => void;
 }) {
+  const [planOpen, setPlanOpen] = useState(false);
+  const planContent = extractPlanContent(toolUses);
   const allowedPrompts = (toolInput.allowedPrompts || []) as Array<{
     tool: string;
     prompt: string;
@@ -309,6 +333,14 @@ function ExitPlanModeUI({
         >
           Reject
         </button>
+        {planContent && (
+          <button
+            onClick={() => setPlanOpen(true)}
+            className="rounded-lg border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+          >
+            View Plan
+          </button>
+        )}
         <button
           onClick={onApprove}
           className="rounded-lg bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
@@ -316,6 +348,20 @@ function ExitPlanModeUI({
           Approve & Execute
         </button>
       </div>
+
+      {planContent && (
+        <Dialog open={planOpen} onOpenChange={setPlanOpen}>
+          <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
+            <DialogHeader>
+              <DialogTitle>Plan</DialogTitle>
+            </DialogHeader>
+            <div className="overflow-y-auto flex-1 min-h-0">
+              <MessageResponse>{planContent}</MessageResponse>
+            </div>
+            <DialogFooter showCloseButton />
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
   );
 }
@@ -443,6 +489,7 @@ export function StreamingMessage({
         {pendingPermission?.toolName === 'ExitPlanMode' && !permissionResolved && (
           <ExitPlanModeUI
             toolInput={pendingPermission.toolInput as Record<string, unknown>}
+            toolUses={toolUses}
             onApprove={() => onPermissionResponse?.('allow')}
             onDeny={() => onPermissionResponse?.('deny')}
           />
