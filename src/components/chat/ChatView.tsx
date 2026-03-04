@@ -210,9 +210,9 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
 
   // Permission response — delegates to manager
   const handlePermissionResponse = useCallback(
-    async (decision: 'allow' | 'allow_session' | 'deny', updatedInput?: Record<string, unknown>) => {
+    async (decision: 'allow' | 'allow_session' | 'deny', updatedInput?: Record<string, unknown>, denyMessage?: string) => {
       setPendingApprovalSessionId('');
-      await respondToPermission(sessionId, decision, updatedInput);
+      await respondToPermission(sessionId, decision, updatedInput, denyMessage);
     },
     [sessionId, setPendingApprovalSessionId]
   );

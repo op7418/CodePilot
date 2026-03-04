@@ -62,7 +62,7 @@ interface MessageListProps {
   streamingToolOutput?: string;
   statusText?: string;
   pendingPermission?: PermissionRequestEvent | null;
-  onPermissionResponse?: (decision: 'allow' | 'allow_session' | 'deny') => void;
+  onPermissionResponse?: (decision: 'allow' | 'allow_session' | 'deny', updatedInput?: Record<string, unknown>, denyMessage?: string) => void;
   permissionResolved?: 'allow' | 'deny' | null;
   onForceStop?: () => void;
   hasMore?: boolean;
