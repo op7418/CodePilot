@@ -9,43 +9,41 @@ const DEFAULT_MODELS = [
   { value: 'haiku', label: 'Haiku 4.5' },
 ];
 
-// Provider-specific model label mappings (base_url -> alias -> display name)
+// Provider-specific model label mappings (base_url -> actual_api_model_name -> display name).
+// IMPORTANT: for non-Anthropic providers that use the direct API path (streamDirectFromProvider),
+// the `value` field is sent verbatim to the provider's /v1/messages endpoint as the "model"
+// parameter. It must be the actual API model name, NOT a CodePilot internal alias
+// (sonnet / opus / haiku). Those aliases only work when the Claude Code CLI resolves them.
 const PROVIDER_MODEL_LABELS: Record<string, { value: string; label: string }[]> = {
+  // ── BigModel / GLM (智谱 AI) ────────────────────────────────────────────────
   'https://api.z.ai/api/anthropic': [
-    { value: 'sonnet', label: 'GLM-4.7' },
-    { value: 'opus', label: 'GLM-5' },
-    { value: 'haiku', label: 'GLM-4.5-Air' },
+    { value: 'glm-4.7', label: 'GLM-4.7' },
+    { value: 'glm-5', label: 'GLM-5' },
+    { value: 'glm-4.5-air', label: 'GLM-4.5-Air' },
   ],
   'https://open.bigmodel.cn/api/anthropic': [
-    { value: 'sonnet', label: 'GLM-4.7' },
-    { value: 'opus', label: 'GLM-5' },
-    { value: 'haiku', label: 'GLM-4.5-Air' },
+    { value: 'glm-4.7', label: 'GLM-4.7' },
+    { value: 'glm-5', label: 'GLM-5' },
+    { value: 'glm-4.5-air', label: 'GLM-4.5-Air' },
   ],
+  // ── Kimi / Moonshot ─────────────────────────────────────────────────────────
   'https://api.kimi.com/coding/': [
-    { value: 'sonnet', label: 'Kimi K2.5' },
-    { value: 'opus', label: 'Kimi K2.5' },
-    { value: 'haiku', label: 'Kimi K2.5' },
+    { value: 'kimi-k2.5', label: 'Kimi K2.5' },
   ],
   'https://api.moonshot.ai/anthropic': [
-    { value: 'sonnet', label: 'Kimi K2.5' },
-    { value: 'opus', label: 'Kimi K2.5' },
-    { value: 'haiku', label: 'Kimi K2.5' },
+    { value: 'kimi-k2.5', label: 'Kimi K2.5' },
   ],
   'https://api.moonshot.cn/anthropic': [
-    { value: 'sonnet', label: 'Kimi K2.5' },
-    { value: 'opus', label: 'Kimi K2.5' },
-    { value: 'haiku', label: 'Kimi K2.5' },
+    { value: 'kimi-k2.5', label: 'Kimi K2.5' },
   ],
+  // ── MiniMax ─────────────────────────────────────────────────────────────────
   'https://api.minimaxi.com/anthropic': [
-    { value: 'sonnet', label: 'MiniMax-M2.5' },
-    { value: 'opus', label: 'MiniMax-M2.5' },
-    { value: 'haiku', label: 'MiniMax-M2.5' },
+    { value: 'MiniMax-M2.5', label: 'MiniMax-M2.5' },
   ],
   'https://api.minimax.io/anthropic': [
-    { value: 'sonnet', label: 'MiniMax-M2.5' },
-    { value: 'opus', label: 'MiniMax-M2.5' },
-    { value: 'haiku', label: 'MiniMax-M2.5' },
+    { value: 'MiniMax-M2.5', label: 'MiniMax-M2.5' },
   ],
+  // ── OpenRouter ──────────────────────────────────────────────────────────────
   'https://openrouter.ai/api': [
     { value: 'sonnet', label: 'Sonnet 4.6' },
     { value: 'opus', label: 'Opus 4.6' },

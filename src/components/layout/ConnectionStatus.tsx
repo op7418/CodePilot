@@ -17,6 +17,9 @@ import { InstallWizard } from "@/components/layout/InstallWizard";
 interface ClaudeStatus {
   connected: boolean;
   version: string | null;
+  /** Present when a non-anthropic provider is active (Claude CLI not needed) */
+  provider_name?: string;
+  provider_type?: string;
 }
 
 const BASE_INTERVAL = 30_000; // 30s
@@ -143,7 +146,9 @@ export function ConnectionStatus() {
         {status === null
           ? t('connection.checking')
           : connected
-            ? t('connection.connected')
+            ? status.provider_name
+              ? `Connected · ${status.provider_name}`
+              : t('connection.connected')
             : t('connection.disconnected')}
       </button>
 
@@ -151,16 +156,36 @@ export function ConnectionStatus() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {connected ? t('connection.installed') : t('connection.notInstalled')}
+              {status?.provider_name
+                ? `Connected to ${status.provider_name}`
+                : connected ? t('connection.installed') : t('connection.notInstalled')}
             </DialogTitle>
             <DialogDescription>
-              {connected
-                ? `Claude Code CLI v${status?.version} is running and ready.`
-                : "Claude Code CLI is required to use this application."}
+              {status?.provider_name
+                ? `Using custom API provider — Claude Code CLI is not required.`
+                : connected
+                  ? `Claude Code CLI v${status?.version} is running and ready.`
+                  : "Claude Code CLI is required to use this application."}
             </DialogDescription>
           </DialogHeader>
 
-          {connected ? (
+          {status?.provider_name ? (
+            // Non-anthropic custom provider: no Claude CLI needed
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-3 rounded-lg bg-emerald-500/10 px-4 py-3">
+                <span className="block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
+                <div>
+                  <p className="font-medium text-emerald-700 dark:text-emerald-400">
+                    {status.provider_name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Custom API provider · Claude CLI not required
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : connected ? (
+            // Claude CLI is installed and running
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-3 rounded-lg bg-emerald-500/10 px-4 py-3">
                 <span className="block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
