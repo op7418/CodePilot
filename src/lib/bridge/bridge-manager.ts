@@ -400,6 +400,10 @@ async function handleMessage(
   adapter: BaseChannelAdapter,
   msg: InboundMessage,
 ): Promise<void> {
+  // ── [DIAG-5] handleMessage entry ────────────────────────────────────────
+  console.log(`[bridge-manager][DIAG] 🚀 handleMessage started | channel=${adapter.channelType} chatId=${msg.address.chatId} messageId=${msg.messageId} isCallback=${!!msg.callbackData} text="${msg.text.slice(0, 60)}"`);
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Update lastMessageAt for this adapter
   const adapterState = getState();
   const meta = adapterState.adapterMeta.get(adapter.channelType) || { lastMessageAt: null, lastError: null };

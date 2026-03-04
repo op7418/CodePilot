@@ -31,7 +31,7 @@ import path from 'path';
  * Removes null bytes and control characters that cause spawn EINVAL.
  */
 function sanitizeEnvValue(value: string): string {
-  // eslint-disable-next-line no-control-regex
+   
   return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 }
 
@@ -365,8 +365,21 @@ async function streamDirectFromProvider(
     }
   }
 
-  // Step 3: last-resort fallback if still empty
-  if (!effectiveModel) effectiveModel = 'claude-3-5-sonnet-20241022';
+  // Step 3: last-resort fallback if still empty.
+  // For known third-party providers (Kimi, GLM, MiniMax, etc.), resolve to their
+  // 'sonnet' equivalent from the resolution map rather than falling back to a raw
+  // Anthropic model name (which would cause a 400 error on non-Anthropic endpoints).
+  // This matters for Bridge sessions where bridge_default_model may be unset.
+  if (!effectiveModel) {
+    const aliasMap = PROVIDER_MODEL_RESOLUTION[baseUrl];
+    const providerDefault = aliasMap?.['sonnet'];
+    if (providerDefault) {
+      console.log(`[claude-client] No model configured, using provider default for "${baseUrl}": ${providerDefault}`);
+      effectiveModel = providerDefault;
+    } else {
+      effectiveModel = 'claude-3-5-sonnet-20241022';
+    }
+  }
 
   const requestBody: Record<string, unknown> = {
     model: effectiveModel,
@@ -386,6 +399,10 @@ async function streamDirectFromProvider(
       model: effectiveModel,
     }),
   }));
+
+  // ── [API-REQ] Log exact model name and endpoint before sending ──────────
+  console.log(`[claude-client][API-REQ] Sending request to model: "${effectiveModel}" | endpoint: ${baseUrl}/v1/messages | messages: ${messages.length}`);
+  // ─────────────────────────────────────────────────────────────────────────
 
   const response = await fetch(`${baseUrl}/v1/messages`, {
     method: 'POST',
