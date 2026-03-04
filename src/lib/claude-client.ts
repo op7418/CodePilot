@@ -1,6 +1,5 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type {
-  SDKMessage,
   SDKAssistantMessage,
   SDKUserMessage,
   SDKResultMessage,
@@ -166,30 +165,27 @@ function formatSSE(event: SSEEvent): string {
 }
 
 /**
- * Extract text content from an SDK assistant message
- */
-function extractTextFromMessage(msg: SDKAssistantMessage): string {
-  const parts: string[] = [];
-  for (const block of msg.message.content) {
-    if (block.type === 'text') {
-      parts.push(block.text);
-    }
-  }
-  return parts.join('');
-}
-
-/**
  * Extract token usage from an SDK result message
  */
 function extractTokenUsage(msg: SDKResultMessage): TokenUsage | null {
   if (!msg.usage) return null;
-  return {
+  const usage: TokenUsage = {
     input_tokens: msg.usage.input_tokens,
     output_tokens: msg.usage.output_tokens,
     cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
     cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
     cost_usd: 'total_cost_usd' in msg ? msg.total_cost_usd : undefined,
   };
+  // Extract context window size from modelUsage if available
+  // modelUsage is Record<string, ModelUsage> (keyed by model name), so iterate values
+  const modelUsage = (msg as Record<string, unknown>).modelUsage as Record<string, { contextWindow?: number }> | undefined;
+  if (modelUsage) {
+    const models = Object.values(modelUsage);
+    if (models.length > 0 && models[0].contextWindow) {
+      usage.context_window = models[0].contextWindow;
+    }
+  }
+  return usage;
 }
 
 /**
@@ -731,8 +727,8 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
 
         registerConversation(sessionId, conversation);
 
-        let lastAssistantText = '';
         let tokenUsage: TokenUsage | null = null;
+        let lastTurnInputTokens = 0;
 
         for await (const message of conversation) {
           if (abortController?.signal.aborted) {
@@ -743,11 +739,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             case 'assistant': {
               const assistantMsg = message as SDKAssistantMessage;
               // Text deltas are handled by stream_event for real-time streaming.
-              // Only track lastAssistantText here and process tool_use blocks.
-              const text = extractTextFromMessage(assistantMsg);
-              if (text) {
-                lastAssistantText = text;
-              }
+              // Only process tool_use blocks here.
 
               // Check for tool use blocks
               for (const block of assistantMsg.message.content) {
@@ -803,6 +795,30 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                   controller.enqueue(formatSSE({ type: 'text', data: delta.text }));
                 }
               }
+              // Capture single-turn input tokens from message_start usage
+              // Include cache_read + cache_creation tokens (prompt caching)
+              if (evt.type === 'message_start' && 'message' in evt) {
+                const msgUsage = (evt.message as { usage?: {
+                  input_tokens?: number;
+                  cache_read_input_tokens?: number;
+                  cache_creation_input_tokens?: number;
+                } }).usage;
+                if (msgUsage) {
+                  const totalContextTokens = (msgUsage.input_tokens || 0)
+                    + (msgUsage.cache_read_input_tokens || 0)
+                    + (msgUsage.cache_creation_input_tokens || 0);
+                  if (totalContextTokens > 0) {
+                    lastTurnInputTokens = totalContextTokens;
+                    // Push context tokens to frontend immediately for real-time progress ring
+                    controller.enqueue(formatSSE({
+                      type: 'status',
+                      data: JSON.stringify({
+                        context_tokens: totalContextTokens,
+                      }),
+                    }));
+                  }
+                }
+              }
               break;
             }
 
@@ -820,13 +836,28 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                   }));
                 } else if (sysMsg.subtype === 'status') {
                   // SDK sends status messages when permission mode changes (e.g. ExitPlanMode)
-                  const statusMsg = sysMsg as SDKSystemMessage & { permissionMode?: string };
+                  const statusMsg = sysMsg as SDKSystemMessage & { permissionMode?: string; status?: string };
                   if (statusMsg.permissionMode) {
                     controller.enqueue(formatSSE({
                       type: 'mode_changed',
                       data: statusMsg.permissionMode,
                     }));
                   }
+                  // Handle compacting status
+                  if (statusMsg.status === 'compacting') {
+                    controller.enqueue(formatSSE({
+                      type: 'status',
+                      data: JSON.stringify({ compacting: true }),
+                    }));
+                  }
+                } else if (sysMsg.subtype === 'compact_boundary') {
+                  // Context was compacted — don't reset lastTurnInputTokens here;
+                  // the next message_start will overwrite it with the post-compaction
+                  // context size, ensuring the result carries accurate last_input_tokens.
+                  controller.enqueue(formatSSE({
+                    type: 'compact_boundary',
+                    data: '',
+                  }));
                 }
               }
               break;
@@ -860,6 +891,10 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             case 'result': {
               const resultMsg = message as SDKResultMessage;
               tokenUsage = extractTokenUsage(resultMsg);
+              // Attach last-turn input tokens for accurate context size display
+              if (tokenUsage && lastTurnInputTokens > 0) {
+                tokenUsage.last_input_tokens = lastTurnInputTokens;
+              }
               controller.enqueue(formatSSE({
                 type: 'result',
                 data: JSON.stringify({
