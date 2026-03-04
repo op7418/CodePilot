@@ -568,6 +568,7 @@ export async function respondToPermission(
   sessionId: string,
   decision: 'allow' | 'allow_session' | 'deny',
   updatedInput?: Record<string, unknown>,
+  denyMessage?: string,
 ): Promise<void> {
   const stream = getStreamsMap().get(sessionId);
   if (!stream || !stream.snapshot.pendingPermission) return;
@@ -577,7 +578,7 @@ export async function respondToPermission(
   const body = {
     permissionRequestId: perm.permissionRequestId,
     decision: decision === 'deny'
-      ? { behavior: 'deny' as const, message: 'User denied permission' }
+      ? { behavior: 'deny' as const, message: denyMessage || 'User denied permission' }
       : {
           behavior: 'allow' as const,
           ...(decision === 'allow_session' && perm.suggestions

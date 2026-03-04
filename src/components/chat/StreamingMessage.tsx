@@ -121,7 +121,7 @@ interface StreamingMessageProps {
   streamingToolOutput?: string;
   statusText?: string;
   pendingPermission?: PermissionRequestEvent | null;
-  onPermissionResponse?: (decision: 'allow' | 'allow_session' | 'deny', updatedInput?: Record<string, unknown>) => void;
+  onPermissionResponse?: (decision: 'allow' | 'allow_session' | 'deny', updatedInput?: Record<string, unknown>, denyMessage?: string) => void;
   permissionResolved?: 'allow' | 'deny' | null;
   onForceStop?: () => void;
 }
@@ -294,13 +294,16 @@ function ExitPlanModeUI({
   toolUses,
   onApprove,
   onDeny,
+  onDenyWithMessage,
 }: {
   toolInput: Record<string, unknown>;
   toolUses: ToolUseInfo[];
   onApprove: () => void;
   onDeny: () => void;
+  onDenyWithMessage: (message: string) => void;
 }) {
   const [planOpen, setPlanOpen] = useState(false);
+  const [feedback, setFeedback] = useState('');
   const planContent = extractPlanContent(toolUses);
   const allowedPrompts = (toolInput.allowedPrompts || []) as Array<{
     tool: string;
@@ -346,6 +349,29 @@ function ExitPlanModeUI({
           className="rounded-lg bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
         >
           Approve & Execute
+        </button>
+      </div>
+      <div className="flex gap-2">
+        <input
+          type="text"
+          placeholder="Provide feedback on the plan..."
+          value={feedback}
+          onChange={(e) => setFeedback(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && feedback.trim()) {
+              onDenyWithMessage(feedback.trim());
+            }
+          }}
+          className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-primary focus:outline-none"
+        />
+        <button
+          onClick={() => {
+            if (feedback.trim()) onDenyWithMessage(feedback.trim());
+          }}
+          disabled={!feedback.trim()}
+          className="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-muted disabled:opacity-40"
+        >
+          Do this instead
         </button>
       </div>
 
@@ -492,6 +518,7 @@ export function StreamingMessage({
             toolUses={toolUses}
             onApprove={() => onPermissionResponse?.('allow')}
             onDeny={() => onPermissionResponse?.('deny')}
+            onDenyWithMessage={(msg) => onPermissionResponse?.('deny', undefined, msg)}
           />
         )}
         {pendingPermission?.toolName === 'ExitPlanMode' && permissionResolved === 'allow' && (
