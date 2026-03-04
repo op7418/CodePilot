@@ -276,13 +276,15 @@ function AskUserQuestionUI({
   );
 }
 
-function extractPlanContent(toolUses: ToolUseInfo[]): string | null {
+function extractPlanFilePath(toolUses: ToolUseInfo[]): string | null {
+  // Walk backwards to find the most recent Write or Edit targeting a plans/*.md file
   for (let i = toolUses.length - 1; i >= 0; i--) {
     const tool = toolUses[i];
     const input = tool.input as Record<string, unknown>;
-    if (tool.name === 'Write' && typeof input.file_path === 'string' && typeof input.content === 'string') {
-      if (input.file_path.includes('plans/') && input.file_path.endsWith('.md')) {
-        return input.content;
+    if ((tool.name === 'Write' || tool.name === 'Edit') && typeof input.file_path === 'string') {
+      const fp = input.file_path;
+      if (fp.endsWith('.md') && (fp.includes('plans/') || fp.includes('plans\\'))) {
+        return fp;
       }
     }
   }
@@ -303,8 +305,10 @@ function ExitPlanModeUI({
   onDenyWithMessage: (message: string) => void;
 }) {
   const [planOpen, setPlanOpen] = useState(false);
+  const [planContent, setPlanContent] = useState<string | null>(null);
+  const [planLoading, setPlanLoading] = useState(false);
   const [feedback, setFeedback] = useState('');
-  const planContent = extractPlanContent(toolUses);
+  const planFilePath = extractPlanFilePath(toolUses);
   const allowedPrompts = (toolInput.allowedPrompts || []) as Array<{
     tool: string;
     prompt: string;
@@ -336,12 +340,28 @@ function ExitPlanModeUI({
         >
           Reject
         </button>
-        {planContent && (
+        {planFilePath && (
           <button
-            onClick={() => setPlanOpen(true)}
-            className="rounded-lg border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10"
+            onClick={async () => {
+              setPlanLoading(true);
+              try {
+                const res = await fetch(`/api/files/preview?path=${encodeURIComponent(planFilePath)}&maxLines=1000`);
+                if (res.ok) {
+                  const data = await res.json();
+                  setPlanContent(data.preview?.content || 'Failed to load plan');
+                } else {
+                  setPlanContent('Failed to load plan file');
+                }
+              } catch {
+                setPlanContent('Failed to load plan file');
+              }
+              setPlanLoading(false);
+              setPlanOpen(true);
+            }}
+            disabled={planLoading}
+            className="rounded-lg border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
           >
-            View Plan
+            {planLoading ? 'Loading...' : 'View Plan'}
           </button>
         )}
         <button
@@ -375,7 +395,7 @@ function ExitPlanModeUI({
         </button>
       </div>
 
-      {planContent && (
+      {planOpen && planContent && (
         <Dialog open={planOpen} onOpenChange={setPlanOpen}>
           <DialogContent className="max-w-4xl h-[80vh] flex flex-col">
             <DialogHeader>
