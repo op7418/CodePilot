@@ -46,6 +46,8 @@ const en = {
   'messageInput.memoryDesc': 'Edit project memory file',
   'messageInput.modeCode': 'Code',
   'messageInput.modePlan': 'Plan',
+  'messageInput.compacting': 'Compacting...',
+  'messageInput.contextRefreshPending': 'Context compacted. Token gauge updates on the next turn.',
   'messageInput.aiSuggested': 'AI Suggested',
 
   // ── Streaming message ───────────────────────────────────────

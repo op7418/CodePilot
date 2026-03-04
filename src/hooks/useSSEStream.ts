@@ -25,6 +25,10 @@ export interface SSECallbacks {
   onModeChanged: (mode: string) => void;
   onTaskUpdate: (sessionId: string) => void;
   onError: (accumulated: string) => void;
+  onCompactBoundary?: () => void;
+  onCompacting?: () => void;
+  onContextTokens?: (tokens: number) => void;
+  onMcpServers?: (servers: Array<{ name: string; status: string }>) => void;
 }
 
 /**
@@ -87,8 +91,16 @@ function handleSSEEvent(
     case 'status': {
       try {
         const statusData = JSON.parse(event.data);
-        if (statusData.session_id) {
+        if (typeof statusData.context_tokens === 'number' && Number.isFinite(statusData.context_tokens)) {
+          callbacks.onContextTokens?.(statusData.context_tokens);
+          return accumulated;
+        } else if (statusData.session_id) {
           callbacks.onStatus(`Connected (${statusData.model || 'claude'})`);
+          if (statusData.mcp_servers) {
+            callbacks.onMcpServers?.(statusData.mcp_servers);
+          }
+        } else if (statusData.compacting) {
+          callbacks.onCompacting?.();
         } else if (statusData.notification) {
           callbacks.onStatus(statusData.message || statusData.title || undefined);
         } else {
@@ -97,6 +109,11 @@ function handleSSEEvent(
       } catch {
         callbacks.onStatus(event.data || undefined);
       }
+      return accumulated;
+    }
+
+    case 'compact_boundary': {
+      callbacks.onCompactBoundary?.();
       return accumulated;
     }
 
@@ -233,6 +250,10 @@ export function useSSEStream() {
         onModeChanged: (m) => callbacksRef.current?.onModeChanged(m),
         onTaskUpdate: (s) => callbacksRef.current?.onTaskUpdate(s),
         onError: (a) => callbacksRef.current?.onError(a),
+        onCompactBoundary: () => callbacksRef.current?.onCompactBoundary?.(),
+        onCompacting: () => callbacksRef.current?.onCompacting?.(),
+        onContextTokens: (t) => callbacksRef.current?.onContextTokens?.(t),
+        onMcpServers: (s) => callbacksRef.current?.onMcpServers?.(s),
       };
 
       return consumeSSEStream(reader, proxied);

@@ -2,15 +2,21 @@ import { NextResponse } from 'next/server';
 import { getAllProviders, getDefaultProviderId } from '@/lib/db';
 import type { ErrorResponse, ProviderModelGroup } from '@/types';
 
+interface ModelOption {
+  value: string;
+  label: string;
+  context_window?: number;
+}
+
 // Default Claude model options
-const DEFAULT_MODELS = [
-  { value: 'sonnet', label: 'Sonnet 4.6' },
-  { value: 'opus', label: 'Opus 4.6' },
-  { value: 'haiku', label: 'Haiku 4.5' },
+const DEFAULT_MODELS: ModelOption[] = [
+  { value: 'sonnet', label: 'Sonnet 4.6', context_window: 200000 },
+  { value: 'opus', label: 'Opus 4.6', context_window: 200000 },
+  { value: 'haiku', label: 'Haiku 4.5', context_window: 200000 },
 ];
 
 // Provider-specific model label mappings (base_url -> alias -> display name)
-const PROVIDER_MODEL_LABELS: Record<string, { value: string; label: string }[]> = {
+const PROVIDER_MODEL_LABELS: Record<string, ModelOption[]> = {
   'https://api.z.ai/api/anthropic': [
     { value: 'sonnet', label: 'GLM-4.7' },
     { value: 'opus', label: 'GLM-5' },
@@ -47,9 +53,9 @@ const PROVIDER_MODEL_LABELS: Record<string, { value: string; label: string }[]> 
     { value: 'haiku', label: 'MiniMax-M2.5' },
   ],
   'https://openrouter.ai/api': [
-    { value: 'sonnet', label: 'Sonnet 4.6' },
-    { value: 'opus', label: 'Opus 4.6' },
-    { value: 'haiku', label: 'Haiku 4.5' },
+    { value: 'sonnet', label: 'Sonnet 4.6', context_window: 200000 },
+    { value: 'opus', label: 'Opus 4.6', context_window: 200000 },
+    { value: 'haiku', label: 'Haiku 4.5', context_window: 200000 },
   ],
   'https://coding.dashscope.aliyuncs.com/apps/anthropic': [
     { value: 'qwen3.5-plus', label: 'Qwen 3.5 Plus' },
@@ -65,9 +71,9 @@ const PROVIDER_MODEL_LABELS: Record<string, { value: string; label: string }[]> 
 /**
  * Deduplicate models: if multiple aliases map to the same label, keep only the first one.
  */
-function deduplicateModels(models: { value: string; label: string }[]): { value: string; label: string }[] {
+function deduplicateModels(models: ModelOption[]): ModelOption[] {
   const seen = new Set<string>();
-  const result: { value: string; label: string }[] = [];
+  const result: ModelOption[] = [];
   for (const m of models) {
     if (!seen.has(m.label)) {
       seen.add(m.label);
@@ -75,6 +81,19 @@ function deduplicateModels(models: { value: string; label: string }[]): { value:
     }
   }
   return result;
+}
+
+function parsePositiveInteger(value: unknown): number | undefined {
+  if (typeof value === 'number' && Number.isInteger(value) && value > 0) {
+    return value;
+  }
+  if (typeof value === 'string') {
+    const parsed = Number.parseInt(value, 10);
+    if (Number.isInteger(parsed) && parsed > 0) {
+      return parsed;
+    }
+  }
+  return undefined;
 }
 
 export async function GET() {
@@ -100,19 +119,31 @@ export async function GET() {
       if (MEDIA_PROVIDER_TYPES.has(provider.provider_type)) continue;
       const matched = PROVIDER_MODEL_LABELS[provider.base_url];
       let rawModels = matched || DEFAULT_MODELS;
+      let providerEnv: Record<string, unknown> = {};
+
+      try {
+        providerEnv = JSON.parse(provider.extra_env || '{}') as Record<string, unknown>;
+      } catch {
+        providerEnv = {};
+      }
+
+      const providerContextWindow = parsePositiveInteger(providerEnv.CODEPILOT_CONTEXT_WINDOW);
 
       // For providers with ANTHROPIC_MODEL in extra_env (e.g. Volcengine Ark),
       // show the configured model name in the selector
       if (!matched) {
-        try {
-          const envObj = JSON.parse(provider.extra_env || '{}');
-          if (envObj.ANTHROPIC_MODEL) {
-            rawModels = [{ value: envObj.ANTHROPIC_MODEL, label: envObj.ANTHROPIC_MODEL }];
-          }
-        } catch { /* use default */ }
+        const anthropicModel = providerEnv.ANTHROPIC_MODEL;
+        if (typeof anthropicModel === 'string' && anthropicModel.trim()) {
+          rawModels = [{ value: anthropicModel, label: anthropicModel }];
+        }
       }
 
-      const models = deduplicateModels(rawModels);
+      const models = deduplicateModels(
+        rawModels.map((model) => ({
+          ...model,
+          context_window: model.context_window ?? providerContextWindow,
+        }))
+      );
 
       groups.push({
         provider_id: provider.id,

@@ -122,7 +122,7 @@ export interface ProviderModelGroup {
   provider_id: string;       // provider DB id, or 'env' for environment variables
   provider_name: string;
   provider_type: string;
-  models: Array<{ value: string; label: string }>;
+  models: Array<{ value: string; label: string; context_window?: number }>;
 }
 
 export interface CreateProviderRequest {
@@ -162,6 +162,8 @@ export interface TokenUsage {
   cache_read_input_tokens?: number;
   cache_creation_input_tokens?: number;
   cost_usd?: number;
+  context_window?: number;
+  last_input_tokens?: number;
 }
 
 // ==========================================
@@ -356,6 +358,7 @@ export type SSEEventType =
   | 'permission_request' // permission approval needed
   | 'mode_changed'       // SDK permission mode changed (e.g. plan → code)
   | 'task_update'        // SDK TodoWrite task sync
+  | 'compact_boundary'   // context compaction boundary
   | 'done';              // stream complete
 
 export interface SSEEvent {
@@ -651,6 +654,14 @@ export interface SessionStreamSnapshot {
   error: string | null;
   /** Final message content built at stream completion for ChatView to consume */
   finalMessageContent: string | null;
+  /** Context Ring: context window usage */
+  contextWindow?: { used: number; total: number } | null;
+  /** Context Ring: whether context compaction is in progress */
+  isCompacting?: boolean;
+  /** Context Ring: streaming context token counts */
+  streamingContextTokens?: { used: number; total: number } | null;
+  /** Context Ring: whether context tokens need a refresh */
+  contextTokensPendingRefresh?: boolean;
 }
 
 export interface StreamEvent {

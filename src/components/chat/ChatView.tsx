@@ -1,7 +1,14 @@
 'use client';
 
-import { useState, useCallback, useEffect, useRef } from 'react';
-import type { Message, MessagesResponse, FileAttachment, SessionStreamSnapshot } from '@/types';
+import { useState, useCallback, useEffect, useRef, useMemo } from 'react';
+import type {
+  Message,
+  MessagesResponse,
+  FileAttachment,
+  SessionStreamSnapshot,
+  ProviderModelGroup,
+  TokenUsage,
+} from '@/types';
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { usePanel } from '@/hooks/usePanel';
@@ -26,7 +33,7 @@ interface ChatViewProps {
 }
 
 export function ChatView({ sessionId, initialMessages = [], initialHasMore = false, modelName, initialMode, providerId }: ChatViewProps) {
-  const { setStreamingSessionId, workingDirectory, setWorkingDirectory, setPanelOpen, setPendingApprovalSessionId } = usePanel();
+  const { setStreamingSessionId, workingDirectory, setPendingApprovalSessionId } = usePanel();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loadingMore, setLoadingMore] = useState(false);
@@ -34,6 +41,8 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
   const [mode, setMode] = useState(initialMode || 'code');
   const [currentModel, setCurrentModel] = useState(modelName || (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-model') : null) || 'sonnet');
   const [currentProviderId, setCurrentProviderId] = useState(providerId || (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-provider-id') : null) || '');
+  const [providerModelGroups, setProviderModelGroups] = useState<ProviderModelGroup[]>([]);
+  const [providerGroupsDefaultId, setProviderGroupsDefaultId] = useState('');
 
   // Sync model/provider when session data loads (props update after async fetch)
   // Unconditional: when modelName is empty (old session with no saved model),
@@ -59,6 +68,12 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
   const statusText = streamSnapshot?.statusText;
   const pendingPermission = streamSnapshot?.pendingPermission ?? null;
   const permissionResolved = streamSnapshot?.permissionResolved ?? null;
+
+  // Context Ring states — derive from stream snapshot
+  const snapshotContextWindowTotal = streamSnapshot?.contextWindow?.total ?? 0;
+  const snapshotIsCompacting = streamSnapshot?.isCompacting ?? false;
+  const snapshotStreamingContextTokens = streamSnapshot?.streamingContextTokens ?? null;
+  const snapshotContextTokensPendingRefresh = streamSnapshot?.contextTokensPendingRefresh ?? false;
 
   // Pending image generation notices — flushed into the next user message so the LLM knows about generated images
   const pendingImageNoticesRef = useRef<string[]>([]);
@@ -384,6 +399,69 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
     return () => window.removeEventListener('image-gen-completed', handler);
   }, [sessionId]);
 
+  const latestAssistantUsage = useMemo<TokenUsage | null>(() => {
+    for (let i = messages.length - 1; i >= 0; i--) {
+      const msg = messages[i];
+      if (msg.role === 'assistant' && msg.token_usage) {
+        try {
+          return typeof msg.token_usage === 'string'
+            ? JSON.parse(msg.token_usage) as TokenUsage
+            : msg.token_usage as TokenUsage;
+        } catch { /* skip */ }
+      }
+    }
+    return null;
+  }, [messages]);
+
+  // Context tokens from message history (fallback when not actively streaming)
+  const contextTokens = useMemo(() => {
+    if (!latestAssistantUsage) return 0;
+    // Prefer last_input_tokens: this is the actual single-turn context size
+    // from the last API call's message_start event
+    if (typeof latestAssistantUsage.last_input_tokens === 'number' && latestAssistantUsage.last_input_tokens > 0) {
+      return latestAssistantUsage.last_input_tokens + (latestAssistantUsage.output_tokens || 0);
+    }
+    // Fallback: sum input + cache tokens for accurate context size
+    const input = (latestAssistantUsage.input_tokens || 0)
+      + (latestAssistantUsage.cache_read_input_tokens || 0)
+      + (latestAssistantUsage.cache_creation_input_tokens || 0);
+    const output = latestAssistantUsage.output_tokens || 0;
+    return input + output;
+  }, [latestAssistantUsage]);
+
+  const historyContextWindow = useMemo(() => {
+    const fromUsage = latestAssistantUsage?.context_window;
+    return typeof fromUsage === 'number' && fromUsage > 0 ? fromUsage : 0;
+  }, [latestAssistantUsage]);
+
+  const providerModelContextWindow = useMemo(() => {
+    const effectiveProviderId = currentProviderId || providerGroupsDefaultId || (providerModelGroups[0]?.provider_id ?? '');
+    const group = providerModelGroups.find((g) => g.provider_id === effectiveProviderId);
+    if (!group) return 0;
+    const model = group.models.find((m) => m.value === currentModel);
+    const cw = model?.context_window;
+    return typeof cw === 'number' && cw > 0 ? cw : 0;
+  }, [providerModelGroups, currentProviderId, providerGroupsDefaultId, currentModel]);
+
+  const handleProviderGroupsLoaded = useCallback((groups: ProviderModelGroup[], defaultProviderId?: string) => {
+    setProviderModelGroups(groups);
+    setProviderGroupsDefaultId(defaultProviderId || groups[0]?.provider_id || '');
+  }, []);
+
+  const contextWindowMax = snapshotContextWindowTotal > 0
+    ? snapshotContextWindowTotal
+    : historyContextWindow > 0
+      ? historyContextWindow
+      : providerModelContextWindow > 0
+        ? providerModelContextWindow
+        : 200000;
+
+  // Derive the context token count to pass to MessageInput:
+  // Prefer the live streaming value only while stream is active.
+  const effectiveContextTokens = (isStreaming && snapshotStreamingContextTokens)
+    ? snapshotStreamingContextTokens.used
+    : contextTokens;
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <MessageList
@@ -417,9 +495,14 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         onModelChange={setCurrentModel}
         providerId={currentProviderId}
         onProviderModelChange={handleProviderModelChange}
+        onProviderGroupsLoaded={handleProviderGroupsLoaded}
         workingDirectory={workingDirectory}
         mode={mode}
         onModeChange={handleModeChange}
+        contextTokens={effectiveContextTokens}
+        contextStale={isStreaming ? snapshotContextTokensPendingRefresh : false}
+        maxContext={contextWindowMax}
+        isCompacting={isStreaming ? snapshotIsCompacting : false}
       />
     </div>
   );

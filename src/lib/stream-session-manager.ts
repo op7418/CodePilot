@@ -11,15 +11,12 @@
  */
 
 import { consumeSSEStream } from '@/hooks/useSSEStream';
-import { transferPendingToMessage } from '@/lib/image-ref-store';
 import type {
   ToolUseInfo,
   ToolResultInfo,
   SessionStreamSnapshot,
   StreamEvent,
   StreamEventListener,
-  TokenUsage,
-  PermissionRequestEvent,
   FileAttachment,
 } from '@/types';
 
@@ -95,6 +92,15 @@ function buildSnapshot(stream: ActiveStream): SessionStreamSnapshot {
     completedAt: stream.snapshot.completedAt,
     error: stream.snapshot.error,
     finalMessageContent: stream.snapshot.finalMessageContent,
+  };
+}
+
+function clearContextRingState(snapshot: SessionStreamSnapshot): SessionStreamSnapshot {
+  return {
+    ...snapshot,
+    isCompacting: false,
+    contextTokensPendingRefresh: false,
+    streamingContextTokens: null,
   };
 }
 
@@ -341,7 +347,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
     }
 
     // Update snapshot with completion info
-    stream.snapshot = {
+    stream.snapshot = clearContextRingState({
       ...buildSnapshot(stream),
       phase: 'completed',
       completedAt: Date.now(),
@@ -350,7 +356,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
       statusText: undefined,
       pendingPermission: null,
       permissionResolved: null,
-    };
+    });
     stream.accumulatedText = '';
     stream.toolUsesArray = [];
     stream.toolResultsArray = [];
@@ -374,7 +380,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
           ? stream.accumulatedText.trim() + `\n\n**Error:** Stream idle timeout — no response for ${idleSecs}s. The connection may have dropped.`
           : `**Error:** Stream idle timeout — no response for ${idleSecs}s. The connection may have dropped.`;
 
-        stream.snapshot = {
+        stream.snapshot = clearContextRingState({
           ...buildSnapshot(stream),
           phase: 'error',
           completedAt: Date.now(),
@@ -383,7 +389,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
           statusText: undefined,
           pendingPermission: null,
           permissionResolved: null,
-        };
+        });
         stream.accumulatedText = '';
         stream.toolUsesArray = [];
         stream.toolResultsArray = [];
@@ -397,7 +403,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
           ? stream.accumulatedText.trim() + `\n\n*(tool ${timeoutInfo.toolName} timed out after ${timeoutInfo.elapsedSeconds}s)*`
           : null;
 
-        stream.snapshot = {
+        stream.snapshot = clearContextRingState({
           ...buildSnapshot(stream),
           phase: 'stopped',
           completedAt: Date.now(),
@@ -405,7 +411,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
           statusText: undefined,
           pendingPermission: null,
           permissionResolved: null,
-        };
+        });
         stream.accumulatedText = '';
         stream.toolUsesArray = [];
         stream.toolResultsArray = [];
@@ -429,7 +435,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
           ? stream.accumulatedText.trim() + '\n\n*(generation stopped)*'
           : null;
 
-        stream.snapshot = {
+        stream.snapshot = clearContextRingState({
           ...buildSnapshot(stream),
           phase: 'stopped',
           completedAt: Date.now(),
@@ -437,7 +443,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
           statusText: undefined,
           pendingPermission: null,
           permissionResolved: null,
-        };
+        });
         stream.accumulatedText = '';
         stream.toolUsesArray = [];
         stream.toolResultsArray = [];
@@ -448,7 +454,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
     } else {
       // Non-abort error
       const errMsg = error instanceof Error ? error.message : 'Unknown error';
-      stream.snapshot = {
+      stream.snapshot = clearContextRingState({
         ...buildSnapshot(stream),
         phase: 'error',
         completedAt: Date.now(),
@@ -457,7 +463,7 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
         statusText: undefined,
         pendingPermission: null,
         permissionResolved: null,
-      };
+      });
       stream.accumulatedText = '';
       stream.toolUsesArray = [];
       stream.toolResultsArray = [];
