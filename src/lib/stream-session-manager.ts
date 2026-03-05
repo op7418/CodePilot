@@ -294,12 +294,15 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
       },
       onResult: (usage) => {
         markActive();
-        const total = usage?.context_window ?? 0;
+        const total = usage?.context_window ?? stream.snapshot.contextWindow?.total ?? 0;
+        const used = stream.snapshot.streamingContextTokens?.used
+          ?? stream.snapshot.contextWindow?.used
+          ?? 0;
         stream.snapshot = {
           ...stream.snapshot,
           tokenUsage: usage,
           contextWindow: total > 0
-            ? { used: total, total }
+            ? { used, total }
             : stream.snapshot.contextWindow,
         };
         emit(stream, 'snapshot-updated');
@@ -675,3 +678,4 @@ export function clearSnapshot(sessionId: string): void {
     };
   }
 }
+
