@@ -275,6 +275,16 @@ const en = {
   'connection.connected': 'Connected',
   'connection.disconnected': 'Disconnected',
   'connection.checking': 'Checking',
+  'connection.connectedToProvider': 'Connected · {provider}',
+  'connection.connectedToProviderTitle': 'Connected to {provider}',
+  'connection.usingCustomProvider': 'Using custom API provider — Claude Code CLI is not required.',
+  'connection.cliRunning': 'Claude Code CLI v{version} is running and ready.',
+  'connection.cliRequired': 'Claude Code CLI is required to use this application.',
+  'connection.customProviderHint': 'Custom API provider · Claude CLI not required',
+  'connection.active': 'Active',
+  'connection.notDetected': 'Not detected',
+  'connection.authenticate': 'Authenticate',
+  'connection.verifyInstallation': 'Verify Installation',
 
   // ── Install wizard ──────────────────────────────────────────
   'install.title': 'Install Claude Code',

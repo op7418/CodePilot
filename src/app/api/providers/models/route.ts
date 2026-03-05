@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getAllProviders, getDefaultProviderId } from '@/lib/db';
+import { PROVIDER_MODEL_RESOLUTION } from '@/lib/provider-models';
 import type { ErrorResponse, ProviderModelGroup } from '@/types';
 
 // Default Claude model options
@@ -14,6 +15,9 @@ const DEFAULT_MODELS = [
 // the `value` field is sent verbatim to the provider's /v1/messages endpoint as the "model"
 // parameter. It must be the actual API model name, NOT a CodePilot internal alias
 // (sonnet / opus / haiku). Those aliases only work when the Claude Code CLI resolves them.
+//
+// Build PROVIDER_MODEL_LABELS from the shared PROVIDER_MODEL_RESOLUTION map.
+// This ensures consistency with claude-client.ts model alias resolution.
 const PROVIDER_MODEL_LABELS: Record<string, { value: string; label: string }[]> = {
   // ── BigModel / GLM (智谱 AI) ────────────────────────────────────────────────
   'https://api.z.ai/api/anthropic': [
@@ -59,6 +63,10 @@ const PROVIDER_MODEL_LABELS: Record<string, { value: string; label: string }[]> 
     { value: 'MiniMax-M2.5', label: 'MiniMax-M2.5' },
   ],
 };
+
+// Note: PROVIDER_MODEL_RESOLUTION is now imported from @/lib/provider-models
+// to maintain a single source of truth for model alias resolution.
+// If you need to add a new provider, update provider-models.ts.
 
 /**
  * Deduplicate models: if multiple aliases map to the same label, keep only the first one.

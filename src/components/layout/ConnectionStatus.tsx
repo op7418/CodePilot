@@ -147,7 +147,7 @@ export function ConnectionStatus() {
           ? t('connection.checking')
           : connected
             ? status.provider_name
-              ? `Connected · ${status.provider_name}`
+              ? t('connection.connectedToProvider', { provider: status.provider_name })
               : t('connection.connected')
             : t('connection.disconnected')}
       </button>
@@ -157,15 +157,15 @@ export function ConnectionStatus() {
           <DialogHeader>
             <DialogTitle>
               {status?.provider_name
-                ? `Connected to ${status.provider_name}`
+                ? t('connection.connectedToProviderTitle', { provider: status.provider_name })
                 : connected ? t('connection.installed') : t('connection.notInstalled')}
             </DialogTitle>
             <DialogDescription>
               {status?.provider_name
-                ? `Using custom API provider — Claude Code CLI is not required.`
+                ? t('connection.usingCustomProvider')
                 : connected
-                  ? `Claude Code CLI v${status?.version} is running and ready.`
-                  : "Claude Code CLI is required to use this application."}
+                  ? t('connection.cliRunning', { version: status?.version ?? '' })
+                  : t('connection.cliRequired')}
             </DialogDescription>
           </DialogHeader>
 
@@ -179,7 +179,7 @@ export function ConnectionStatus() {
                     {status.provider_name}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    Custom API provider · Claude CLI not required
+                    {t('connection.customProviderHint')}
                   </p>
                 </div>
               </div>
@@ -190,7 +190,7 @@ export function ConnectionStatus() {
               <div className="flex items-center gap-3 rounded-lg bg-emerald-500/10 px-4 py-3">
                 <span className="block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
                 <div>
-                  <p className="font-medium text-emerald-700 dark:text-emerald-400">Active</p>
+                  <p className="font-medium text-emerald-700 dark:text-emerald-400">{t('connection.active')}</p>
                   <p className="text-xs text-muted-foreground">{t('connection.version', { version: status?.version ?? '' })}</p>
                 </div>
               </div>
@@ -199,7 +199,7 @@ export function ConnectionStatus() {
             <div className="space-y-4 text-sm">
               <div className="flex items-center gap-3 rounded-lg bg-red-500/10 px-4 py-3">
                 <span className="block h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
-                <p className="font-medium text-red-700 dark:text-red-400">Not detected</p>
+                <p className="font-medium text-red-700 dark:text-red-400">{t('connection.notDetected')}</p>
               </div>
 
               <div>
@@ -210,14 +210,14 @@ export function ConnectionStatus() {
               </div>
 
               <div>
-                <h4 className="font-medium mb-1.5">2. Authenticate</h4>
+                <h4 className="font-medium mb-1.5">2. {t('connection.authenticate')}</h4>
                 <code className="block rounded-md bg-muted px-3 py-2 text-xs">
                   claude login
                 </code>
               </div>
 
               <div>
-                <h4 className="font-medium mb-1.5">3. Verify Installation</h4>
+                <h4 className="font-medium mb-1.5">3. {t('connection.verifyInstallation')}</h4>
                 <code className="block rounded-md bg-muted px-3 py-2 text-xs">
                   claude --version
                 </code>

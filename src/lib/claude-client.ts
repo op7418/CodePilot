@@ -22,6 +22,7 @@ import { registerConversation, unregisterConversation } from './conversation-reg
 import { getSetting, getActiveProvider, updateSdkSessionId, createPermissionRequest } from './db';
 import { findClaudeBinary, findGitBash, getExpandedPath } from './platform';
 import { notifyPermissionRequest, notifyGeneric } from './telegram-bot';
+import { PROVIDER_MODEL_RESOLUTION } from './provider-models';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -272,6 +273,14 @@ function buildPromptWithHistory(
  *
  * The provider must expose an Anthropic-compatible /v1/messages endpoint.
  * Most third-party LLM gateways (Moonshot, OpenRouter, etc.) support this format.
+ * 
+ * ⚠️ **LIMITATIONS:**
+ * - This direct API path does NOT support Tool Use (file operations, command execution, etc.)
+ * - Only supports pure text interaction with vision (image) support
+ * - No MCP server integration
+ * - No CLAUDE.md or project context awareness
+ * 
+ * For full tool support, use an anthropic provider which routes through Claude Code CLI.
  */
 async function streamDirectFromProvider(
   controller: ReadableStreamDefaultController<string>,
@@ -325,18 +334,6 @@ async function streamDirectFromProvider(
   //    was updated to use actual model names as values.
   // 3. Model value passed from UI — used as-is if it's already a real model name.
 
-  // Alias → real model name, keyed by provider base_url.
-  // Must stay in sync with PROVIDER_MODEL_LABELS in providers/models/route.ts.
-  const PROVIDER_MODEL_RESOLUTION: Record<string, Record<string, string>> = {
-    'https://api.moonshot.cn/anthropic':        { sonnet: 'kimi-k2.5', opus: 'kimi-k2.5', haiku: 'kimi-k2.5' },
-    'https://api.moonshot.ai/anthropic':         { sonnet: 'kimi-k2.5', opus: 'kimi-k2.5', haiku: 'kimi-k2.5' },
-    'https://api.kimi.com/coding/':              { sonnet: 'kimi-k2.5', opus: 'kimi-k2.5', haiku: 'kimi-k2.5' },
-    'https://api.z.ai/api/anthropic':            { sonnet: 'glm-4.7',   opus: 'glm-5',     haiku: 'glm-4.5-air'  },
-    'https://open.bigmodel.cn/api/anthropic':    { sonnet: 'glm-4.7',   opus: 'glm-5',     haiku: 'glm-4.5-air'  },
-    'https://api.minimaxi.com/anthropic':        { sonnet: 'MiniMax-M2.5', opus: 'MiniMax-M2.5', haiku: 'MiniMax-M2.5' },
-    'https://api.minimax.io/anthropic':          { sonnet: 'MiniMax-M2.5', opus: 'MiniMax-M2.5', haiku: 'MiniMax-M2.5' },
-  };
-
   const CODEPILOT_ALIASES = new Set(['sonnet', 'opus', 'haiku']);
   let effectiveModel = model || '';
 
@@ -381,9 +378,22 @@ async function streamDirectFromProvider(
     }
   }
 
+  // Determine max_tokens for the request.
+  // Priority: extra_env.MAX_TOKENS > provider default (8192).
+  // Some providers support larger context (e.g., GLM-5: 128K, Kimi: 200K),
+  // but we use a conservative default. Users can override via extra_env.
+  let maxTokens = 8192;
+  try {
+    const extraEnv = JSON.parse(provider.extra_env || '{}');
+    if (extraEnv.MAX_TOKENS && typeof extraEnv.MAX_TOKENS === 'number' && extraEnv.MAX_TOKENS > 0) {
+      maxTokens = extraEnv.MAX_TOKENS;
+      console.log(`[claude-client] Using MAX_TOKENS from extra_env: ${maxTokens}`);
+    }
+  } catch { /* ignore malformed extra_env */ }
+
   const requestBody: Record<string, unknown> = {
     model: effectiveModel,
-    max_tokens: 8192,
+    max_tokens: maxTokens,
     stream: true,
     messages,
   };
