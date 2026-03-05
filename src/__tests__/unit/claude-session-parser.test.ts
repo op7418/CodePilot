@@ -10,12 +10,19 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { pathToFileURL } from 'node:url';
 
 // We test the parser functions by creating temporary JSONL files
 // that mimic Claude Code's session storage format.
 
 const TEST_DIR = path.join(os.tmpdir(), `codepilot-test-sessions-${Date.now()}`);
 const PROJECTS_DIR = path.join(TEST_DIR, '.claude', 'projects');
+const originalEnv = {
+  HOME: process.env.HOME,
+  USERPROFILE: process.env.USERPROFILE,
+  HOMEDRIVE: process.env.HOMEDRIVE,
+  HOMEPATH: process.env.HOMEPATH,
+};
 
 // Helper to create a JSONL session file
 function createSessionFile(
@@ -121,18 +128,25 @@ describe('claude-session-parser', () => {
   let parser: typeof import('../../lib/claude-session-parser');
 
   before(async () => {
-    // Set HOME to our test directory so the parser looks for sessions there
+    // Point all common home env vars to test dir so os.homedir() is deterministic on Windows/macOS/Linux.
+    const parsed = path.parse(TEST_DIR);
     process.env.HOME = TEST_DIR;
+    process.env.USERPROFILE = TEST_DIR;
+    process.env.HOMEDRIVE = parsed.root.replace(/[\\\/]$/, '');
+    process.env.HOMEPATH = TEST_DIR.slice(parsed.root.length - 1);
 
     // Dynamic import - tsx handles the TypeScript + path alias resolution
-    parser = await import(parserPath);
+    parser = await import(pathToFileURL(parserPath).href);
   });
 
   after(() => {
     // Clean up test directory
     fs.rmSync(TEST_DIR, { recursive: true, force: true });
-    // Restore HOME
-    process.env.HOME = os.homedir();
+    // Restore env
+    process.env.HOME = originalEnv.HOME;
+    process.env.USERPROFILE = originalEnv.USERPROFILE;
+    process.env.HOMEDRIVE = originalEnv.HOMEDRIVE;
+    process.env.HOMEPATH = originalEnv.HOMEPATH;
   });
 
   describe('decodeProjectPath', () => {

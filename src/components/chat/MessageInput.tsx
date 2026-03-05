@@ -19,6 +19,8 @@ import {
   BrainIcon,
   GlobalIcon,
   StopIcon,
+  Folder01Icon,
+  File01Icon,
 } from "@hugeicons/core-free-icons";
 import { cn } from '@/lib/utils';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -81,6 +83,47 @@ const IMAGE_AGENT_SYSTEM_PROMPT = `你是一个图像生成助手。当用户请
 - 如果用户要求修改上一张生成的图片，必须加 "useLastGenerated": true
 - 在输出结构化块之前，可以先简要说明你的理解和计划`;
 
+const FILE_TREE_DRAG_MIME = 'application/x-codepilot-path';
+const FILE_TREE_DRAG_FALLBACK_MIME = 'text/x-codepilot-path';
+
+function hasDragType(dataTransfer: DataTransfer | null | undefined, type: string): boolean {
+  if (!dataTransfer) return false;
+
+  const types = dataTransfer.types as unknown;
+  if (!types) return false;
+
+  if (typeof (types as { includes?: unknown }).includes === 'function') {
+    return (types as { includes: (value: string) => boolean }).includes(type);
+  }
+
+  if (typeof (types as { contains?: unknown }).contains === 'function') {
+    return (types as { contains: (value: string) => boolean }).contains(type);
+  }
+
+  return Array.from(types as ArrayLike<string>).includes(type);
+}
+
+function readFileTreeDropData(dataTransfer: DataTransfer | null | undefined) {
+  if (!dataTransfer) return null;
+
+  const raw = dataTransfer.getData(FILE_TREE_DRAG_MIME)
+    || dataTransfer.getData(FILE_TREE_DRAG_FALLBACK_MIME);
+
+  if (!raw) return null;
+
+  try {
+    const parsed = JSON.parse(raw) as Partial<{ path: string; name: string; type: string }>;
+    if (!parsed.path || typeof parsed.path !== 'string') return null;
+    return {
+      name: typeof parsed.name === 'string' ? parsed.name : '',
+      path: parsed.path,
+      type: parsed.type === 'directory' ? 'directory' : 'file',
+    };
+  } catch {
+    return null;
+  }
+}
+
 
 interface MessageInputProps {
   onSend: (content: string, files?: FileAttachment[], systemPromptAppend?: string, displayOverride?: string) => void;
@@ -117,6 +160,13 @@ interface CommandBadge {
   description: string;
   isSkill: boolean;
   installedSource?: "agents" | "claude";
+}
+
+interface ContextMention {
+  id: string;
+  path: string;
+  name: string;
+  type: 'file' | 'directory';
 }
 
 type PopoverMode = 'file' | 'skill' | null;
@@ -190,12 +240,14 @@ function FileAwareSubmitButton({
   disabled,
   inputValue,
   hasBadge,
+  hasContextMentions,
 }: {
   status: ChatStatus;
   onStop?: () => void;
   disabled?: boolean;
   inputValue: string;
   hasBadge: boolean;
+  hasContextMentions: boolean;
 }) {
   const attachments = usePromptInputAttachments();
   const hasFiles = attachments.files.length > 0;
@@ -205,7 +257,7 @@ function FileAwareSubmitButton({
     <PromptInputSubmit
       status={status}
       onStop={onStop}
-      disabled={disabled || (!isStreaming && !inputValue.trim() && !hasBadge && !hasFiles)}
+      disabled={disabled || (!isStreaming && !inputValue.trim() && !hasBadge && !hasFiles && !hasContextMentions)}
       className="rounded-full"
     >
       {isStreaming ? (
@@ -276,7 +328,7 @@ function mimeFromFilename(name: string): string {
  * Bridge component that listens for 'attach-file-to-chat' custom events
  * from the file tree and adds files as attachments. Must be rendered inside PromptInput.
  */
-function FileTreeAttachmentBridge() {
+function FileTreeAttachmentBridge({ onAttachFailed }: { onAttachFailed?: (filePath: string) => void }) {
   const attachments = usePromptInputAttachments();
   const attachmentsRef = useRef(attachments);
 
@@ -294,6 +346,7 @@ function FileTreeAttachmentBridge() {
         const res = await fetch(`/api/files/raw?path=${encodeURIComponent(filePath)}`);
         if (!res.ok) {
           console.warn(`[FileTreeAttachment] Failed to fetch file: ${res.status} ${res.statusText}`, filePath);
+          onAttachFailed?.(filePath);
           return;
         }
         const blob = await res.blob();
@@ -306,12 +359,13 @@ function FileTreeAttachmentBridge() {
         attachmentsRef.current.add([file]);
       } catch (err) {
         console.warn('[FileTreeAttachment] Error attaching file:', filePath, err);
+        onAttachFailed?.(filePath);
       }
     };
 
     window.addEventListener('attach-file-to-chat', handler);
     return () => window.removeEventListener('attach-file-to-chat', handler);
-  }, []);
+  }, [onAttachFailed]);
 
   return null;
 }
@@ -358,6 +412,80 @@ function FileAttachmentsCapsules() {
   );
 }
 
+function getMentionColorClasses(mention: ContextMention): { chip: string; hover: string } {
+  if (mention.type === 'directory') {
+    return {
+      chip: "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/20",
+      hover: "hover:bg-amber-500/20",
+    };
+  }
+  const ext = mention.name.split('.').pop()?.toLowerCase() || '';
+  if (['doc', 'docx'].includes(ext)) {
+    return {
+      chip: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+      hover: "hover:bg-blue-500/20",
+    };
+  }
+  if (['xls', 'xlsx', 'csv'].includes(ext)) {
+    return {
+      chip: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
+      hover: "hover:bg-green-500/20",
+    };
+  }
+  if (ext === 'pdf') {
+    return {
+      chip: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
+      hover: "hover:bg-red-500/20",
+    };
+  }
+  if (ext === 'txt') {
+    return {
+      chip: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20",
+      hover: "hover:bg-gray-500/20",
+    };
+  }
+  return {
+    chip: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
+    hover: "hover:bg-violet-500/20",
+  };
+}
+
+function ContextMentionChips({
+  mentions,
+  onRemove,
+}: {
+  mentions: ContextMention[];
+  onRemove: (id: string) => void;
+}) {
+  if (mentions.length === 0) return null;
+  return (
+    <div className="grid w-full grid-cols-5 gap-1.5 px-3 pt-2 pb-0 order-first">
+      {mentions.map((m) => {
+        const colors = getMentionColorClasses(m);
+        return (
+          <span
+            key={m.id}
+            className={cn(
+              "inline-flex items-center gap-1 rounded-full pl-2 pr-1 py-0.5 text-xs font-medium border min-w-0",
+              colors.chip
+            )}
+          >
+            <HugeiconsIcon icon={m.type === 'directory' ? Folder01Icon : File01Icon} className="h-3 w-3 shrink-0" />
+            <span className="truncate text-[11px] font-mono">{m.name}</span>
+            <button
+              type="button"
+              onClick={() => onRemove(m.id)}
+              className={cn("ml-auto shrink-0 rounded-full p-0.5 transition-colors", colors.hover)}
+            >
+              <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3" />
+            </button>
+          </span>
+        );
+      })}
+    </div>
+  );
+}
+
 export function MessageInput({
   onSend,
   onImageGenerate,
@@ -380,6 +508,7 @@ export function MessageInput({
   const popoverRef = useRef<HTMLDivElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const modelMenuRef = useRef<HTMLDivElement>(null);
+  const dropZoneRef = useRef<HTMLDivElement>(null);
 
   const [popoverMode, setPopoverMode] = useState<PopoverMode>(null);
   const [popoverItems, setPopoverItems] = useState<PopoverItem[]>([]);
@@ -395,6 +524,76 @@ export function MessageInput({
   const [aiSearchLoading, setAiSearchLoading] = useState(false);
   const aiSearchAbortRef = useRef<AbortController | null>(null);
   const aiSearchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const [isDragOver, setIsDragOver] = useState(false);
+  const [contextMentions, setContextMentions] = useState<ContextMention[]>([]);
+
+  const removeContextMention = useCallback((id: string) => {
+    setContextMentions((prev) => prev.filter((m) => m.id !== id));
+  }, []);
+
+  const addContextMention = useCallback((path: string, name: string, type: 'file' | 'directory') => {
+    setContextMentions((prev) => {
+      if (prev.some((m) => m.path === path)) return prev;
+      return [...prev, { id: nanoid(), path, name, type }];
+    });
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, []);
+
+  const appendPathMention = useCallback((path: string) => {
+    setInputValue((prev) => {
+      const suffix = `@${path} `;
+      return prev ? `${prev}${suffix}` : suffix;
+    });
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, []);
+
+  useEffect(() => {
+    const el = dropZoneRef.current;
+    if (!el) return;
+
+    const onDragOver = (e: DragEvent) => {
+      const isTreeDrag = hasDragType(e.dataTransfer, FILE_TREE_DRAG_MIME)
+        || hasDragType(e.dataTransfer, FILE_TREE_DRAG_FALLBACK_MIME);
+
+      if (isTreeDrag) {
+        e.preventDefault();
+        e.stopPropagation();
+        if (e.dataTransfer) e.dataTransfer.dropEffect = 'copy';
+        setIsDragOver(true);
+      }
+    };
+
+    const onDragLeave = (e: DragEvent) => {
+      if (el.contains(e.relatedTarget as Node)) return;
+      setIsDragOver(false);
+    };
+
+    const onDrop = (e: DragEvent) => {
+      setIsDragOver(false);
+      const data = readFileTreeDropData(e.dataTransfer);
+      if (!data) return;
+      e.preventDefault();
+      e.stopPropagation();
+      if (data.type === 'file') {
+        window.dispatchEvent(
+          new CustomEvent('attach-file-to-chat', { detail: { path: data.path } })
+        );
+        const mentionName = data.name || data.path.split(/[/\\]/).pop() || data.path;
+        addContextMention(data.path, mentionName, 'file');
+      } else {
+        addContextMention(data.path, data.name || data.path, 'directory');
+      }
+    };
+
+    el.addEventListener('dragover', onDragOver);
+    el.addEventListener('dragleave', onDragLeave);
+    el.addEventListener('drop', onDrop);
+    return () => {
+      el.removeEventListener('dragover', onDragOver);
+      el.removeEventListener('dragleave', onDragLeave);
+      el.removeEventListener('drop', onDrop);
+    };
+  }, [addContextMention]);
 
   // Fetch provider groups from API
   const fetchProviderModels = useCallback(() => {
@@ -602,7 +801,14 @@ export function MessageInput({
 
   const handleSubmit = useCallback(async (msg: { text: string; files: Array<{ type: string; url: string; filename?: string; mediaType?: string }> }, e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    const content = inputValue.trim();
+    const rawContent = inputValue.trim();
+    const mentionPrefix = contextMentions.length > 0
+      ? contextMentions
+        .filter((m) => !rawContent.includes(`@${m.path}`))
+        .map((m) => `@${m.path}`)
+        .join(' ')
+      : '';
+    const content = [mentionPrefix, rawContent].filter(Boolean).join(' ');
 
     closePopover();
 
@@ -640,6 +846,7 @@ export function MessageInput({
         deleteRefImages(PENDING_KEY);
       }
 
+      setContextMentions([]);
       setInputValue('');
       if (onSend) {
         onSend(content, files.length > 0 ? files : undefined, IMAGE_AGENT_SYSTEM_PROMPT);
@@ -679,6 +886,7 @@ export function MessageInput({
 
       const files = await convertFiles();
       setBadge(null);
+      setContextMentions([]);
       setInputValue('');
       onSend(finalPrompt, files.length > 0 ? files : undefined);
       return;
@@ -724,8 +932,9 @@ export function MessageInput({
     }
 
     onSend(content || 'Please review the attached file(s).', hasFiles ? files : undefined);
+    setContextMentions([]);
     setInputValue('');
-  }, [inputValue, onSend, onImageGenerate, onCommand, disabled, isStreaming, closePopover, badge, imageGen]);
+  }, [inputValue, onSend, onImageGenerate, onCommand, disabled, isStreaming, closePopover, badge, imageGen, contextMentions]);
 
   const filteredItems = popoverItems.filter((item) => {
     const q = popoverFilter.toLowerCase();
@@ -908,7 +1117,10 @@ export function MessageInput({
   return (
     <div className="bg-background/80 backdrop-blur-lg px-4 py-3">
       <div className="mx-auto">
-        <div className="relative">
+        <div
+          ref={dropZoneRef}
+          className={cn("relative", isDragOver && "ring-2 ring-primary/50 ring-offset-1 ring-offset-background rounded-xl")}
+        >
           {/* Popover */}
           {popoverMode && (allDisplayedItems.length > 0 || aiSearchLoading) && (() => {
             const builtInItems = filteredItems.filter(item => item.builtIn);
@@ -1068,8 +1280,7 @@ export function MessageInput({
             accept=""
             multiple
           >
-            {/* Bridge: listens for file tree "+" button events */}
-            <FileTreeAttachmentBridge />
+            <FileTreeAttachmentBridge onAttachFailed={appendPathMention} />
             {/* Command badge */}
             {badge && (
               <div className="flex w-full items-center gap-1.5 px-3 pt-2.5 pb-0 order-first">
@@ -1092,6 +1303,7 @@ export function MessageInput({
             )}
             {/* File attachment capsules */}
             <FileAttachmentsCapsules />
+            <ContextMentionChips mentions={contextMentions} onRemove={removeContextMention} />
             <PromptInputTextarea
               ref={textareaRef}
               placeholder={badge ? "Add details (optional), then press Enter..." : "Message Claude..."}
@@ -1182,15 +1394,16 @@ export function MessageInput({
                 <ImageGenToggle />
               </PromptInputTools>
 
-              <FileAwareSubmitButton
-                status={chatStatus}
-                onStop={onStop}
-                disabled={disabled}
-                inputValue={inputValue}
-                hasBadge={!!badge}
-              />
-            </PromptInputFooter>
-          </PromptInput>
+                <FileAwareSubmitButton
+                  status={chatStatus}
+                  onStop={onStop}
+                  disabled={disabled}
+                  inputValue={inputValue}
+                  hasBadge={!!badge}
+                  hasContextMentions={contextMentions.length > 0}
+                />
+              </PromptInputFooter>
+            </PromptInput>
         </div>
       </div>
 

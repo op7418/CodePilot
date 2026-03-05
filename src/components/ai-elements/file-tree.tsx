@@ -24,6 +24,9 @@ import {
   useState,
 } from "react";
 
+const FILE_TREE_DRAG_MIME = "application/x-codepilot-path";
+const FILE_TREE_DRAG_FALLBACK_MIME = "text/x-codepilot-path";
+
 interface FileTreeContextType {
   expandedPaths: Set<string>;
   togglePath: (path: string) => void;
@@ -132,6 +135,17 @@ export const FileTreeFolder = ({
     togglePath(path);
   }, [togglePath, path]);
 
+  const handleDragStart = useCallback(
+    (e: React.DragEvent) => {
+      const payload = JSON.stringify({ path, name, type: "directory" });
+      e.dataTransfer.setData(FILE_TREE_DRAG_MIME, payload);
+      e.dataTransfer.setData(FILE_TREE_DRAG_FALLBACK_MIME, payload);
+      e.dataTransfer.setData("text/plain", path);
+      e.dataTransfer.effectAllowed = "copy";
+    },
+    [name, path]
+  );
+
   const folderContextValue = useMemo(
     () => ({ isExpanded, name, path }),
     [isExpanded, name, path]
@@ -148,6 +162,8 @@ export const FileTreeFolder = ({
         >
           <div
             className="flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50"
+            draggable
+            onDragStart={handleDragStart}
           >
             <CollapsibleTrigger asChild>
               <button
@@ -232,6 +248,17 @@ export const FileTreeFile = ({
 
   const fileContextValue = useMemo(() => ({ name, path }), [name, path]);
 
+  const handleDragStart = useCallback(
+    (e: React.DragEvent) => {
+      const payload = JSON.stringify({ path, name, type: "file" });
+      e.dataTransfer.setData(FILE_TREE_DRAG_MIME, payload);
+      e.dataTransfer.setData(FILE_TREE_DRAG_FALLBACK_MIME, payload);
+      e.dataTransfer.setData("text/plain", path);
+      e.dataTransfer.effectAllowed = "copy";
+    },
+    [name, path]
+  );
+
   return (
     <FileTreeFileContext.Provider value={fileContextValue}>
       <div
@@ -242,6 +269,8 @@ export const FileTreeFile = ({
         )}
         onClick={handleClick}
         onKeyDown={handleKeyDown}
+        draggable
+        onDragStart={handleDragStart}
         role="treeitem"
         tabIndex={0}
         {...props}
