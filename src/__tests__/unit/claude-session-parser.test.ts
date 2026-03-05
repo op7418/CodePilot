@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { pathToFileURL } from 'url';
 
 // We test the parser functions by creating temporary JSONL files
 // that mimic Claude Code's session storage format.
@@ -115,6 +116,7 @@ function makeAssistantEntry(opts: {
 // Since the project uses path aliases (@/), we import via a relative path
 // that tsx can resolve with the project's tsconfig.
 const parserPath = path.resolve(__dirname, '../../lib/claude-session-parser.ts');
+const parserModuleUrl = pathToFileURL(parserPath).href;
 
 describe('claude-session-parser', () => {
   // We'll dynamically import the parser module
@@ -125,7 +127,7 @@ describe('claude-session-parser', () => {
     process.env.HOME = TEST_DIR;
 
     // Dynamic import - tsx handles the TypeScript + path alias resolution
-    parser = await import(parserPath);
+    parser = await import(parserModuleUrl);
   });
 
   after(() => {

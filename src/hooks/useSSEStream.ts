@@ -91,7 +91,7 @@ function handleSSEEvent(
     case 'status': {
       try {
         const statusData = JSON.parse(event.data);
-        if (statusData.context_tokens) {
+        if (typeof statusData.context_tokens === 'number') {
           callbacks.onContextTokens?.(statusData.context_tokens);
           return accumulated;
         } else if (statusData.session_id) {
