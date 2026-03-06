@@ -73,7 +73,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/uuid": "^10.0.0",
     "concurrently": "^9.2.1",
-    "electron": "^34.5.8",
+    "electron": "^40.2.1",
     "electron-builder": "^26.7.0",
     "esbuild": "^0.27.3",
     "eslint": "^9",
