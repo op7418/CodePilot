@@ -235,9 +235,13 @@ function buildPromptWithHistory(
 ): string {
   if (!history || history.length === 0) return prompt;
 
-  const lines: string[] = ['<conversation_history>'];
+  const lines: string[] = [
+    '<conversation_history>',
+    '(This is a summary of earlier conversation turns for context. Tool calls shown here were already executed — do not repeat them or output their markers as text.)',
+  ];
   for (const msg of history) {
-    // For assistant messages with tool blocks (JSON arrays), summarize
+    // For assistant messages with tool blocks (JSON arrays), extract only the text portions.
+    // Tool-use and tool-result blocks are omitted to avoid Claude parroting them as plain text.
     let content = msg.content;
     if (msg.role === 'assistant' && content.startsWith('[')) {
       try {
@@ -245,14 +249,9 @@ function buildPromptWithHistory(
         const parts: string[] = [];
         for (const b of blocks) {
           if (b.type === 'text' && b.text) parts.push(b.text);
-          else if (b.type === 'tool_use') parts.push(`[Used tool: ${b.name}]`);
-          else if (b.type === 'tool_result') {
-            const resultStr = typeof b.content === 'string' ? b.content : JSON.stringify(b.content);
-            // Truncate long tool results
-            parts.push(`[Tool result: ${resultStr.slice(0, 500)}${resultStr.length > 500 ? '...' : ''}]`);
-          }
+          // Skip tool_use and tool_result — they were already executed
         }
-        content = parts.join('\n');
+        content = parts.length > 0 ? parts.join('\n') : '(assistant used tools)';
       } catch {
         // Not JSON, use as-is
       }

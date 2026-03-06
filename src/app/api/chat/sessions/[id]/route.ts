@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { deleteSession, getSession, updateSessionWorkingDirectory, updateSessionTitle, updateSessionMode, updateSessionModel, updateSessionProviderId, clearSessionMessages } from '@/lib/db';
+import { deleteSession, getSession, updateSessionWorkingDirectory, updateSessionTitle, updateSessionMode, updateSessionModel, updateSessionProviderId, clearSessionMessages, updateSdkSessionId } from '@/lib/db';
 
 export async function GET(
   _request: NextRequest,
@@ -45,6 +45,9 @@ export async function PATCH(
     }
     if (body.provider_id !== undefined) {
       updateSessionProviderId(id, body.provider_id);
+    }
+    if (body.sdk_session_id !== undefined) {
+      updateSdkSessionId(id, body.sdk_session_id);
     }
     if (body.clear_messages) {
       clearSessionMessages(id);

@@ -392,6 +392,12 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
         stream.toolResultsArray = [];
         stream.toolOutputAccumulated = '';
         emit(stream, 'completed');
+        // Clear stale SDK session so next message starts fresh
+        fetch(`/api/chat/sessions/${encodeURIComponent(stream.sessionId)}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ sdk_session_id: '' }),
+        }).catch(() => {});
         scheduleGC(stream);
       } else if (stream.toolTimeoutInfo) {
         // Tool timeout — auto-retry
