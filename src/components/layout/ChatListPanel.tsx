@@ -16,7 +16,7 @@ import {
   FolderOpenIcon,
   AiUserIcon,
 } from "@hugeicons/core-free-icons";
-import { Columns2, X } from "lucide-react";
+import { AlertTriangle, Columns2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -117,7 +117,7 @@ function groupSessionsByProject(sessions: ChatSession[]): ProjectGroup[] {
 export function ChatListPanel({ open, width }: ChatListPanelProps) {
   const pathname = usePathname();
   const router = useRouter();
-  const { streamingSessionId, pendingApprovalSessionId, activeStreamingSessions, pendingApprovalSessionIds, workingDirectory, sessionId: currentSessionId } = usePanel();
+  const { streamingSessionId, pendingApprovalSessionId, activeStreamingSessions, pendingApprovalSessionIds, workingDirectory } = usePanel();
   const { splitSessions, isSplitActive, activeColumnId, addToSplit, removeFromSplit, setActiveColumn, isInSplit } = useSplit();
   const { t } = useTranslation();
   const { isElectron, openNativePicker } = useNativeFolderPicker();
@@ -132,6 +132,7 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
   );
   const [hoveredFolder, setHoveredFolder] = useState<string | null>(null);
   const [creatingChat, setCreatingChat] = useState(false);
+  const [missingDirs, setMissingDirs] = useState<Set<string>>(new Set());
   const { workspacePath } = useAssistantWorkspace();
 
   /** Read current model + provider_id from localStorage for new session creation */
@@ -211,7 +212,7 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
     } finally {
       setCreatingChat(false);
     }
-  }, [router, workingDirectory, openFolderPicker]);
+  }, [router, workingDirectory, openFolderPicker, getCurrentModelAndProvider]);
 
   const toggleProject = useCallback((wd: string) => {
     setCollapsedProjects((prev) => {
@@ -329,6 +330,88 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
       // Silently fail
     }
   };
+
+  const uniqueDirsKey = useMemo(
+    () =>
+      JSON.stringify(
+        [...new Set(sessions.map((session) => session.working_directory).filter(Boolean))].sort()
+      ),
+    [sessions]
+  );
+  const dirCheckTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mountedRef = useRef(true);
+  const dirCheckAbortRef = useRef<AbortController | null>(null);
+  const dirCheckRequestIdRef = useRef(0);
+
+  const checkMissingDirs = useCallback(() => {
+    const dirs: string[] = JSON.parse(uniqueDirsKey);
+    if (dirs.length === 0) {
+      if (mountedRef.current) {
+        setMissingDirs(new Set());
+      }
+      return;
+    }
+
+    if (dirCheckTimerRef.current) {
+      clearTimeout(dirCheckTimerRef.current);
+    }
+    dirCheckAbortRef.current?.abort();
+    const requestId = dirCheckRequestIdRef.current + 1;
+    dirCheckRequestIdRef.current = requestId;
+
+    dirCheckTimerRef.current = setTimeout(async () => {
+      const abortController = new AbortController();
+      dirCheckAbortRef.current = abortController;
+
+      let missing = new Set<string>();
+      try {
+        const res = await fetch("/api/files/exists", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ dirs }),
+          signal: abortController.signal,
+        });
+
+        if (res.ok) {
+          const data = await res.json();
+          missing = new Set<string>(Array.isArray(data.missingDirs) ? data.missingDirs : []);
+        } else {
+          missing = new Set(dirs);
+        }
+      } catch (error) {
+        if ((error as Error).name === "AbortError") {
+          return;
+        }
+        missing = new Set(dirs);
+      }
+
+      if (mountedRef.current && requestId === dirCheckRequestIdRef.current) {
+        setMissingDirs(missing);
+      }
+    }, 1000);
+  }, [uniqueDirsKey]);
+
+  useEffect(() => {
+    mountedRef.current = true;
+    checkMissingDirs();
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        checkMissingDirs();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      mountedRef.current = false;
+      if (dirCheckTimerRef.current) {
+        clearTimeout(dirCheckTimerRef.current);
+      }
+      dirCheckAbortRef.current?.abort();
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
+  }, [checkMissingDirs]);
 
   const isSearching = searchQuery.length > 0;
 
@@ -568,6 +651,23 @@ export function ChatListPanel({ open, width }: ChatListPanelProps) {
                     </span>
                     {workspacePath && group.workingDirectory === workspacePath && (
                       <HugeiconsIcon icon={AiUserIcon} className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                    )}
+                    {group.workingDirectory && missingDirs.has(group.workingDirectory) && (
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <span
+                            tabIndex={0}
+                            aria-label={t("chatList.dirNotFound")}
+                            className="flex h-3.5 w-3.5 shrink-0 items-center justify-center text-amber-500"
+                          >
+                            <AlertTriangle className="h-3.5 w-3.5" />
+                            <span className="sr-only">{t("chatList.dirNotFound")}</span>
+                          </span>
+                        </TooltipTrigger>
+                        <TooltipContent side="right">
+                          <p className="text-xs">{t("chatList.dirNotFound")}</p>
+                        </TooltipContent>
+                      </Tooltip>
                     )}
                     {/* New chat in project button (on hover) */}
                     {group.workingDirectory !== "" && (

@@ -25,6 +25,7 @@ const en = {
   'chatList.noSessions': 'No sessions yet',
   'chatList.importFromCli': 'Import from Claude Code',
   'chatList.addProjectFolder': 'Add project folder',
+  'chatList.dirNotFound': 'Project directory no longer exists',
   'chatList.threads': 'Threads',
 
   // ── Message list ────────────────────────────────────────────
