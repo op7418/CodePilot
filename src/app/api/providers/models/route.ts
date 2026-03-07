@@ -1,4 +1,7 @@
 import { NextResponse } from 'next/server';
+import fs from 'fs';
+import path from 'path';
+import os from 'os';
 import { getAllProviders, getDefaultProviderId } from '@/lib/db';
 import type { ErrorResponse, ProviderModelGroup } from '@/types';
 
@@ -63,6 +66,24 @@ const PROVIDER_MODEL_LABELS: Record<string, { value: string; label: string }[]> 
 };
 
 /**
+ * Read ANTHROPIC_MODEL from ~/.claude/settings.json (top-level or under "env" key).
+ * Returns null if not configured.
+ */
+function getClaudeSettingsModel(): string | null {
+  try {
+    const settingsPath = path.join(os.homedir(), '.claude', 'settings.json');
+    if (!fs.existsSync(settingsPath)) return null;
+    const settings = JSON.parse(fs.readFileSync(settingsPath, 'utf-8')) as Record<string, unknown>;
+    const model =
+      (settings.ANTHROPIC_MODEL as string | undefined) ||
+      ((settings.env as Record<string, unknown> | undefined)?.ANTHROPIC_MODEL as string | undefined);
+    return model || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * Deduplicate models: if multiple aliases map to the same label, keep only the first one.
  */
 function deduplicateModels(models: { value: string; label: string }[]): { value: string; label: string }[] {
@@ -85,11 +106,17 @@ export async function GET() {
     // Always show the built-in Claude Code provider group.
     // Claude Code CLI stores credentials in ~/.claude/ (via `claude login`),
     // which the SDK subprocess can read — even without ANTHROPIC_API_KEY in env.
+    // If the user has configured ANTHROPIC_MODEL in ~/.claude/settings.json,
+    // surface that model instead of the default Claude aliases.
+    const claudeSettingsModel = getClaudeSettingsModel();
+    const envModels = claudeSettingsModel
+      ? [{ value: claudeSettingsModel, label: claudeSettingsModel }]
+      : DEFAULT_MODELS;
     groups.push({
       provider_id: 'env',
       provider_name: 'Claude Code',
       provider_type: 'anthropic',
-      models: DEFAULT_MODELS,
+      models: envModels,
     });
 
     // Provider types that are not LLMs (e.g. image generation) — skip in chat model selector
