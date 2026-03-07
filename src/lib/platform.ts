@@ -13,7 +13,7 @@ export const isMac = process.platform === 'darwin';
  * Whether the given binary path requires shell execution.
  * On Windows, .cmd/.bat files cannot be executed directly by execFileSync.
  */
-function needsShell(binPath: string): boolean {
+export function needsShell(binPath: string): boolean {
   return isWindows && /\.(cmd|bat)$/i.test(binPath);
 }
 
