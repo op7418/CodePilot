@@ -14,7 +14,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import { HugeiconsIcon } from "@hugeicons/react";
-import { ReloadIcon, Loading02Icon } from "@hugeicons/core-free-icons";
+import { ReloadIcon, Loading02Icon, CheckmarkCircle02Icon, Link01Icon } from "@hugeicons/core-free-icons";
+import { Input } from "@/components/ui/input";
 import { useUpdate } from "@/hooks/useUpdate";
 import { useTranslation } from "@/hooks/useTranslation";
 import { SUPPORTED_LOCALES, type Locale } from "@/i18n";
@@ -121,6 +122,10 @@ export function GeneralSection() {
   const [skipPermissions, setSkipPermissions] = useState(false);
   const [showSkipPermWarning, setShowSkipPermWarning] = useState(false);
   const [skipPermSaving, setSkipPermSaving] = useState(false);
+  const [githubToken, setGithubToken] = useState("");
+  const [githubSaving, setGithubSaving] = useState(false);
+  const [githubVerifying, setGithubVerifying] = useState(false);
+  const [githubVerified, setGithubVerified] = useState(false);
   const { t, locale, setLocale } = useTranslation();
 
   const fetchAppSettings = useCallback(async () => {
@@ -136,9 +141,27 @@ export function GeneralSection() {
     }
   }, []);
 
+  const fetchGithubSettings = useCallback(async () => {
+    try {
+      const res = await fetch("/api/settings");
+      if (res.ok) {
+        const data = await res.json();
+        const token = data.settings?.githubToken || "";
+        setGithubToken(token);
+        // If token exists, mark as verified
+        if (token) {
+          setGithubVerified(true);
+        }
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
   useEffect(() => {
     fetchAppSettings();
-  }, [fetchAppSettings]);
+    fetchGithubSettings();
+  }, [fetchAppSettings, fetchGithubSettings]);
 
   const handleSkipPermToggle = (checked: boolean) => {
     if (checked) {
@@ -166,6 +189,50 @@ export function GeneralSection() {
     } finally {
       setSkipPermSaving(false);
       setShowSkipPermWarning(false);
+    }
+  };
+
+  const saveGithubToken = async (token: string) => {
+    setGithubSaving(true);
+    try {
+      const res = await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: { githubToken: token },
+        }),
+      });
+      if (res.ok) {
+        setGithubToken(token);
+        setGithubVerified(false); // Reset verified status when token changes
+      }
+    } catch {
+      // ignore
+    } finally {
+      setGithubSaving(false);
+    }
+  };
+
+  const verifyGithubToken = async () => {
+    if (!githubToken) return;
+
+    setGithubVerifying(true);
+    try {
+      const res = await fetch("/api/github/verify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token: githubToken }),
+      });
+      const data = await res.json();
+      if (data.success) {
+        setGithubVerified(true);
+      } else {
+        setGithubVerified(false);
+      }
+    } catch {
+      setGithubVerified(false);
+    } finally {
+      setGithubVerifying(false);
     }
   };
 
@@ -213,6 +280,61 @@ export function GeneralSection() {
               ))}
             </SelectContent>
           </Select>
+        </div>
+      </div>
+
+      {/* GitHub Token */}
+      <div className={`rounded-lg border p-4 transition-shadow hover:shadow-sm ${githubVerified ? "border-green-500/50 bg-green-500/5" : "border-border/50"}`}>
+        <div className="flex items-start justify-between gap-4">
+          <div className="flex-1">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-medium">{t('settings.github')}</h2>
+              {githubVerified && (
+                <span className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+                  <HugeiconsIcon icon={CheckmarkCircle02Icon} className="h-3 w-3" />
+                  {t('settings.githubConfigured')}
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t('settings.githubTokenHint')}
+            </p>
+            <div className="flex items-center gap-2 mt-3">
+              <Input
+                value={githubToken}
+                onChange={(e) => {
+                  setGithubToken(e.target.value);
+                  setGithubVerified(false);
+                }}
+                placeholder={t('settings.githubTokenPlaceholder')}
+                disabled={githubSaving || githubVerifying}
+                className="flex-1"
+                type="password"
+              />
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={verifyGithubToken}
+                disabled={!githubToken || githubVerifying}
+                className="shrink-0"
+              >
+                {githubVerifying ? (
+                  <HugeiconsIcon icon={Loading02Icon} className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  t('settings.githubVerify') || 'Verify'
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => window.open("https://github.com/settings/tokens/new?scopes=repo,read:user", "_blank")}
+                className="shrink-0"
+              >
+                <HugeiconsIcon icon={Link01Icon} className="h-3.5 w-3.5 mr-1" />
+                {t('settings.githubHowToSetup')}
+              </Button>
+            </div>
+          </div>
         </div>
       </div>
 

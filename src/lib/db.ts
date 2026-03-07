@@ -274,6 +274,27 @@ function initDb(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE INDEX IF NOT EXISTS idx_perm_links_request ON channel_permission_links(permission_request_id);
+
+    -- Git: repositories registry
+    CREATE TABLE IF NOT EXISTS git_repositories (
+      id TEXT PRIMARY KEY,
+      path TEXT NOT NULL UNIQUE,
+      name TEXT NOT NULL,
+      scan_root TEXT,
+      is_default INTEGER NOT NULL DEFAULT 0,
+      last_opened_at TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE INDEX IF NOT EXISTS idx_git_repos_path ON git_repositories(path);
+    CREATE INDEX IF NOT EXISTS idx_git_repos_default ON git_repositories(is_default);
+
+    -- Git: scan root directories
+    CREATE TABLE IF NOT EXISTS git_scan_roots (
+      id TEXT PRIMARY KEY,
+      path TEXT NOT NULL UNIQUE,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
   `);
 
   // Run migrations for existing databases

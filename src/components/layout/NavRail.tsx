@@ -14,6 +14,7 @@ import {
   Wifi01Icon,
   Moon02Icon,
   Sun02Icon,
+  GitBranchIcon,
 } from "@hugeicons/core-free-icons";
 import { Button } from "@/components/ui/button";
 import {
@@ -38,6 +39,7 @@ const navItems = [
   { href: "/chat", label: "Chats", icon: Message02Icon },
   { href: "/skills", label: "Skills", icon: ZapIcon },
   { href: "/mcp", label: "MCP", icon: Plug01Icon },
+  { href: "/git", label: "Git", icon: GitBranchIcon },
   { href: "/gallery", label: "Gallery", icon: Image01Icon },
   { href: "/bridge", label: "Bridge", icon: Wifi01Icon },
   { href: "/settings", label: "Settings", icon: Settings02Icon },
@@ -52,6 +54,7 @@ export function NavRail({ onToggleChatList, hasUpdate, readyToInstall, skipPermi
     'Chats': 'nav.chats',
     'Skills': 'extensions.skills',
     'MCP': 'extensions.mcpServers',
+    'Git': 'git.title',
     'Gallery': 'gallery.title',
     'Bridge': 'nav.bridge',
     'Settings': 'nav.settings',

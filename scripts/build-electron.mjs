@@ -27,10 +27,11 @@ async function buildElectron() {
   const shared = {
     bundle: true,
     platform: 'node',
-    target: 'node18',
+    target: 'node22',
     external: ['electron'],
     sourcemap: true,
     minify: false,
+    format: 'cjs',
   };
 
   await build({
