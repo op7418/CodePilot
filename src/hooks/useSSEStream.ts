@@ -1,5 +1,23 @@
 import { useRef, useCallback } from 'react';
 import type { SSEEvent, TokenUsage, PermissionRequestEvent } from '@/types';
+import { translate, detectLocale, type TranslationKey } from '@/i18n';
+
+export type TranslationFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
+
+export function formatSSEError(eventData: string, t?: TranslationFn): string {
+  try {
+    const parsed = JSON.parse(eventData);
+    if (parsed.error_code === 'WORKING_DIR_NOT_FOUND') {
+      const translator = t ?? ((key: TranslationKey, params?: Record<string, string | number>) =>
+        translate(detectLocale(), key, params));
+      return translator('error.workingDirNotFound', { dir: parsed.working_directory });
+    }
+  } catch {
+    // ignore
+  }
+
+  return eventData;
+}
 
 interface ToolUseInfo {
   id: string;
@@ -36,6 +54,7 @@ function handleSSEEvent(
   event: SSEEvent,
   accumulated: string,
   callbacks: SSECallbacks,
+  t?: TranslationFn,
 ): string {
   switch (event.type) {
     case 'text': {
@@ -153,7 +172,7 @@ function handleSSEEvent(
     }
 
     case 'error': {
-      const next = accumulated + '\n\n**Error:** ' + event.data;
+      const next = accumulated + '\n\n**Error:** ' + formatSSEError(event.data, t);
       callbacks.onError(next);
       return next;
     }
@@ -174,6 +193,7 @@ function handleSSEEvent(
 export async function consumeSSEStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   callbacks: SSECallbacks,
+  t?: TranslationFn,
 ): Promise<{ accumulated: string; tokenUsage: TokenUsage | null }> {
   const decoder = new TextDecoder();
   let buffer = '';
@@ -201,7 +221,7 @@ export async function consumeSSEStream(
 
       try {
         const event: SSEEvent = JSON.parse(line.slice(6));
-        accumulated = handleSSEEvent(event, accumulated, wrappedCallbacks);
+        accumulated = handleSSEEvent(event, accumulated, wrappedCallbacks, t);
       } catch {
         // skip malformed SSE lines
       }
@@ -222,6 +242,7 @@ export function useSSEStream() {
     async (
       reader: ReadableStreamDefaultReader<Uint8Array>,
       callbacks: SSECallbacks,
+      t?: TranslationFn,
     ) => {
       callbacksRef.current = callbacks;
 
@@ -242,7 +263,7 @@ export function useSSEStream() {
         onError: (a) => callbacksRef.current?.onError(a),
       };
 
-      return consumeSSEStream(reader, proxied);
+      return consumeSSEStream(reader, proxied, t);
     },
     [],
   );

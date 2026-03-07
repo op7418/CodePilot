@@ -6,6 +6,8 @@ import type { Message, SSEEvent, SessionResponse, TokenUsage, PermissionRequestE
 import { MessageList } from '@/components/chat/MessageList';
 import { MessageInput } from '@/components/chat/MessageInput';
 import { usePanel } from '@/hooks/usePanel';
+import { formatSSEError } from '@/hooks/useSSEStream';
+import { useTranslation } from '@/hooks/useTranslation';
 
 interface ToolUseInfo {
   id: string;
@@ -20,14 +22,15 @@ interface ToolResultInfo {
 
 export default function NewChatPage() {
   const router = useRouter();
-  const { setWorkingDirectory, setPanelOpen, setPendingApprovalSessionId } = usePanel();
+  const { setPendingApprovalSessionId } = usePanel();
+  const { t } = useTranslation();
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [toolUses, setToolUses] = useState<ToolUseInfo[]>([]);
   const [toolResults, setToolResults] = useState<ToolResultInfo[]>([]);
   const [statusText, setStatusText] = useState<string | undefined>();
-  const [workingDir, setWorkingDir] = useState('');
+  const [workingDir] = useState('');
   const [mode, setMode] = useState('code');
   const [currentModel, setCurrentModel] = useState('sonnet');
   const [currentProviderId, setCurrentProviderId] = useState('');
@@ -252,7 +255,7 @@ export default function NewChatPage() {
                   break;
                 }
                 case 'error': {
-                  accumulated += '\n\n**Error:** ' + event.data;
+                  accumulated += '\n\n**Error:** ' + formatSSEError(event.data, t);
                   setStreamingContent(accumulated);
                   break;
                 }
@@ -311,7 +314,7 @@ export default function NewChatPage() {
         abortControllerRef.current = null;
       }
     },
-    [isStreaming, router, workingDir, mode, currentModel, currentProviderId, setPendingApprovalSessionId]
+    [isStreaming, router, workingDir, mode, currentModel, currentProviderId, setPendingApprovalSessionId, t]
   );
 
   const handleCommand = useCallback((command: string) => {

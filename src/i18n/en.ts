@@ -331,6 +331,7 @@ const en = {
   'error.hideDetails': 'Hide details',
   'error.tryAgain': 'Try Again',
   'error.reloadApp': 'Reload App',
+  'error.workingDirNotFound': 'Project directory not found: {dir}',
 
   // ── Update ─────────────────────────────────────────────────
   'update.newVersionAvailable': 'New Version Available',

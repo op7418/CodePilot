@@ -5,6 +5,8 @@ export type { TranslationKey };
 
 export type Locale = 'en' | 'zh';
 
+let currentLocale: Locale | null = null;
+
 export const SUPPORTED_LOCALES: { value: Locale; label: string }[] = [
   { value: 'en', label: 'English' },
   { value: 'zh', label: '中文' },
@@ -14,6 +16,16 @@ const dictionaries: Record<Locale, Record<TranslationKey, string>> = {
   en,
   zh,
 };
+
+export function setCurrentLocale(locale: Locale): void {
+  currentLocale = locale;
+}
+
+export function detectLocale(): Locale {
+  if (currentLocale) return currentLocale;
+  if (typeof navigator !== 'undefined' && navigator.language.startsWith('zh')) return 'zh';
+  return 'en';
+}
 
 /**
  * Translate a key with optional parameter interpolation.
