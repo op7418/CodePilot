@@ -358,6 +358,9 @@ export class TelegramAdapter extends BaseChannelAdapter {
   }
 
   private enqueue(msg: InboundMessage): void {
+    // ── [DIAG-4] Message enqueued ────────────────────────────────────────
+    console.log(`[telegram-adapter][DIAG] 📥 Enqueued messageId=${msg.messageId} chatId=${msg.address.chatId} text="${msg.text.slice(0, 50)}" | waiters=${this.waiters.length} queue=${this.queue.length}`);
+    // ─────────────────────────────────────────────────────────────────────
     const waiter = this.waiters.shift();
     if (waiter) {
       waiter(msg);
@@ -494,6 +497,13 @@ export class TelegramAdapter extends BaseChannelAdapter {
           continue;
         }
         const updates: TelegramUpdate[] = data.result;
+
+        // ── [DIAG-1] Log every getUpdates batch (even empty) ──────────────
+        if (updates.length > 0) {
+          console.log(`[telegram-adapter][DIAG] ✅ Received ${updates.length} update(s) from Telegram. update_ids: [${updates.map(u => u.update_id).join(', ')}]`);
+        }
+        // ──────────────────────────────────────────────────────────────────
+
         for (const update of updates) {
           // Advance fetchOffset so the next getUpdates call skips this update
           if (update.update_id >= fetchOffset) {
@@ -502,6 +512,7 @@ export class TelegramAdapter extends BaseChannelAdapter {
 
           // Idempotency: skip updates already processed (dedup on restart)
           if (this.recentUpdateIds.has(update.update_id)) {
+            console.log(`[telegram-adapter][DIAG] ⏭️  update_id=${update.update_id} already processed (dedup), skipping`);
             this.markUpdateProcessed(update.update_id);
             continue;
           }
@@ -511,8 +522,13 @@ export class TelegramAdapter extends BaseChannelAdapter {
             const chatId = cb.message?.chat.id ? String(cb.message.chat.id) : '';
             const userId = String(cb.from.id);
 
+            // ── [DIAG-2] Callback auth check ─────────────────────────────
+            console.log(`[telegram-adapter][DIAG] 🔘 Callback from userId=${userId} chatId=${chatId} | authorized=${this.isAuthorized(userId, chatId)}`);
+            // ─────────────────────────────────────────────────────────────
+
             if (!this.isAuthorized(userId, chatId)) {
               console.warn('[telegram-adapter] Unauthorized callback from userId:', userId, 'chatId:', chatId);
+              // Silently skip unauthorized callbacks — no need to reply to button presses from unknown users
               this.markUpdateProcessed(update.update_id);
               continue;
             }
@@ -543,8 +559,24 @@ export class TelegramAdapter extends BaseChannelAdapter {
             const userId = m.from ? String(m.from.id) : chatId;
             const displayName = m.from?.username || m.from?.first_name || chatId;
 
-            if (!this.isAuthorized(userId, chatId)) {
+            // ── [DIAG-3] Message auth check ──────────────────────────────
+            const authorized = this.isAuthorized(userId, chatId);
+            console.log(`[telegram-adapter][DIAG] 📨 Message from userId=${userId} chatId=${chatId} text="${(m.text ?? m.caption ?? '').slice(0, 50)}" | authorized=${authorized}`);
+            // ─────────────────────────────────────────────────────────────
+
+            if (!authorized) {
               console.warn('[telegram-adapter] Unauthorized message from userId:', userId, 'chatId:', chatId);
+              // Send explicit rejection notice instead of silent drop.
+              // This prevents the "message black hole" symptom where the user
+              // sends a message and receives zero feedback.
+              // Note: `token` is already declared at the top of this try-block — no re-declaration needed.
+              if (token) {
+                callTelegramApi(token, 'sendMessage', {
+                  chat_id: chatId,
+                  text: '⛔ Unauthorized: your user ID is not in the Bridge allowed list.\n\nPlease add your Telegram user ID to the "Allowed Users" field in CodePilot → Bridge → Telegram settings.',
+                  disable_web_page_preview: true,
+                }).catch(() => {});
+              }
               this.markUpdateProcessed(update.update_id);
               continue;
             }

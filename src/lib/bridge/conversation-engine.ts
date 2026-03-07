@@ -74,10 +74,15 @@ export async function processMessage(
 ): Promise<ConversationResult> {
   const sessionId = binding.codepilotSessionId;
 
+  // ── [DIAG-6] processMessage entry ───────────────────────────────────────
+  console.log(`[conversation-engine][DIAG] 🤖 processMessage called | sessionId=${sessionId.slice(0, 8)} channel=${binding.channelType} text="${text.slice(0, 60)}" hasFiles=${!!(files && files.length > 0)}`);
+  // ─────────────────────────────────────────────────────────────────────────
+
   // Acquire session lock
   const lockId = crypto.randomBytes(8).toString('hex');
   const lockAcquired = acquireSessionLock(sessionId, lockId, `bridge-${binding.channelType}`, 600);
   if (!lockAcquired) {
+    console.warn(`[conversation-engine][DIAG] ⛔ Session lock busy for sessionId=${sessionId.slice(0, 8)}`);
     return {
       responseText: '',
       tokenUsage: null,

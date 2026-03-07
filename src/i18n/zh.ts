@@ -272,6 +272,16 @@ const zh: Record<TranslationKey, string> = {
   'connection.connected': '已连接',
   'connection.disconnected': '未连接',
   'connection.checking': '检测中',
+  'connection.connectedToProvider': '已连接 · {provider}',
+  'connection.connectedToProviderTitle': '已连接到 {provider}',
+  'connection.usingCustomProvider': '使用自定义 API 服务商 — 无需 Claude Code CLI。',
+  'connection.cliRunning': 'Claude Code CLI v{version} 正在运行。',
+  'connection.cliRequired': '需要安装 Claude Code CLI 才能使用本应用。',
+  'connection.customProviderHint': '自定义 API 服务商 · 无需 Claude CLI',
+  'connection.active': '活跃',
+  'connection.notDetected': '未检测到',
+  'connection.authenticate': '身份验证',
+  'connection.verifyInstallation': '验证安装',
 
   // ── Install wizard ──────────────────────────────────────────
   'install.title': '安装 Claude Code',

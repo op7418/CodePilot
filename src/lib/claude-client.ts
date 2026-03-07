@@ -22,6 +22,7 @@ import { registerConversation, unregisterConversation } from './conversation-reg
 import { getSetting, getActiveProvider, updateSdkSessionId, createPermissionRequest } from './db';
 import { findClaudeBinary, findGitBash, getExpandedPath } from './platform';
 import { notifyPermissionRequest, notifyGeneric } from './telegram-bot';
+import { PROVIDER_MODEL_RESOLUTION } from './provider-models';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -31,7 +32,7 @@ import path from 'path';
  * Removes null bytes and control characters that cause spawn EINVAL.
  */
 function sanitizeEnvValue(value: string): string {
-  // eslint-disable-next-line no-control-regex
+   
   return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 }
 
@@ -265,6 +266,248 @@ function buildPromptWithHistory(
   return lines.join('\n');
 }
 
+/**
+ * Stream directly from a non-anthropic provider's Anthropic-compatible API.
+ * Bypasses the Claude Code CLI subprocess entirely.
+ * Used when provider_type !== 'anthropic' (e.g. moonshot, custom, openrouter).
+ *
+ * The provider must expose an Anthropic-compatible /v1/messages endpoint.
+ * Most third-party LLM gateways (Moonshot, OpenRouter, etc.) support this format.
+ * 
+ * ⚠️ **LIMITATIONS:**
+ * - This direct API path does NOT support Tool Use (file operations, command execution, etc.)
+ * - Only supports pure text interaction with vision (image) support
+ * - No MCP server integration
+ * - No CLAUDE.md or project context awareness
+ * 
+ * For full tool support, use an anthropic provider which routes through Claude Code CLI.
+ */
+async function streamDirectFromProvider(
+  controller: ReadableStreamDefaultController<string>,
+  options: ClaudeStreamOptions,
+  provider: ApiProvider,
+): Promise<void> {
+  const { prompt, sessionId, model, systemPrompt, conversationHistory, abortController, files } = options;
+
+  // Build messages array from conversation history + current prompt
+  const messages: Array<{ role: 'user' | 'assistant'; content: unknown }> = [];
+  if (conversationHistory && conversationHistory.length > 0) {
+    for (const msg of conversationHistory) {
+      // Summarize tool-call JSON blocks to plain text for cross-provider compatibility
+      let content: string = msg.content;
+      if (msg.role === 'assistant' && content.startsWith('[')) {
+        try {
+          const blocks = JSON.parse(content) as Array<{ type: string; text?: string; name?: string }>;
+          content = blocks
+            .map(b => b.type === 'text' && b.text ? b.text : b.type === 'tool_use' ? `[Used tool: ${b.name}]` : '')
+            .filter(Boolean)
+            .join('\n');
+        } catch { /* use raw content */ }
+      }
+      if (content.trim()) {
+        messages.push({ role: msg.role, content });
+      }
+    }
+  }
+
+  // Build user message content — embed image attachments as vision content blocks
+  const imageFiles = files ? files.filter(f => isImageFile(f.type)) : [];
+  if (imageFiles.length > 0) {
+    const contentBlocks: Array<unknown> = imageFiles.map(img => ({
+      type: 'image',
+      source: { type: 'base64', media_type: img.type || 'image/png', data: img.data },
+    }));
+    contentBlocks.push({ type: 'text', text: prompt });
+    messages.push({ role: 'user', content: contentBlocks });
+  } else {
+    messages.push({ role: 'user', content: prompt });
+  }
+
+  const baseUrl = (provider.base_url || 'https://api.anthropic.com').replace(/\/$/, '');
+  const apiKey = provider.api_key;
+
+  // Resolve the actual API model name. Priority order:
+  // 1. extra_env.ANTHROPIC_MODEL — explicit user override (highest priority)
+  // 2. Alias resolution map — converts CodePilot short aliases (sonnet/opus/haiku)
+  //    to the real model name for this provider's base_url.
+  //    This handles legacy model values persisted in localStorage/DB before PROVIDER_MODEL_LABELS
+  //    was updated to use actual model names as values.
+  // 3. Model value passed from UI — used as-is if it's already a real model name.
+
+  const CODEPILOT_ALIASES = new Set(['sonnet', 'opus', 'haiku']);
+  let effectiveModel = model || '';
+
+  // Step 1: extra_env.ANTHROPIC_MODEL override
+  try {
+    const extraEnv = JSON.parse(provider.extra_env || '{}') as Record<string, string>;
+    if (extraEnv.ANTHROPIC_MODEL && typeof extraEnv.ANTHROPIC_MODEL === 'string') {
+      effectiveModel = extraEnv.ANTHROPIC_MODEL;
+      console.log(`[claude-client] Using ANTHROPIC_MODEL from extra_env: ${effectiveModel}`);
+    }
+  } catch { /* ignore malformed extra_env */ }
+
+  // Step 2: resolve CodePilot aliases to real model names using the resolution map
+  if (CODEPILOT_ALIASES.has(effectiveModel)) {
+    const aliasMap = PROVIDER_MODEL_RESOLUTION[baseUrl];
+    if (aliasMap?.[effectiveModel]) {
+      const resolved = aliasMap[effectiveModel];
+      console.log(`[claude-client] Resolved model alias "${effectiveModel}" → "${resolved}" for ${baseUrl}`);
+      effectiveModel = resolved;
+    } else {
+      console.warn(
+        `[claude-client] Model "${effectiveModel}" is a CodePilot alias with no resolution for "${baseUrl}". ` +
+        `Set ANTHROPIC_MODEL in the provider's extra_env to specify the correct model name.`
+      );
+      // Keep alias as-is — the provider's error message will be informative
+    }
+  }
+
+  // Step 3: last-resort fallback if still empty.
+  // For known third-party providers (Kimi, GLM, MiniMax, etc.), resolve to their
+  // 'sonnet' equivalent from the resolution map rather than falling back to a raw
+  // Anthropic model name (which would cause a 400 error on non-Anthropic endpoints).
+  // This matters for Bridge sessions where bridge_default_model may be unset.
+  if (!effectiveModel) {
+    const aliasMap = PROVIDER_MODEL_RESOLUTION[baseUrl];
+    const providerDefault = aliasMap?.['sonnet'];
+    if (providerDefault) {
+      console.log(`[claude-client] No model configured, using provider default for "${baseUrl}": ${providerDefault}`);
+      effectiveModel = providerDefault;
+    } else {
+      effectiveModel = 'claude-3-5-sonnet-20241022';
+    }
+  }
+
+  // Determine max_tokens for the request.
+  // Priority: extra_env.MAX_TOKENS > provider default (8192).
+  // Some providers support larger context (e.g., GLM-5: 128K, Kimi: 200K),
+  // but we use a conservative default. Users can override via extra_env.
+  let maxTokens = 8192;
+  try {
+    const extraEnv = JSON.parse(provider.extra_env || '{}');
+    if (extraEnv.MAX_TOKENS && typeof extraEnv.MAX_TOKENS === 'number' && extraEnv.MAX_TOKENS > 0) {
+      maxTokens = extraEnv.MAX_TOKENS;
+      console.log(`[claude-client] Using MAX_TOKENS from extra_env: ${maxTokens}`);
+    }
+  } catch { /* ignore malformed extra_env */ }
+
+  const requestBody: Record<string, unknown> = {
+    model: effectiveModel,
+    max_tokens: maxTokens,
+    stream: true,
+    messages,
+  };
+  if (systemPrompt) {
+    requestBody.system = systemPrompt;
+  }
+
+  // Emit an init-style status event so the frontend shows the model name
+  controller.enqueue(formatSSE({
+    type: 'status',
+    data: JSON.stringify({
+      session_id: `direct-${sessionId}`,
+      model: effectiveModel,
+    }),
+  }));
+
+  // ── [API-REQ] Log exact model name and endpoint before sending ──────────
+  console.log(`[claude-client][API-REQ] Sending request to model: "${effectiveModel}" | endpoint: ${baseUrl}/v1/messages | messages: ${messages.length}`);
+  // ─────────────────────────────────────────────────────────────────────────
+
+  const response = await fetch(`${baseUrl}/v1/messages`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-api-key': apiKey,
+      'anthropic-version': '2023-06-01',
+      Authorization: `Bearer ${apiKey}`,
+    },
+    body: JSON.stringify(requestBody),
+    signal: abortController?.signal,
+  });
+
+  if (!response.ok) {
+    const errText = await response.text().catch(() => `HTTP ${response.status}`);
+    throw new Error(`Provider API error (${response.status}): ${errText}`);
+  }
+
+  const reader = response.body?.getReader();
+  if (!reader) throw new Error('No response body from provider API');
+
+  const decoder = new TextDecoder();
+  let buffer = '';
+  let inputTokens = 0;
+  let outputTokens = 0;
+
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        if (!line.startsWith('data: ')) continue;
+        const rawData = line.slice(6).trim();
+        if (rawData === '[DONE]') continue;
+        try {
+          const event = JSON.parse(rawData) as Record<string, unknown>;
+          switch ((event as { type?: string }).type) {
+            case 'content_block_delta': {
+              const delta = (event as { delta?: { type?: string; text?: string } }).delta;
+              if (delta?.type === 'text_delta' && delta.text) {
+                controller.enqueue(formatSSE({ type: 'text', data: delta.text }));
+              }
+              break;
+            }
+            case 'message_start': {
+              const msg = (event as { message?: { usage?: { input_tokens?: number } } }).message;
+              if (msg?.usage) inputTokens = msg.usage.input_tokens || 0;
+              break;
+            }
+            case 'message_delta': {
+              const usage = (event as { usage?: { output_tokens?: number } }).usage;
+              if (usage) outputTokens = usage.output_tokens || 0;
+              break;
+            }
+            case 'error': {
+              const err = (event as { error?: { message?: string } }).error;
+              throw new Error(err?.message || 'Provider API stream error');
+            }
+          }
+        } catch (parseErr) {
+          if (parseErr instanceof SyntaxError) continue; // skip malformed JSON lines
+          throw parseErr; // re-throw provider error events
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+
+  // Emit final result event with token usage for the UI stats panel
+  const tokenUsage: TokenUsage = {
+    input_tokens: inputTokens,
+    output_tokens: outputTokens,
+    cache_read_input_tokens: 0,
+    cache_creation_input_tokens: 0,
+  };
+  controller.enqueue(formatSSE({
+    type: 'result',
+    data: JSON.stringify({
+      subtype: 'success',
+      is_error: false,
+      num_turns: 1,
+      duration_ms: 0,
+      usage: tokenUsage,
+      session_id: `direct-${sessionId}`,
+    }),
+  }));
+}
+
 export function streamClaude(options: ClaudeStreamOptions): ReadableStream<string> {
   const {
     prompt,
@@ -289,6 +532,22 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
       const activeProvider: ApiProvider | undefined = options.provider ?? getActiveProvider();
 
       try {
+        // ── Non-anthropic provider fast path ────────────────────────────────
+        // When the active provider's type is not 'anthropic', bypass the
+        // Claude Code CLI subprocess entirely and stream directly from the
+        // provider's Anthropic-compatible /v1/messages API endpoint.
+        // This fixes the bug where selecting Moonshot/Kimi (or any custom
+        // provider) still spawned an official Claude CLI process in the
+        // background and showed "Connected to Claude" in the UI.
+        if (activeProvider && activeProvider.provider_type !== 'anthropic') {
+          console.log(`[claude-client] Non-anthropic provider "${activeProvider.name}" (${activeProvider.provider_type}), using direct API path`);
+          await streamDirectFromProvider(controller, options, activeProvider);
+          controller.enqueue(formatSSE({ type: 'done', data: '' }));
+          controller.close();
+          return;
+        }
+        // ── Anthropic provider: use Claude Code CLI via Agent SDK ────────────
+
         // Build env for the Claude Code subprocess.
         // Start with process.env (includes user shell env from Electron's loadUserShellEnv).
         // Then overlay any API config the user set in CodePilot settings (optional).

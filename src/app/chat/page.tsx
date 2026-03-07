@@ -29,8 +29,17 @@ export default function NewChatPage() {
   const [statusText, setStatusText] = useState<string | undefined>();
   const [workingDir, setWorkingDir] = useState('');
   const [mode, setMode] = useState('code');
-  const [currentModel, setCurrentModel] = useState('sonnet');
-  const [currentProviderId, setCurrentProviderId] = useState('');
+  // Restore last-used model/provider from localStorage so the new chat page
+  // behaves consistently with ChatView (where the same pattern is used).
+  // Without this, every new chat page visit reset the provider to '' (empty),
+  // causing the API to fall back to env-var Claude even when the user had
+  // previously selected a third-party provider like Kimi. (Issue #85)
+  const [currentModel, setCurrentModel] = useState(
+    (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-model') : null) || 'sonnet'
+  );
+  const [currentProviderId, setCurrentProviderId] = useState(
+    (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-provider-id') : null) || ''
+  );
   const [pendingPermission, setPendingPermission] = useState<PermissionRequestEvent | null>(null);
   const [permissionResolved, setPermissionResolved] = useState<'allow' | 'deny' | null>(null);
   const [streamingToolOutput, setStreamingToolOutput] = useState('');

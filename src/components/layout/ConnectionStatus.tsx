@@ -17,6 +17,9 @@ import { InstallWizard } from "@/components/layout/InstallWizard";
 interface ClaudeStatus {
   connected: boolean;
   version: string | null;
+  /** Present when a non-anthropic provider is active (Claude CLI not needed) */
+  provider_name?: string;
+  provider_type?: string;
 }
 
 const BASE_INTERVAL = 30_000; // 30s
@@ -143,7 +146,9 @@ export function ConnectionStatus() {
         {status === null
           ? t('connection.checking')
           : connected
-            ? t('connection.connected')
+            ? status.provider_name
+              ? t('connection.connectedToProvider', { provider: status.provider_name })
+              : t('connection.connected')
             : t('connection.disconnected')}
       </button>
 
@@ -151,21 +156,41 @@ export function ConnectionStatus() {
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
             <DialogTitle>
-              {connected ? t('connection.installed') : t('connection.notInstalled')}
+              {status?.provider_name
+                ? t('connection.connectedToProviderTitle', { provider: status.provider_name })
+                : connected ? t('connection.installed') : t('connection.notInstalled')}
             </DialogTitle>
             <DialogDescription>
-              {connected
-                ? `Claude Code CLI v${status?.version} is running and ready.`
-                : "Claude Code CLI is required to use this application."}
+              {status?.provider_name
+                ? t('connection.usingCustomProvider')
+                : connected
+                  ? t('connection.cliRunning', { version: status?.version ?? '' })
+                  : t('connection.cliRequired')}
             </DialogDescription>
           </DialogHeader>
 
-          {connected ? (
+          {status?.provider_name ? (
+            // Non-anthropic custom provider: no Claude CLI needed
             <div className="space-y-3 text-sm">
               <div className="flex items-center gap-3 rounded-lg bg-emerald-500/10 px-4 py-3">
                 <span className="block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
                 <div>
-                  <p className="font-medium text-emerald-700 dark:text-emerald-400">Active</p>
+                  <p className="font-medium text-emerald-700 dark:text-emerald-400">
+                    {status.provider_name}
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    {t('connection.customProviderHint')}
+                  </p>
+                </div>
+              </div>
+            </div>
+          ) : connected ? (
+            // Claude CLI is installed and running
+            <div className="space-y-3 text-sm">
+              <div className="flex items-center gap-3 rounded-lg bg-emerald-500/10 px-4 py-3">
+                <span className="block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
+                <div>
+                  <p className="font-medium text-emerald-700 dark:text-emerald-400">{t('connection.active')}</p>
                   <p className="text-xs text-muted-foreground">{t('connection.version', { version: status?.version ?? '' })}</p>
                 </div>
               </div>
@@ -174,7 +199,7 @@ export function ConnectionStatus() {
             <div className="space-y-4 text-sm">
               <div className="flex items-center gap-3 rounded-lg bg-red-500/10 px-4 py-3">
                 <span className="block h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
-                <p className="font-medium text-red-700 dark:text-red-400">Not detected</p>
+                <p className="font-medium text-red-700 dark:text-red-400">{t('connection.notDetected')}</p>
               </div>
 
               <div>
@@ -185,14 +210,14 @@ export function ConnectionStatus() {
               </div>
 
               <div>
-                <h4 className="font-medium mb-1.5">2. Authenticate</h4>
+                <h4 className="font-medium mb-1.5">2. {t('connection.authenticate')}</h4>
                 <code className="block rounded-md bg-muted px-3 py-2 text-xs">
                   claude login
                 </code>
               </div>
 
               <div>
-                <h4 className="font-medium mb-1.5">3. Verify Installation</h4>
+                <h4 className="font-medium mb-1.5">3. {t('connection.verifyInstallation')}</h4>
                 <code className="block rounded-md bg-muted px-3 py-2 text-xs">
                   claude --version
                 </code>
