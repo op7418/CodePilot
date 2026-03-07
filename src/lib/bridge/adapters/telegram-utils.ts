@@ -5,7 +5,31 @@
  * Extracted from telegram-bot.ts to avoid duplication.
  */
 
+import { ProxyAgent } from 'undici';
+
 const TELEGRAM_API = 'https://api.telegram.org';
+
+/**
+ * Get proxy URL from environment variables.
+ * Supports HTTP_PROXY, HTTPS_PROXY, and ALL_PROXY.
+ */
+export function getProxyUrl(): string | undefined {
+  return process.env.HTTPS_PROXY || process.env.HTTP_PROXY || process.env.ALL_PROXY;
+}
+
+/**
+ * Proxy-enabled fetch for Telegram API calls.
+ * Falls back to native fetch if no proxy is configured.
+ */
+export async function proxyFetch(url: string | URL, init?: RequestInit): Promise<Response> {
+  const proxyUrl = getProxyUrl();
+  if (proxyUrl) {
+    const dispatcher = new ProxyAgent(proxyUrl);
+    // @ts-expect-error - dispatcher is an undici-specific extension not in standard fetch types
+    return fetch(url, { ...init, dispatcher });
+  }
+  return fetch(url, init);
+}
 
 export interface TelegramSendResult {
   ok: boolean;
@@ -41,7 +65,7 @@ export async function callTelegramApi(
 ): Promise<TelegramSendResult> {
   try {
     const url = `${TELEGRAM_API}/bot${botToken}/${method}`;
-    const res = await fetch(url, {
+    const res = await proxyFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(params),
