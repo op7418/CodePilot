@@ -328,6 +328,7 @@ const zh: Record<TranslationKey, string> = {
   'error.hideDetails': '隐藏详情',
   'error.tryAgain': '重试',
   'error.reloadApp': '重新加载',
+  'error.workingDirNotFound': '项目目录不存在：{dir}',
 
   // ── Update ─────────────────────────────────────────────────
   'update.newVersionAvailable': '有新版本可用',

@@ -1,6 +1,5 @@
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type {
-  SDKMessage,
   SDKAssistantMessage,
   SDKUserMessage,
   SDKResultMessage,
@@ -31,7 +30,6 @@ import path from 'path';
  * Removes null bytes and control characters that cause spawn EINVAL.
  */
 function sanitizeEnvValue(value: string): string {
-  // eslint-disable-next-line no-control-regex
   return value.replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, '');
 }
 
@@ -163,19 +161,6 @@ function toSdkMcpConfig(
  */
 function formatSSE(event: SSEEvent): string {
   return `data: ${JSON.stringify(event)}\n\n`;
-}
-
-/**
- * Extract text content from an SDK assistant message
- */
-function extractTextFromMessage(msg: SDKAssistantMessage): string {
-  const parts: string[] = [];
-  for (const block of msg.message.content) {
-    if (block.type === 'text') {
-      parts.push(block.text);
-    }
-  }
-  return parts.join('');
 }
 
 /**
@@ -361,6 +346,20 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           if (!appToken && !sdkEnv.ANTHROPIC_API_KEY && !sdkEnv.ANTHROPIC_AUTH_TOKEN) {
             console.warn('[claude-client] No API key found: no active provider, no legacy settings, and no ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN in environment');
           }
+        }
+
+        if (workingDirectory && !fs.existsSync(workingDirectory)) {
+          controller.enqueue(formatSSE({
+            type: 'error',
+            data: JSON.stringify({
+              error_code: 'WORKING_DIR_NOT_FOUND',
+              message: `Project directory not found: ${workingDirectory}`,
+              working_directory: workingDirectory,
+            }),
+          }));
+          controller.enqueue(formatSSE({ type: 'done', data: '' }));
+          controller.close();
+          return;
         }
 
         // Check if dangerously_skip_permissions is enabled in app settings
@@ -730,7 +729,6 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
 
         registerConversation(sessionId, conversation);
 
-        let lastAssistantText = '';
         let tokenUsage: TokenUsage | null = null;
 
         for await (const message of conversation) {
@@ -742,11 +740,6 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             case 'assistant': {
               const assistantMsg = message as SDKAssistantMessage;
               // Text deltas are handled by stream_event for real-time streaming.
-              // Only track lastAssistantText here and process tool_use blocks.
-              const text = extractTextFromMessage(assistantMsg);
-              if (text) {
-                lastAssistantText = text;
-              }
 
               // Check for tool use blocks
               for (const block of assistantMsg.message.content) {
@@ -906,7 +899,15 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         if (error instanceof Error) {
           const code = (error as NodeJS.ErrnoException).code;
           if (code === 'ENOENT' || rawMessage.includes('ENOENT') || rawMessage.includes('spawn')) {
-            errorMessage = `Claude Code CLI not found. Please ensure Claude Code is installed and available in your PATH.\n\nOriginal error: ${rawMessage}`;
+            if (workingDirectory && !fs.existsSync(workingDirectory)) {
+              errorMessage = JSON.stringify({
+                error_code: 'WORKING_DIR_NOT_FOUND',
+                message: `Project directory not found: ${workingDirectory}`,
+                working_directory: workingDirectory,
+              });
+            } else {
+              errorMessage = `Claude Code CLI not found. Please ensure Claude Code is installed and available in your PATH.\n\nOriginal error: ${rawMessage}`;
+            }
           } else if (rawMessage.includes('exited with code 1') || rawMessage.includes('exit code 1')) {
             const providerHint = activeProvider?.name ? ` (Provider: ${activeProvider.name})` : '';
             const detailHint = extraDetail ? `\n\nDetails: ${extraDetail}` : '';

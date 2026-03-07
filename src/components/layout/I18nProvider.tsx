@@ -1,7 +1,7 @@
 'use client';
 
 import { createContext, useState, useEffect, useCallback, type ReactNode } from 'react';
-import { type Locale, type TranslationKey, translate } from '@/i18n';
+import { type Locale, type TranslationKey, translate, setCurrentLocale } from '@/i18n';
 
 interface I18nContextValue {
   locale: Locale;
@@ -36,6 +36,10 @@ export function I18nProvider({ children }: { children: ReactNode }) {
     }
     loadLocale();
   }, []);
+
+  useEffect(() => {
+    setCurrentLocale(locale);
+  }, [locale]);
 
   const setLocale = useCallback((newLocale: Locale) => {
     setLocaleState(newLocale);
