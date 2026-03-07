@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { cloneRepository, addRepository } from '@/lib/git';
+import { validateGitUrl, validatePath } from '@/lib/git/security';
 import os from 'os';
 import path from 'path';
 import fs from 'fs';
@@ -21,17 +22,11 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Validate URL format
-    const validUrlPatterns = [
-      /^https?:\/\/.+\.git$/i,
-      /^https?:\/\/github\.com\/[^/]+\/[^/]+$/i,
-      /^git@.+\.git$/i,
-    ];
-
-    const isValidUrl = validUrlPatterns.some(pattern => pattern.test(url));
-    if (!isValidUrl) {
+    // Validate URL format and security
+    const urlValidation = validateGitUrl(url);
+    if (!urlValidation.valid) {
       return NextResponse.json(
-        { error: 'Invalid Git repository URL format' },
+        { error: urlValidation.error },
         { status: 400 }
       );
     }
@@ -56,6 +51,16 @@ export async function POST(request: NextRequest) {
           return false;
         }
       }) || homeDir;
+    } else {
+      // Validate user-provided target directory
+      const pathValidation = validatePath(cloneTargetDir);
+      if (!pathValidation.valid) {
+        return NextResponse.json(
+          { error: pathValidation.error },
+          { status: 400 }
+        );
+      }
+      cloneTargetDir = pathValidation.normalized;
     }
 
     // Check if target directory exists
@@ -67,7 +72,7 @@ export async function POST(request: NextRequest) {
     }
 
     // Perform clone
-    const result = await cloneRepository(url, cloneTargetDir, {
+    const result = await cloneRepository(url.trim(), cloneTargetDir, {
       branch,
       depth,
     });

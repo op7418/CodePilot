@@ -19,3 +19,9 @@ export {
   scanAllRoots,
 } from './repo-scanner';
 export type { ScanOptions } from './repo-scanner';
+export {
+  validateGitUrl,
+  validatePath,
+  validateRemoteName,
+  validateBranchName,
+} from './security';

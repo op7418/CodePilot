@@ -7,6 +7,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { createGitService } from '@/lib/git';
+import { validatePath, validateGitUrl, validateRemoteName } from '@/lib/git/security';
 
 export async function GET(request: NextRequest) {
   try {
@@ -20,7 +21,16 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    const git = createGitService(repoPath);
+    // Validate path
+    const pathValidation = validatePath(repoPath);
+    if (!pathValidation.valid) {
+      return NextResponse.json(
+        { error: pathValidation.error },
+        { status: 400 }
+      );
+    }
+
+    const git = createGitService(pathValidation.normalized!);
     const remotes = await git.getRemotes();
 
     return NextResponse.json({ remotes });
@@ -49,8 +59,35 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const git = createGitService(repoPath);
-    await git.addRemote(name, url);
+    // Validate path
+    const pathValidation = validatePath(repoPath);
+    if (!pathValidation.valid) {
+      return NextResponse.json(
+        { error: pathValidation.error },
+        { status: 400 }
+      );
+    }
+
+    // Validate remote name
+    const nameValidation = validateRemoteName(name);
+    if (!nameValidation.valid) {
+      return NextResponse.json(
+        { error: nameValidation.error },
+        { status: 400 }
+      );
+    }
+
+    // Validate URL
+    const urlValidation = validateGitUrl(url);
+    if (!urlValidation.valid) {
+      return NextResponse.json(
+        { error: urlValidation.error },
+        { status: 400 }
+      );
+    }
+
+    const git = createGitService(pathValidation.normalized!);
+    await git.addRemote(name.trim(), url.trim());
 
     return NextResponse.json({ success: true, message: `Remote "${name}" added` });
   } catch (error) {
@@ -78,8 +115,26 @@ export async function DELETE(request: NextRequest) {
       );
     }
 
-    const git = createGitService(repoPath);
-    await git.removeRemote(name);
+    // Validate path
+    const pathValidation = validatePath(repoPath);
+    if (!pathValidation.valid) {
+      return NextResponse.json(
+        { error: pathValidation.error },
+        { status: 400 }
+      );
+    }
+
+    // Validate remote name
+    const nameValidation = validateRemoteName(name);
+    if (!nameValidation.valid) {
+      return NextResponse.json(
+        { error: nameValidation.error },
+        { status: 400 }
+      );
+    }
+
+    const git = createGitService(pathValidation.normalized!);
+    await git.removeRemote(name.trim());
 
     return NextResponse.json({ success: true, message: `Remote "${name}" removed` });
   } catch (error) {
