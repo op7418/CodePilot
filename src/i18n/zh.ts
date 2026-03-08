@@ -22,6 +22,7 @@ const zh: Record<TranslationKey, string> = {
   'chatList.noSessions': '暂无会话',
   'chatList.importFromCli': '从 Claude Code 导入',
   'chatList.addProjectFolder': '添加项目文件夹',
+  'chatList.dirNotFound': '项目目录已不存在',
   'chatList.threads': '对话列表',
 
   // ── Message list ────────────────────────────────────────────
