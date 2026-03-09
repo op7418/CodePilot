@@ -264,6 +264,18 @@ const QUICK_PRESETS: QuickPreset[] = [
     fields: ["api_key", "base_url"],
   },
   {
+    key: "gemini-image-thirdparty",
+    name: "Gemini Image Third-party API",
+    description: "Gemini-compatible image API — provide URL and Key",
+    descriptionZh: "Gemini 兼容第三方图片 API — 填写地址和密钥",
+    icon: <Google size={18} />,
+    provider_type: "gemini-image",
+    base_url: "",
+    extra_env: '{"GEMINI_API_KEY":""}',
+    fields: ["api_key", "base_url", "model_names"],
+    category: "media",
+  },
+  {
     key: "gemini-image",
     name: "Google Gemini (Image)",
     description: "Nano Banana Pro — AI image generation by Google Gemini",
@@ -345,7 +357,8 @@ function PresetConnectDialog({
     if (preset.fields.includes("model_names") && modelName.trim()) {
       try {
         const envObj = JSON.parse(finalExtraEnv);
-        envObj["ANTHROPIC_MODEL"] = modelName.trim();
+        const modelKey = preset.provider_type === "gemini-image" ? "GEMINI_IMAGE_MODEL" : "ANTHROPIC_MODEL";
+        envObj[modelKey] = modelName.trim();
         finalExtraEnv = JSON.stringify(envObj);
       } catch { /* use as-is */ }
     }

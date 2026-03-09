@@ -35,8 +35,8 @@ export async function generateSingleImage(params: GenerateSingleImageParams): Pr
 
   const db = getDb();
   const provider = db.prepare(
-    "SELECT api_key, extra_env FROM api_providers WHERE provider_type = 'gemini-image' AND api_key != '' LIMIT 1"
-  ).get() as { api_key: string; extra_env?: string } | undefined;
+    "SELECT api_key, base_url, extra_env FROM api_providers WHERE provider_type = 'gemini-image' AND api_key != '' LIMIT 1"
+  ).get() as { api_key: string; base_url?: string; extra_env?: string } | undefined;
 
   if (!provider) {
     throw new Error('No Gemini Image provider configured. Please add a provider with type "gemini-image" in Settings.');
@@ -53,7 +53,10 @@ export async function generateSingleImage(params: GenerateSingleImageParams): Pr
   const aspectRatio = (params.aspectRatio || '1:1') as `${number}:${number}`;
   const imageSize = params.imageSize || '1K';
 
-  const google = createGoogleGenerativeAI({ apiKey: provider.api_key });
+  const google = createGoogleGenerativeAI({
+    apiKey: provider.api_key,
+    baseURL: provider.base_url || undefined,
+  });
 
   // Build prompt: plain string or { text, images } for reference images
   // Combine both base64 data and file paths — both can be provided simultaneously
