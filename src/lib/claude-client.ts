@@ -178,11 +178,31 @@ function extractTextFromMessage(msg: SDKAssistantMessage): string {
   return parts.join('');
 }
 
+function extractContextWindow(value: unknown): number | undefined {
+  if (!value || typeof value !== 'object') return undefined;
+
+  const maybeContextWindow = (value as { contextWindow?: unknown }).contextWindow;
+  if (typeof maybeContextWindow === 'number' && Number.isFinite(maybeContextWindow)) {
+    return maybeContextWindow;
+  }
+
+  for (const entry of Object.values(value as Record<string, unknown>)) {
+    if (!entry || typeof entry !== 'object') continue;
+    const nestedContextWindow = (entry as { contextWindow?: unknown }).contextWindow;
+    if (typeof nestedContextWindow === 'number' && Number.isFinite(nestedContextWindow)) {
+      return nestedContextWindow;
+    }
+  }
+
+  return undefined;
+}
+
 /**
  * Extract token usage from an SDK result message
  */
 function extractTokenUsage(msg: SDKResultMessage): TokenUsage | null {
   if (!msg.usage) return null;
+
   const usage: TokenUsage = {
     input_tokens: msg.usage.input_tokens,
     output_tokens: msg.usage.output_tokens,
@@ -190,23 +210,13 @@ function extractTokenUsage(msg: SDKResultMessage): TokenUsage | null {
     cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
     cost_usd: 'total_cost_usd' in msg ? msg.total_cost_usd : undefined,
   };
-  // Extract context window size from modelUsage if available
-  const modelUsage = (msg as Record<string, unknown>).modelUsage as
-    | Record<string, { contextWindow?: number }>
-    | { contextWindow?: number }
-    | undefined;
-  if (modelUsage && typeof modelUsage === 'object') {
-    const direct = (modelUsage as { contextWindow?: number }).contextWindow;
-    if (direct) {
-      usage.context_window = direct;
-    } else {
-      const values = Object.values(modelUsage as Record<string, { contextWindow?: number }>);
-      const found = values.find((entry) => entry?.contextWindow);
-      if (found?.contextWindow) {
-        usage.context_window = found.contextWindow;
-      }
-    }
+
+  const modelUsage = (msg as { modelUsage?: unknown }).modelUsage;
+  const contextWindow = extractContextWindow(modelUsage);
+  if (contextWindow) {
+    usage.context_window = contextWindow;
   }
+
   return usage;
 }
 
@@ -1009,3 +1019,4 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
     },
   });
 }
+

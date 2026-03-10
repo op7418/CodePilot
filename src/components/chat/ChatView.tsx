@@ -234,7 +234,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
       }
     }
     return 0;
-  }, [messages]);
+  }, [messages.length, messages[messages.length - 1]?.id, messages[messages.length - 1]?.token_usage]);
 
   const effectiveContextTokens = snapshotStreamingContextTokens
     ? snapshotStreamingContextTokens.used
@@ -460,3 +460,4 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
     </div>
   );
 }
+
