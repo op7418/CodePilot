@@ -25,6 +25,7 @@ import {
 } from "react";
 
 const FILE_TREE_DRAG_MIME = "application/x-codepilot-path";
+// Keep a text/* fallback because some drag-and-drop consumers strip unknown custom MIME types.
 const FILE_TREE_DRAG_FALLBACK_MIME = "text/x-codepilot-path";
 
 interface FileTreeContextType {

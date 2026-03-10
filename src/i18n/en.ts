@@ -47,6 +47,7 @@ const en = {
   'messageInput.modeCode': 'Code',
   'messageInput.modePlan': 'Plan',
   'messageInput.aiSuggested': 'AI Suggested',
+  'messageInput.removeContextMention': 'Remove context mention: {name}',
 
   // ── Streaming message ───────────────────────────────────────
   'streaming.thinking': 'Thinking...',

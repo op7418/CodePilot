@@ -84,23 +84,12 @@ const IMAGE_AGENT_SYSTEM_PROMPT = `你是一个图像生成助手。当用户请
 - 在输出结构化块之前，可以先简要说明你的理解和计划`;
 
 const FILE_TREE_DRAG_MIME = 'application/x-codepilot-path';
+// Keep a text/* fallback because some drag-and-drop bridges drop unknown custom MIME types.
 const FILE_TREE_DRAG_FALLBACK_MIME = 'text/x-codepilot-path';
 
 function hasDragType(dataTransfer: DataTransfer | null | undefined, type: string): boolean {
   if (!dataTransfer) return false;
-
-  const types = dataTransfer.types as unknown;
-  if (!types) return false;
-
-  if (typeof (types as { includes?: unknown }).includes === 'function') {
-    return (types as { includes: (value: string) => boolean }).includes(type);
-  }
-
-  if (typeof (types as { contains?: unknown }).contains === 'function') {
-    return (types as { contains: (value: string) => boolean }).contains(type);
-  }
-
-  return Array.from(types as ArrayLike<string>).includes(type);
+  return Array.from(dataTransfer.types).includes(type);
 }
 
 function readFileTreeDropData(dataTransfer: DataTransfer | null | undefined) {
@@ -419,34 +408,9 @@ function getMentionColorClasses(mention: ContextMention): { chip: string; hover:
       hover: "hover:bg-amber-500/20",
     };
   }
-  const ext = mention.name.split('.').pop()?.toLowerCase() || '';
-  if (['doc', 'docx'].includes(ext)) {
-    return {
-      chip: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
-      hover: "hover:bg-blue-500/20",
-    };
-  }
-  if (['xls', 'xlsx', 'csv'].includes(ext)) {
-    return {
-      chip: "bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20",
-      hover: "hover:bg-green-500/20",
-    };
-  }
-  if (ext === 'pdf') {
-    return {
-      chip: "bg-red-500/10 text-red-600 dark:text-red-400 border-red-500/20",
-      hover: "hover:bg-red-500/20",
-    };
-  }
-  if (ext === 'txt') {
-    return {
-      chip: "bg-gray-500/10 text-gray-600 dark:text-gray-400 border-gray-500/20",
-      hover: "hover:bg-gray-500/20",
-    };
-  }
   return {
-    chip: "bg-violet-500/10 text-violet-600 dark:text-violet-400 border-violet-500/20",
-    hover: "hover:bg-violet-500/20",
+    chip: "bg-blue-500/10 text-blue-600 dark:text-blue-400 border-blue-500/20",
+    hover: "hover:bg-blue-500/20",
   };
 }
 
@@ -457,9 +421,10 @@ function ContextMentionChips({
   mentions: ContextMention[];
   onRemove: (id: string) => void;
 }) {
+  const { t } = useTranslation();
   if (mentions.length === 0) return null;
   return (
-    <div className="grid w-full grid-cols-5 gap-1.5 px-3 pt-2 pb-0 order-first">
+    <div className="flex w-full flex-wrap items-center gap-1.5 px-3 pt-2 pb-0 order-first">
       {mentions.map((m) => {
         const colors = getMentionColorClasses(m);
         return (
@@ -475,6 +440,8 @@ function ContextMentionChips({
             <button
               type="button"
               onClick={() => onRemove(m.id)}
+              aria-label={t('messageInput.removeContextMention', { name: m.name })}
+              title={t('messageInput.removeContextMention', { name: m.name })}
               className={cn("ml-auto shrink-0 rounded-full p-0.5 transition-colors", colors.hover)}
             >
               <HugeiconsIcon icon={Cancel01Icon} className="h-3 w-3" />
