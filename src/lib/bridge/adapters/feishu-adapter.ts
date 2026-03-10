@@ -27,6 +27,7 @@ import type { FileAttachment } from '@/types';
 import { BaseChannelAdapter, registerAdapterFactory } from '../channel-adapter';
 import { insertAuditLog } from '../../db';
 import { getSetting } from '../../db';
+import { extensionForMimeType, resolveFeishuResourceMimeType } from './feishu-media';
 import {
   htmlToFeishuMarkdown,
   preprocessFeishuMarkdown,
@@ -68,16 +69,6 @@ type FeishuMessageEventData = {
       name: string;
     }>;
   };
-};
-
-
-/** MIME type guesses by message_type. */
-const MIME_BY_TYPE: Record<string, string> = {
-  image: 'image/png',
-  file: 'application/octet-stream',
-  audio: 'audio/ogg',
-  video: 'video/mp4',
-  media: 'application/octet-stream',
 };
 
 export class FeishuAdapter extends BaseChannelAdapter {
@@ -905,11 +896,12 @@ export class FeishuAdapter extends BaseChannelAdapter {
 
       const base64 = buffer.toString('base64');
       const id = crypto.randomUUID();
-      const mimeType = MIME_BY_TYPE[resourceType] || 'application/octet-stream';
-      const ext = resourceType === 'image' ? 'png'
-        : resourceType === 'audio' ? 'ogg'
-        : resourceType === 'video' ? 'mp4'
-        : 'bin';
+      const mimeType = resolveFeishuResourceMimeType(
+        resourceType,
+        buffer,
+        (res as { headers?: Headers | Record<string, string | string[] | undefined> }).headers,
+      );
+      const ext = extensionForMimeType(mimeType, resourceType);
 
       console.log(`[feishu-adapter] Resource downloaded: ${buffer.length} bytes, key=${fileKey}`);
 
