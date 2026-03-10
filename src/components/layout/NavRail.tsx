@@ -7,6 +7,7 @@ import {
   Message02Icon,
   ZapIcon,
   Plug01Icon,
+  Store01Icon,
   Image01Icon,
   Settings02Icon,
   Wifi01Icon,
@@ -34,6 +35,7 @@ const navItems = [
   { href: "/chat", label: "Chats", icon: Message02Icon },
   { href: "/skills", label: "Skills", icon: ZapIcon },
   { href: "/mcp", label: "MCP", icon: Plug01Icon },
+  { href: "/plugins-market", label: "Plugins", icon: Store01Icon },
   { href: "/gallery", label: "Gallery", icon: Image01Icon },
   { href: "/bridge", label: "Bridge", icon: Wifi01Icon },
 ] as const;
@@ -46,6 +48,7 @@ export function NavRail({ onToggleChatList, hasUpdate, readyToInstall, skipPermi
     'Chats': 'nav.chats',
     'Skills': 'extensions.skills',
     'MCP': 'extensions.mcpServers',
+    'Plugins': 'pluginMarket.title',
     'Gallery': 'gallery.title',
     'Bridge': 'nav.bridge',
   };

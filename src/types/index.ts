@@ -281,6 +281,48 @@ export interface SkillDefinition {
   enabled: boolean;
 }
 
+// --- Plugin Marketplace (Claude Code Plugins) ---
+
+export interface PluginManifest {
+  name: string;
+  version?: string;
+  description?: string;
+  author?: { name: string; email?: string; url?: string };
+  homepage?: string;
+  repository?: string;
+  license?: string;
+  keywords?: string[];
+  category?: string;
+}
+
+export interface PluginComponents {
+  hasSkills: boolean;
+  hasAgents: boolean;
+  hasHooks: boolean;
+  hasMcp: boolean;
+  hasLsp: boolean;
+  hasCommands: boolean;
+}
+
+export interface MarketplacePlugin {
+  name: string;
+  description?: string;
+  version?: string;
+  author?: { name: string; email?: string; url?: string };
+  marketplace: string;
+  category?: string;
+  components: PluginComponents;
+  isInstalled: boolean;
+  installedScope?: 'user' | 'project' | 'local';
+}
+
+export interface PluginMarketplaceInfo {
+  name: string;
+  owner: { name: string; email?: string };
+  pluginCount: number;
+  source: string;
+}
+
 // --- Marketplace (Skills.sh) ---
 
 export interface MarketplaceSkill {
