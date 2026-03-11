@@ -129,7 +129,7 @@ const QUICK_PRESETS: QuickPreset[] = [
     provider_type: "anthropic",
     protocol: "anthropic",
     base_url: "",
-    extra_env: '{"ANTHROPIC_API_KEY":""}',
+    extra_env: "{}",
     fields: ["name", "api_key", "base_url", "model_mapping"],
   },
   {
@@ -457,26 +457,19 @@ function PresetConnectDialog({
       return;
     }
 
-    // For anthropic-thirdparty, inject the correct auth key into extra_env
-    // while preserving any other user-specified env vars (e.g. API_TIMEOUT_MS)
+    // For anthropic-thirdparty, strip auth key placeholders from extra_env.
+    // Auth is handled via the api_key field — storing empty ANTHROPIC_API_KEY /
+    // ANTHROPIC_AUTH_TOKEN placeholders in extra_env causes toClaudeCodeEnv()
+    // to infer the wrong authStyle and can override freshly-injected credentials.
     let finalExtraEnv = extraEnv;
     if (preset.key === "anthropic-thirdparty") {
       try {
         const parsed = JSON.parse(extraEnv || "{}");
-        // Remove both auth keys, then set the correct one
         delete parsed["ANTHROPIC_API_KEY"];
         delete parsed["ANTHROPIC_AUTH_TOKEN"];
-        if (authStyle === "auth_token") {
-          parsed["ANTHROPIC_AUTH_TOKEN"] = "";
-        } else {
-          parsed["ANTHROPIC_API_KEY"] = "";
-        }
         finalExtraEnv = JSON.stringify(parsed);
       } catch {
-        // If parse fails, fall back to simple replacement
-        finalExtraEnv = authStyle === "auth_token"
-          ? '{"ANTHROPIC_AUTH_TOKEN":""}'
-          : '{"ANTHROPIC_API_KEY":""}';
+        finalExtraEnv = "{}";
       }
     }
     // In edit mode, preserve existing role_models_json unless the user modifies mapping fields
