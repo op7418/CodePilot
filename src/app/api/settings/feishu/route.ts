@@ -11,6 +11,9 @@ const FEISHU_KEYS = [
   'bridge_feishu_app_id',
   'bridge_feishu_app_secret',
   'bridge_feishu_domain',
+  'bridge_feishu_mode',
+  'bridge_feishu_webhook_port',
+  'bridge_feishu_webhook_verification_token',
   'bridge_feishu_allowed_users',
   'bridge_feishu_group_policy',
   'bridge_feishu_group_allow_from',
@@ -26,9 +29,13 @@ export async function GET() {
         // Mask app secret for security
         if (key === 'bridge_feishu_app_secret' && value.length > 8) {
           result[key] = '***' + value.slice(-8);
-        } else {
-          result[key] = value;
+          continue;
         }
+        if (key === 'bridge_feishu_webhook_verification_token' && value.length > 8) {
+          result[key] = '***' + value.slice(-8);
+          continue;
+        }
+        result[key] = value;
       }
     }
 
@@ -54,6 +61,10 @@ export async function PUT(request: NextRequest) {
 
       // Don't overwrite secret if user sent the masked version back
       if (key === 'bridge_feishu_app_secret' && strValue.startsWith('***')) {
+        continue;
+      }
+
+      if (key === 'bridge_feishu_webhook_verification_token' && strValue.startsWith('***')) {
         continue;
       }
 

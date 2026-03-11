@@ -1,0 +1,7 @@
+name = "lark-webhook-relay"
+main = "src/index.ts"
+compatibility_date = "2024-12-01"
+
+[vars]
+# Set via: npx wrangler secret put TUNNEL_URL
+# TUNNEL_URL = "https://your-tunnel-id.cfargotunnel.com"
