@@ -336,7 +336,7 @@ function getExpandedShellPath(): string {
     return [...new Set(allParts)].join(sep);
   } else {
     const basePath = `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin`;
-    const raw = `${basePath}:${home}/.npm-global/bin:${home}/.local/bin:${home}/.claude/bin:${shellPath}`;
+    const raw = `${basePath}:${home}/.npm-global/bin:${home}/.bun/bin:${home}/.local/bin:${home}/.claude/bin:${shellPath}`;
     const allParts = raw.split(':').filter(Boolean);
     return [...new Set(allParts)].join(':');
   }
