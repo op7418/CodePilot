@@ -71,11 +71,12 @@ export function getClaudeCandidatePaths(): string[] {
     return candidates;
   }
   return [
-    '/usr/local/bin/claude',
-    '/opt/homebrew/bin/claude',
     path.join(home, '.npm-global', 'bin', 'claude'),
+    path.join(home, '.bun', 'bin', 'claude'),
     path.join(home, '.local', 'bin', 'claude'),
     path.join(home, '.claude', 'bin', 'claude'),
+    '/opt/homebrew/bin/claude',
+    '/usr/local/bin/claude',
   ];
 }
 
