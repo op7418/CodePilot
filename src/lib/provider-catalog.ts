@@ -30,6 +30,7 @@ export type AuthStyle =
   | 'api_key'             // ANTHROPIC_API_KEY
   | 'auth_token'          // ANTHROPIC_AUTH_TOKEN
   | 'env_only'            // No API key; auth via extra env (bedrock/vertex)
+  | 'cli_oauth'           // No API key; use Claude CLI's built-in OAuth (subscription accounts)
   | 'custom_header';      // API key in custom header (future)
 
 /**
@@ -122,6 +123,21 @@ const ANTHROPIC_DEFAULT_MODELS: CatalogModel[] = [
 // ── Vendor presets ──────────────────────────────────────────────
 
 export const VENDOR_PRESETS: VendorPreset[] = [
+  // ── Claude CLI OAuth (Subscription) ──
+  {
+    key: 'cli-oauth',
+    name: 'Claude CLI (Subscription)',
+    description: 'Use Claude CLI built-in OAuth — for Pro/Max/Team subscription accounts',
+    descriptionZh: 'Claude CLI 内置登录 — 适用于 Pro/Max/Team 订阅账号',
+    protocol: 'anthropic',
+    authStyle: 'cli_oauth',
+    baseUrl: '',
+    defaultEnvOverrides: {},
+    defaultModels: ANTHROPIC_DEFAULT_MODELS,
+    fields: [],
+    iconKey: 'anthropic',
+  },
+
   // ── Official Anthropic ──
   {
     key: 'anthropic-official',

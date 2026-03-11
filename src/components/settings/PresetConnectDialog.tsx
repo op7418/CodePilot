@@ -241,6 +241,12 @@ export function PresetConnectDialog({
 
     setSaving(true);
     try {
+      // For CLI OAuth preset, inject auth style marker into env_overrides_json
+      let finalEnvOverrides = isEdit ? envOverridesJson.trim() || "" : "";
+      if (preset.key === "cli-oauth") {
+        finalEnvOverrides = JSON.stringify({ __AUTH_STYLE: "cli_oauth" });
+      }
+
       await onSave({
         name: name.trim() || preset.name,
         provider_type: preset.provider_type,
@@ -250,7 +256,7 @@ export function PresetConnectDialog({
         extra_env: finalExtraEnv,
         role_models_json: roleModelsJson,
         headers_json: isEdit ? headersJson.trim() || "{}" : undefined,
-        env_overrides_json: isEdit ? envOverridesJson.trim() || "" : undefined,
+        env_overrides_json: finalEnvOverrides || undefined,
         notes: isEdit ? notes.trim() : "",
       });
       onOpenChange(false);

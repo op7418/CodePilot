@@ -166,7 +166,32 @@ export function toClaudeCodeEnv(
     'GEMINI_API_KEY',
   ]);
 
-  if (resolved.provider && resolved.hasCredentials) {
+  if (resolved.authStyle === 'cli_oauth') {
+    // CLI OAuth mode — clear all ANTHROPIC_* variables so the Claude CLI
+    // uses its own built-in OAuth flow (subscription account tokens in ~/.claude/).
+    // We must NOT inject any API key or auth token here.
+    for (const key of Object.keys(env)) {
+      if (key.startsWith('ANTHROPIC_') || MANAGED_ENV_KEYS.has(key)) {
+        delete env[key];
+      }
+    }
+
+    // Inject role models as env vars (if configured)
+    if (resolved.roleModels.default) env.ANTHROPIC_MODEL = resolved.roleModels.default;
+    if (resolved.roleModels.reasoning) env.ANTHROPIC_REASONING_MODEL = resolved.roleModels.reasoning;
+    if (resolved.roleModels.small) env.ANTHROPIC_SMALL_FAST_MODEL = resolved.roleModels.small;
+    if (resolved.roleModels.haiku) env.ANTHROPIC_DEFAULT_HAIKU_MODEL = resolved.roleModels.haiku;
+    if (resolved.roleModels.sonnet) env.ANTHROPIC_DEFAULT_SONNET_MODEL = resolved.roleModels.sonnet;
+    if (resolved.roleModels.opus) env.ANTHROPIC_DEFAULT_OPUS_MODEL = resolved.roleModels.opus;
+
+    // Inject env overrides (skip internal markers)
+    for (const [key, value] of Object.entries(resolved.envOverrides)) {
+      if (key.startsWith('__')) continue; // skip internal markers like __AUTH_STYLE
+      if (typeof value === 'string') {
+        if (value === '') { delete env[key]; } else { env[key] = value; }
+      }
+    }
+  } else if (resolved.provider && resolved.hasCredentials) {
     // Clear all ANTHROPIC_* variables AND managed env vars to prevent cross-provider leaks
     for (const key of Object.keys(env)) {
       if (key.startsWith('ANTHROPIC_') || MANAGED_ENV_KEYS.has(key)) {
@@ -543,7 +568,7 @@ function buildResolution(
   }
 
   // Has credentials?
-  const hasCredentials = !!(provider.api_key) || authStyle === 'env_only';
+  const hasCredentials = !!(provider.api_key) || authStyle === 'env_only' || authStyle === 'cli_oauth';
 
   // Settings sources — always include 'user' so SDK can load skills from
   // ~/.claude/skills/. Env override conflicts are handled by envOverrides.
@@ -579,6 +604,12 @@ function inferProtocolFromProvider(provider: ApiProvider): Protocol {
 }
 
 function inferAuthStyleFromProvider(provider: ApiProvider): AuthStyle {
+  // Check env_overrides for CLI OAuth marker
+  try {
+    const overrides = JSON.parse(provider.env_overrides_json || '{}');
+    if (overrides.__AUTH_STYLE === 'cli_oauth') return 'cli_oauth';
+  } catch { /* ignore */ }
+
   // Check preset match first
   const preset = findPresetForLegacy(provider.base_url, provider.provider_type);
   if (preset) return preset.authStyle;

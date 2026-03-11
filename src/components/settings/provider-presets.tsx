@@ -65,6 +65,19 @@ export interface QuickPreset {
 }
 
 export const QUICK_PRESETS: QuickPreset[] = [
+  // ── Claude CLI OAuth (Subscription) ──
+  {
+    key: "cli-oauth",
+    name: "Claude CLI (Subscription)",
+    description: "Use Claude CLI built-in OAuth — for Pro/Max/Team subscription accounts. Requires: claude login",
+    descriptionZh: "Claude CLI 内置登录 — 适用于 Pro/Max/Team 订阅账号。需先运行: claude login",
+    icon: <Anthropic size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "",
+    extra_env: "{}",
+    fields: [],
+  },
   // ── Custom endpoints ──
   {
     key: "custom-openai",
