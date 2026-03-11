@@ -55,19 +55,52 @@ export function CliSettingsSection() {
   const [saving, setSaving] = useState(false);
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
-  const [pendingSaveAction, setPendingSaveAction] = useState<"form" | "json" | null>(null);
+  const [pendingSaveAction, setPendingSaveAction] = useState<
+    "form" | "json" | null
+  >(null);
   const { t } = useTranslation();
 
-  const knownFieldKeys: Record<string, { label: TranslationKey; description: TranslationKey }> = {
-    permissions: { label: 'cli.permissions', description: 'cli.permissionsDesc' },
-    env: { label: 'cli.envVars', description: 'cli.envVarsDesc' },
+  const knownFieldKeys: Record<
+    string,
+    { label: TranslationKey; description: TranslationKey }
+  > = {
+    permissions: {
+      label: "cli.permissions",
+      description: "cli.permissionsDesc",
+    },
+    env: { label: "cli.envVars", description: "cli.envVarsDesc" },
+  };
+
+  // Helpers to read/write HTTPS_PROXY inside settings.env
+  const getProxyValue = (): string => {
+    const env = settings.env as Record<string, string> | null | undefined;
+    return env?.HTTPS_PROXY ?? "";
+  };
+
+  const setProxyValue = (value: string) => {
+    const env =
+      (settings.env as Record<string, string> | null | undefined) ?? {};
+    if (value.trim()) {
+      updateField("env", {
+        ...env,
+        HTTPS_PROXY: value.trim(),
+        https_proxy: value.trim(),
+      });
+    } else {
+      // Remove both HTTPS_PROXY and https_proxy if cleared
+      const { HTTPS_PROXY, https_proxy, ...rest } = env;
+      void HTTPS_PROXY;
+      void https_proxy;
+      updateField("env", Object.keys(rest).length > 0 ? rest : undefined);
+    }
   };
 
   // Map dynamic CLI settings keys to translation keys (for fields not in KNOWN_FIELDS)
   const dynamicFieldLabels: Record<string, TranslationKey> = {
-    skipDangerousModePermissionPrompt: 'cli.field.skipDangerousModePermissionPrompt',
-    verbose: 'cli.field.verbose',
-    theme: 'cli.field.theme',
+    skipDangerousModePermissionPrompt:
+      "cli.field.skipDangerousModePermissionPrompt",
+    verbose: "cli.field.verbose",
+    theme: "cli.field.theme",
   };
 
   const fetchSettings = useCallback(async () => {
@@ -93,7 +126,8 @@ export function CliSettingsSection() {
     fetchSettings();
   }, [fetchSettings]);
 
-  const hasChanges = JSON.stringify(settings) !== JSON.stringify(originalSettings);
+  const hasChanges =
+    JSON.stringify(settings) !== JSON.stringify(originalSettings);
 
   const handleSave = async (source: "form" | "json") => {
     let dataToSave: SettingsData;
@@ -146,7 +180,7 @@ export function CliSettingsSection() {
       setJsonText(JSON.stringify(parsed, null, 2));
       setJsonError("");
     } catch {
-      setJsonError(t('cli.formatError'));
+      setJsonError(t("cli.formatError"));
     }
   };
 
@@ -163,7 +197,9 @@ export function CliSettingsSection() {
     return (
       <div className="flex items-center justify-center py-12">
         <SpinnerGap size={20} className="animate-spin text-muted-foreground" />
-        <span className="ml-2 text-sm text-muted-foreground">{t('cli.loadingSettings')}</span>
+        <span className="ml-2 text-sm text-muted-foreground">
+          {t("cli.loadingSettings")}
+        </span>
       </div>
     );
   }
@@ -174,23 +210,47 @@ export function CliSettingsSection() {
         <TabsList className="mb-4">
           <TabsTrigger value="form" className="gap-2">
             <SlidersHorizontal size={16} />
-            {t('cli.form')}
+            {t("cli.form")}
           </TabsTrigger>
           <TabsTrigger value="json" className="gap-2">
             <Code size={16} />
-            {t('cli.json')}
+            {t("cli.json")}
           </TabsTrigger>
         </TabsList>
 
         <TabsContent value="form">
           <div className="space-y-6">
+            {/* Proxy server — dedicated input that writes to settings.env.HTTPS_PROXY */}
+            <div className="rounded-lg border border-border/50 p-4 transition-shadow hover:shadow-sm">
+              <Label className="text-sm font-medium">{t("cli.proxy")}</Label>
+              <p className="mb-2 text-xs text-muted-foreground">
+                {t("cli.proxyDesc")}
+              </p>
+              <Input
+                value={getProxyValue()}
+                onChange={(e) => setProxyValue(e.target.value)}
+                placeholder={t("cli.proxyPlaceholder")}
+                className="font-mono text-sm"
+              />
+            </div>
+
             {KNOWN_FIELDS.map((field) => (
               <div
                 key={field.key}
                 className="rounded-lg border border-border/50 p-4 transition-shadow hover:shadow-sm"
               >
-                <Label className="text-sm font-medium">{t(knownFieldKeys[field.key]?.label ?? field.label as TranslationKey)}</Label>
-                <p className="mb-2 text-xs text-muted-foreground">{t(knownFieldKeys[field.key]?.description ?? field.description as TranslationKey)}</p>
+                <Label className="text-sm font-medium">
+                  {t(
+                    knownFieldKeys[field.key]?.label ??
+                      (field.label as TranslationKey),
+                  )}
+                </Label>
+                <p className="mb-2 text-xs text-muted-foreground">
+                  {t(
+                    knownFieldKeys[field.key]?.description ??
+                      (field.description as TranslationKey),
+                  )}
+                </p>
                 <Textarea
                   value={
                     typeof settings[field.key] === "object"
@@ -218,7 +278,9 @@ export function CliSettingsSection() {
                   key={key}
                   className="rounded-lg border border-border/50 p-4 transition-shadow hover:shadow-sm"
                 >
-                  <Label className="text-sm font-medium">{dynamicFieldLabels[key] ? t(dynamicFieldLabels[key]) : key}</Label>
+                  <Label className="text-sm font-medium">
+                    {dynamicFieldLabels[key] ? t(dynamicFieldLabels[key]) : key}
+                  </Label>
                   {typeof value === "boolean" ? (
                     <div className="mt-2 flex items-center gap-2">
                       <Switch
@@ -226,7 +288,7 @@ export function CliSettingsSection() {
                         onCheckedChange={(checked) => updateField(key, checked)}
                       />
                       <span className="text-sm text-muted-foreground">
-                        {value ? t('common.enabled') : t('common.disabled')}
+                        {value ? t("common.enabled") : t("common.disabled")}
                       </span>
                     </div>
                   ) : typeof value === "string" ? (
@@ -253,21 +315,30 @@ export function CliSettingsSection() {
               ))}
 
             <div className="flex items-center gap-3">
-              <Button onClick={() => confirmSave("form")} disabled={!hasChanges || saving} className="gap-2">
+              <Button
+                onClick={() => confirmSave("form")}
+                disabled={!hasChanges || saving}
+                className="gap-2"
+              >
                 {saving ? (
                   <SpinnerGap size={16} className="animate-spin" />
                 ) : (
                   <FloppyDisk size={16} />
                 )}
-                {saving ? t('provider.saving') : t('cli.save')}
+                {saving ? t("provider.saving") : t("cli.save")}
               </Button>
-              <Button variant="outline" onClick={handleReset} disabled={!hasChanges} className="gap-2">
+              <Button
+                variant="outline"
+                onClick={handleReset}
+                disabled={!hasChanges}
+                className="gap-2"
+              >
                 <ArrowClockwise size={16} />
-                {t('cli.reset')}
+                {t("cli.reset")}
               </Button>
               {saveSuccess && (
                 <span className="text-sm text-green-600 dark:text-green-400">
-                  {t('cli.settingsSaved')}
+                  {t("cli.settingsSaved")}
                 </span>
               )}
             </div>
@@ -285,28 +356,38 @@ export function CliSettingsSection() {
               className="min-h-[400px] font-mono text-sm"
               placeholder='{"key": "value"}'
             />
-            {jsonError && <p className="text-sm text-destructive">{jsonError}</p>}
+            {jsonError && (
+              <p className="text-sm text-destructive">{jsonError}</p>
+            )}
 
             <div className="flex items-center gap-3">
-              <Button onClick={() => confirmSave("json")} disabled={saving} className="gap-2">
+              <Button
+                onClick={() => confirmSave("json")}
+                disabled={saving}
+                className="gap-2"
+              >
                 {saving ? (
                   <SpinnerGap size={16} className="animate-spin" />
                 ) : (
                   <FloppyDisk size={16} />
                 )}
-                {saving ? t('provider.saving') : t('cli.save')}
+                {saving ? t("provider.saving") : t("cli.save")}
               </Button>
-              <Button variant="outline" onClick={handleFormatJson} className="gap-2">
+              <Button
+                variant="outline"
+                onClick={handleFormatJson}
+                className="gap-2"
+              >
                 <Code size={16} />
-                {t('cli.format')}
+                {t("cli.format")}
               </Button>
               <Button variant="outline" onClick={handleReset} className="gap-2">
                 <ArrowClockwise size={16} />
-                {t('cli.reset')}
+                {t("cli.reset")}
               </Button>
               {saveSuccess && (
                 <span className="text-sm text-green-600 dark:text-green-400">
-                  {t('cli.settingsSaved')}
+                  {t("cli.settingsSaved")}
                 </span>
               )}
             </div>
@@ -318,15 +399,17 @@ export function CliSettingsSection() {
       <AlertDialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{t('cli.confirmSaveTitle')}</AlertDialogTitle>
+            <AlertDialogTitle>{t("cli.confirmSaveTitle")}</AlertDialogTitle>
             <AlertDialogDescription>
-              {t('cli.confirmSaveDesc')}
+              {t("cli.confirmSaveDesc")}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel>{t('common.cancel')}</AlertDialogCancel>
-            <AlertDialogAction onClick={() => pendingSaveAction && handleSave(pendingSaveAction)}>
-              {t('common.save')}
+            <AlertDialogCancel>{t("common.cancel")}</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={() => pendingSaveAction && handleSave(pendingSaveAction)}
+            >
+              {t("common.save")}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
