@@ -25,6 +25,9 @@ export function getExtraPathDirs(): string[] {
   if (isWindows) {
     const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
     const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+    const programData = process.env.ProgramData || 'C:\\ProgramData';
+    const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
+    const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
     return [
       path.join(appData, 'npm'),
       path.join(localAppData, 'npm'),
@@ -32,6 +35,10 @@ export function getExtraPathDirs(): string[] {
       path.join(home, '.claude', 'bin'),
       path.join(home, '.local', 'bin'),
       path.join(home, '.nvm', 'current', 'bin'),
+      path.join(programFilesX86, 'nodejs'),
+      path.join(programFiles, 'nodejs'),
+      path.join(programData, 'scoop', 'shims'),
+      path.join(home, 'scoop', 'shims'),
     ];
   }
   return [
@@ -54,6 +61,9 @@ export function getClaudeCandidatePaths(): string[] {
   if (isWindows) {
     const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
     const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
+    const programData = process.env.ProgramData || 'C:\\ProgramData';
+    const programFiles = process.env.ProgramFiles || 'C:\\Program Files';
+    const programFilesX86 = process.env['ProgramFiles(x86)'] || 'C:\\Program Files (x86)';
     const exts = ['.cmd', '.exe', '.bat', ''];
     const baseDirs = [
       path.join(appData, 'npm'),
@@ -61,6 +71,10 @@ export function getClaudeCandidatePaths(): string[] {
       path.join(home, '.npm-global', 'bin'),
       path.join(home, '.claude', 'bin'),
       path.join(home, '.local', 'bin'),
+      path.join(home, 'scoop', 'shims'),
+      path.join(programData, 'scoop', 'shims'),
+      path.join(programFiles, 'nodejs'),
+      path.join(programFilesX86, 'nodejs'),
     ];
     const candidates: string[] = [];
     for (const dir of baseDirs) {
@@ -117,7 +131,7 @@ export function findClaudeBinary(): string | undefined {
     _cachedBinaryPath = found;
     _cachedBinaryTimestamp = now;
   } else {
-    // Don't cache "not found" — user may install CLI any moment
+    // Don't cache "not found" - user may install CLI any moment
     _cachedBinaryPath = null;
   }
   return found;
@@ -127,6 +141,10 @@ function _findClaudeBinaryUncached(): string | undefined {
   // Try known candidate paths first
   for (const p of getClaudeCandidatePaths()) {
     try {
+      if (isWindows && /\.(cmd|bat)$/i.test(p)) {
+        if (fs.existsSync(p)) return p;
+        continue;
+      }
       execFileSync(p, ['--version'], {
         timeout: 3000,
         stdio: 'pipe',
@@ -154,6 +172,10 @@ function _findClaudeBinaryUncached(): string | undefined {
       const candidate = line.trim();
       if (!candidate) continue;
       try {
+        if (isWindows && /\.(cmd|bat)$/i.test(candidate)) {
+          if (fs.existsSync(candidate)) return candidate;
+          continue;
+        }
         execFileSync(candidate, ['--version'], {
           timeout: 3000,
           stdio: 'pipe',

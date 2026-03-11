@@ -51,39 +51,41 @@ function sanitizeEnv(env: Record<string, string>): Record<string, string> {
   return clean;
 }
 
+export interface ClaudeLaunchConfig {
+  executable?: 'node';
+  pathToClaudeCodeExecutable: string;
+}
+
 /**
- * On Windows, npm installs CLI tools as .cmd wrappers that can't be
- * spawned without shell:true. Parse the wrapper to extract the real
- * .js script path so we can pass it to the SDK directly.
+ * Resolve how CodePilot should launch Claude Code on the current machine.
+ *
+ * For npm-installed Windows wrappers, use the sibling node.exe explicitly and
+ * point the SDK at the real cli.js entrypoint. This avoids both shell issues
+ * with .cmd files and accidental fallback to the SDK's bundled cli.js path.
  */
-function resolveScriptFromCmd(cmdPath: string): string | undefined {
-  try {
-    const content = fs.readFileSync(cmdPath, 'utf-8');
-    const cmdDir = path.dirname(cmdPath);
-
-    // npm .cmd wrappers typically contain a line like:
-    //   "%~dp0\node_modules\@anthropic-ai\claude-code\cli.js" %*
-    // Match paths containing claude-code or claude-agent and ending in .js
-    const patterns = [
-      // Quoted: "%~dp0\...\cli.js"
-      /"%~dp0\\([^"]*claude[^"]*\.js)"/i,
-      // Unquoted: %~dp0\...\cli.js
-      /%~dp0\\(\S*claude\S*\.js)/i,
-      // Quoted with %dp0%: "%dp0%\...\cli.js"
-      /"%dp0%\\([^"]*claude[^"]*\.js)"/i,
-    ];
-
-    for (const re of patterns) {
-      const m = content.match(re);
-      if (m) {
-        const resolved = path.normalize(path.join(cmdDir, m[1]));
-        if (fs.existsSync(resolved)) return resolved;
-      }
-    }
-  } catch {
-    // ignore read errors
+export function resolveClaudeLaunchConfig(claudePath: string): ClaudeLaunchConfig {
+  const ext = path.extname(claudePath).toLowerCase();
+  if (process.platform === 'win32' && (ext === '.cmd' || ext === '.bat')) {
+    const installDir = path.dirname(claudePath);
+    return {
+      executable: 'node',
+      pathToClaudeCodeExecutable: path.join(installDir, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
+    };
   }
-  return undefined;
+  return { pathToClaudeCodeExecutable: claudePath };
+}
+
+export function classifyClaudeLaunchFailure(rawMessage: string, code?: string): 'missing_node_runtime' | 'missing_claude_cli' | null {
+  const lowered = rawMessage.toLowerCase();
+  const hasEnoent = code === 'ENOENT' || lowered.includes('enoent');
+  if (!hasEnoent) return null;
+  if (lowered.includes('spawn node ') || lowered.includes('spawn node.exe ')) {
+    return 'missing_node_runtime';
+  }
+  if (lowered.includes('spawn claude ') || lowered.includes('spawn claude.exe ') || lowered.includes('spawn claude.cmd ')) {
+    return 'missing_claude_cli';
+  }
+  return 'missing_claude_cli';
 }
 
 let cachedClaudePath: string | null | undefined;
@@ -237,7 +239,7 @@ function buildPromptWithHistory(
 
   const lines: string[] = [
     '<conversation_history>',
-    '(This is a summary of earlier conversation turns for context. Tool calls shown here were already executed — do not repeat them or output their markers as text.)',
+    '(This is a summary of earlier conversation turns for context. Tool calls shown here were already executed - do not repeat them or output their markers as text.)',
   ];
   for (const msg of history) {
     // For assistant messages with tool blocks (JSON arrays), extract only the text portions.
@@ -249,7 +251,7 @@ function buildPromptWithHistory(
         const parts: string[] = [];
         for (const b of blocks) {
           if (b.type === 'text' && b.text) parts.push(b.text);
-          // Skip tool_use and tool_result — they were already executed
+          // Skip tool_use and tool_result - they were already executed
         }
         content = parts.length > 0 ? parts.join('\n') : '(assistant used tools)';
       } catch {
@@ -320,12 +322,10 @@ export async function generateTextViaSdk(params: {
 
   const claudePath = findClaudePath();
   if (claudePath) {
-    const ext = path.extname(claudePath).toLowerCase();
-    if (ext === '.cmd' || ext === '.bat') {
-      const scriptPath = resolveScriptFromCmd(claudePath);
-      if (scriptPath) queryOptions.pathToClaudeCodeExecutable = scriptPath;
-    } else {
-      queryOptions.pathToClaudeCodeExecutable = claudePath;
+    const launchConfig = resolveClaudeLaunchConfig(claudePath);
+    queryOptions.pathToClaudeCodeExecutable = launchConfig.pathToClaudeCodeExecutable;
+    if (launchConfig.executable) {
+      queryOptions.executable = launchConfig.executable;
     }
   }
 
@@ -389,7 +389,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
     async start(controller) {
       // Resolve provider via the unified resolver. The caller may pass an explicit
       // provider (from resolveProvider().provider), or undefined when 'env' mode is
-      // intended. We do NOT fall back to getActiveProvider() here — that's handled
+      // intended. We do NOT fall back to getActiveProvider() here - that's handled
       // inside resolveForClaudeCode() only when no resolution was attempted at all.
       const resolved = resolveForClaudeCode(options.provider, {
         providerId: options.providerId,
@@ -424,7 +424,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
 
         // Build env from resolved provider
         const resolvedEnv = toClaudeCodeEnv(sdkEnv, resolved);
-        // toClaudeCodeEnv returns a full env — merge back into sdkEnv
+        // toClaudeCodeEnv returns a full env - merge back into sdkEnv
         // (preserves HOME, USERPROFILE, PATH, Git Bash detection set above)
         Object.assign(sdkEnv, resolvedEnv);
 
@@ -457,22 +457,15 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           queryOptions.allowDangerouslySkipPermissions = true;
         }
 
-        // Find claude binary for packaged app where PATH is limited.
-        // On Windows, npm installs Claude CLI as a .cmd wrapper which cannot
-        // be spawned directly without shell:true. Parse the wrapper to
-        // extract the real .js script path and pass that to the SDK instead.
+        // Find Claude binary for packaged app where PATH is limited.
+        // Preserve Windows wrappers as-is so the SDK launches the same
+        // executable users run successfully from their shell.
         const claudePath = findClaudePath();
         if (claudePath) {
-          const ext = path.extname(claudePath).toLowerCase();
-          if (ext === '.cmd' || ext === '.bat') {
-            const scriptPath = resolveScriptFromCmd(claudePath);
-            if (scriptPath) {
-              queryOptions.pathToClaudeCodeExecutable = scriptPath;
-            } else {
-              console.warn('[claude-client] Could not resolve .js path from .cmd wrapper, falling back to SDK resolution:', claudePath);
-            }
-          } else {
-            queryOptions.pathToClaudeCodeExecutable = claudePath;
+          const launchConfig = resolveClaudeLaunchConfig(claudePath);
+          queryOptions.pathToClaudeCodeExecutable = launchConfig.pathToClaudeCodeExecutable;
+          if (launchConfig.executable) {
+            queryOptions.executable = launchConfig.executable;
           }
         }
 
@@ -601,11 +594,11 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           workingDirectory,
         };
 
-        // No queryOptions.hooks — all hook types (Notification, PostToolUse) use
+        // No queryOptions.hooks - all hook types (Notification, PostToolUse) use
         // the SDK's hook_callback control_request transport, which fails with
         // "CLI output was not valid JSON" when the CLI mixes control frames with
         // normal stdout. Notifications are derived from stream messages instead
-        // (task_notification, result). TodoWrite sync uses tool_use → tool_result.
+        // (task_notification, result). TodoWrite sync uses tool_use -> tool_result.
 
         // Capture real-time stderr output from Claude Code process
         queryOptions.stderr = (data: string) => {
@@ -799,7 +792,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                     }),
                   }));
 
-                  // Track TodoWrite calls — sync deferred until tool_result confirms success
+                  // Track TodoWrite calls - sync deferred until tool_result confirms success
                   if (block.name === 'TodoWrite') {
                     try {
                       const toolInput = block.input as {
@@ -862,7 +855,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                 }
               }
 
-              // Emit rewind_point for file checkpointing — only for prompt-level
+              // Emit rewind_point for file checkpointing - only for prompt-level
               // user messages (parent_tool_use_id === null), and skip auto-trigger
               // turns which are invisible to the user (onboarding/check-in).
               if (
@@ -916,7 +909,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                     }));
                   }
                 } else if (sysMsg.subtype === 'task_notification') {
-                  // Agent task completed/failed/stopped — surface as notification
+                  // Agent task completed/failed/stopped - surface as notification
                   const taskMsg = sysMsg as SDKSystemMessage & {
                     status: string; summary: string; task_id: string;
                   };
@@ -1019,14 +1012,17 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         // Provide more specific error messages based on error type
         if (error instanceof Error) {
           const code = (error as NodeJS.ErrnoException).code;
-          if (code === 'ENOENT' || rawMessage.includes('ENOENT') || rawMessage.includes('spawn')) {
+          const launchFailure = classifyClaudeLaunchFailure(rawMessage, code);
+          if (launchFailure === 'missing_node_runtime') {
+            errorMessage = `Claude Code was found, but CodePilot could not start its Node.js runtime dependency. Please ensure Node.js is installed and available in PATH.\n\nOriginal error: ${rawMessage}`;
+          } else if (launchFailure === 'missing_claude_cli') {
             errorMessage = `Claude Code CLI not found. Please ensure Claude Code is installed and available in your PATH.\n\nOriginal error: ${rawMessage}`;
           } else if (rawMessage.includes('exited with code 1') || rawMessage.includes('exit code 1')) {
             const providerHint = resolved.provider?.name ? ` (Provider: ${resolved.provider?.name})` : '';
             const detailHint = extraDetail ? `\n\nDetails: ${extraDetail}` : '';
             const hasImages = files && files.some(f => isImageFile(f.type));
-            const imageHint = hasImages ? '\n• Provider may not support image/vision input' : '';
-            errorMessage = `Claude Code process exited with an error${providerHint}. This is often caused by:\n• Invalid or missing API Key\n• Incorrect Base URL configuration\n• Network connectivity issues${imageHint}${detailHint}\n\nOriginal error: ${rawMessage}`;
+            const imageHint = hasImages ? '\n- Provider may not support image/vision input' : '';
+            errorMessage = `Claude Code process exited with an error${providerHint}. This is often caused by:\n- Invalid or missing API Key\n- Incorrect Base URL configuration\n- Network connectivity issues${imageHint}${detailHint}\n\nOriginal error: ${rawMessage}`;
           } else if (rawMessage.includes('exited with code')) {
             const providerHint = resolved.provider?.name ? ` (Provider: ${resolved.provider?.name})` : '';
             errorMessage = `Claude Code process crashed unexpectedly${providerHint}.\n\nOriginal error: ${rawMessage}`;
@@ -1047,7 +1043,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         controller.enqueue(formatSSE({ type: 'done', data: '' }));
 
         // Always clear sdk_session_id on crash so the next message starts fresh.
-        // Even for fresh sessions — the SDK may emit a session_id via status
+        // Even for fresh sessions - the SDK may emit a session_id via status
         // event before crashing, which gets persisted by consumeStream/SSE
         // handlers. Leaving it would cause repeated resume failures.
         if (sessionId) {
