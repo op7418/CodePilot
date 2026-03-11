@@ -1,5 +1,8 @@
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import {
   VENDOR_PRESETS,
   inferProtocolFromLegacy,
@@ -9,7 +12,7 @@ import {
 } from '../../lib/provider-catalog';
 import type { Protocol } from '../../lib/provider-catalog';
 
-// ── Provider Catalog Tests ──────────────────────────────────────
+//  Provider Catalog Tests 
 
 describe('Provider Catalog', () => {
   describe('VENDOR_PRESETS', () => {
@@ -103,86 +106,86 @@ describe('Provider Catalog', () => {
   });
 
   describe('inferProtocolFromLegacy', () => {
-    it('anthropic type → anthropic protocol', () => {
+    it('anthropic type ?anthropic protocol', () => {
       assert.equal(inferProtocolFromLegacy('anthropic', 'https://api.anthropic.com'), 'anthropic');
     });
 
-    it('openrouter type → openrouter protocol', () => {
+    it('openrouter type ?openrouter protocol', () => {
       assert.equal(inferProtocolFromLegacy('openrouter', 'https://openrouter.ai/api'), 'openrouter');
     });
 
-    it('bedrock type → bedrock protocol', () => {
+    it('bedrock type ?bedrock protocol', () => {
       assert.equal(inferProtocolFromLegacy('bedrock', ''), 'bedrock');
     });
 
-    it('vertex type → vertex protocol', () => {
+    it('vertex type ?vertex protocol', () => {
       assert.equal(inferProtocolFromLegacy('vertex', ''), 'vertex');
     });
 
-    it('gemini-image type → gemini-image protocol', () => {
+    it('gemini-image type ?gemini-image protocol', () => {
       assert.equal(inferProtocolFromLegacy('gemini-image', 'https://generativelanguage.googleapis.com'), 'gemini-image');
     });
 
     // Critical: Chinese vendors with custom type should infer anthropic
-    it('custom type + GLM base_url → anthropic protocol', () => {
+    it('custom type + GLM base_url ?anthropic protocol', () => {
       assert.equal(inferProtocolFromLegacy('custom', 'https://open.bigmodel.cn/api/anthropic'), 'anthropic');
       assert.equal(inferProtocolFromLegacy('custom', 'https://api.z.ai/api/anthropic'), 'anthropic');
     });
 
-    it('custom type + Kimi base_url → anthropic protocol', () => {
+    it('custom type + Kimi base_url ?anthropic protocol', () => {
       assert.equal(inferProtocolFromLegacy('custom', 'https://api.kimi.com/coding/'), 'anthropic');
     });
 
-    it('custom type + Moonshot base_url → anthropic protocol', () => {
+    it('custom type + Moonshot base_url ?anthropic protocol', () => {
       assert.equal(inferProtocolFromLegacy('custom', 'https://api.moonshot.cn/anthropic'), 'anthropic');
     });
 
-    it('custom type + MiniMax base_url → anthropic protocol', () => {
+    it('custom type + MiniMax base_url ?anthropic protocol', () => {
       assert.equal(inferProtocolFromLegacy('custom', 'https://api.minimaxi.com/anthropic'), 'anthropic');
       assert.equal(inferProtocolFromLegacy('custom', 'https://api.minimax.io/anthropic'), 'anthropic');
     });
 
-    it('custom type + Volcengine base_url → anthropic protocol', () => {
+    it('custom type + Volcengine base_url ?anthropic protocol', () => {
       assert.equal(inferProtocolFromLegacy('custom', 'https://ark.cn-beijing.volces.com/api/coding'), 'anthropic');
     });
 
-    it('custom type + Bailian base_url → anthropic protocol', () => {
+    it('custom type + Bailian base_url ?anthropic protocol', () => {
       assert.equal(inferProtocolFromLegacy('custom', 'https://coding.dashscope.aliyuncs.com/apps/anthropic'), 'anthropic');
     });
 
-    it('custom type + unknown URL → openai-compatible protocol', () => {
+    it('custom type + unknown URL ?openai-compatible protocol', () => {
       assert.equal(inferProtocolFromLegacy('custom', 'https://my-server.example.com/v1'), 'openai-compatible');
     });
 
-    it('custom type + URL containing /anthropic → anthropic protocol', () => {
+    it('custom type + URL containing /anthropic ?anthropic protocol', () => {
       assert.equal(inferProtocolFromLegacy('custom', 'https://proxy.example.com/anthropic'), 'anthropic');
     });
   });
 
   describe('inferAuthStyleFromLegacy', () => {
-    it('bedrock → env_only', () => {
+    it('bedrock ?env_only', () => {
       assert.equal(inferAuthStyleFromLegacy('bedrock', '{}'), 'env_only');
     });
 
-    it('vertex → env_only', () => {
+    it('vertex ?env_only', () => {
       assert.equal(inferAuthStyleFromLegacy('vertex', '{}'), 'env_only');
     });
 
-    it('extra_env with ANTHROPIC_AUTH_TOKEN → auth_token', () => {
+    it('extra_env with ANTHROPIC_AUTH_TOKEN ?auth_token', () => {
       assert.equal(
         inferAuthStyleFromLegacy('custom', '{"ANTHROPIC_AUTH_TOKEN":""}'),
         'auth_token',
       );
     });
 
-    it('extra_env with ANTHROPIC_API_KEY → api_key', () => {
+    it('extra_env with ANTHROPIC_API_KEY ?api_key', () => {
       assert.equal(
         inferAuthStyleFromLegacy('custom', '{"ANTHROPIC_API_KEY":""}'),
         'api_key',
       );
     });
 
-    it('empty extra_env → api_key', () => {
+    it('empty extra_env ?api_key', () => {
       assert.equal(inferAuthStyleFromLegacy('anthropic', '{}'), 'api_key');
     });
   });
@@ -245,7 +248,7 @@ describe('Provider Catalog', () => {
   });
 });
 
-// ── Provider Resolver Tests ─────────────────────────────────────
+//  Provider Resolver Tests 
 
 import { resolveProvider, toClaudeCodeEnv, toAiSdkConfig } from '../../lib/provider-resolver';
 import type { ResolvedProvider } from '../../lib/provider-resolver';
@@ -262,7 +265,7 @@ describe('Provider Resolver', () => {
     it('returns env-based resolution when no provider configured', () => {
       // With no providers in DB, should return env-based
       const resolved = resolveProvider({});
-      // provider may be undefined or the default — depends on DB state
+      // provider may be undefined or the default ?depends on DB state
       assert.equal(resolved.protocol, 'anthropic');
     });
   });
@@ -371,8 +374,8 @@ describe('Provider Resolver', () => {
         headers: {},
         envOverrides: {
           API_TIMEOUT_MS: '3000000',
-          ANTHROPIC_API_KEY: '', // legacy placeholder — should be skipped (auth keys handled by auth injection)
-          SOME_CUSTOM_VAR: '',   // non-auth key — should be deleted
+          ANTHROPIC_API_KEY: '', // legacy placeholder ?should be skipped (auth keys handled by auth injection)
+          SOME_CUSTOM_VAR: '',   // non-auth key ?should be deleted
         },
         roleModels: {},
         hasCredentials: true,
@@ -382,7 +385,7 @@ describe('Provider Resolver', () => {
 
       const env = toClaudeCodeEnv({ PATH: '/usr/bin', SOME_CUSTOM_VAR: 'old' }, resolved);
       assert.equal(env.API_TIMEOUT_MS, '3000000');
-      // Auth keys are NOT deleted by envOverrides — they're managed by the auth injection logic above
+      // Auth keys are NOT deleted by envOverrides ?they're managed by the auth injection logic above
       assert.equal(env.ANTHROPIC_API_KEY, 'key'); // preserved from auth injection
       assert.equal(env.SOME_CUSTOM_VAR, undefined); // non-auth key deleted by empty string
     });
@@ -454,8 +457,54 @@ describe('Provider Resolver', () => {
     });
   });
 
+  describe('env-mode Claude settings inheritance', () => {
+    it('reads auth env from ~/.claude/settings.json in env mode', () => {
+      const origHome = process.env.HOME;
+      const origUserProfile = process.env.USERPROFILE;
+      const origApiKey = process.env.ANTHROPIC_API_KEY;
+      const origAuthToken = process.env.ANTHROPIC_AUTH_TOKEN;
+      const origBaseUrl = process.env.ANTHROPIC_BASE_URL;
+
+      const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-claude-settings-'));
+      const claudeDir = path.join(tempRoot, '.claude');
+      fs.mkdirSync(claudeDir, { recursive: true });
+      fs.writeFileSync(
+        path.join(claudeDir, 'settings.json'),
+        JSON.stringify({
+          env: {
+            ANTHROPIC_AUTH_TOKEN: 'settings-token',
+            ANTHROPIC_BASE_URL: 'https://settings.example/anthropic',
+          },
+        }),
+      );
+
+      process.env.HOME = tempRoot;
+      process.env.USERPROFILE = tempRoot;
+      delete process.env.ANTHROPIC_API_KEY;
+      delete process.env.ANTHROPIC_AUTH_TOKEN;
+      delete process.env.ANTHROPIC_BASE_URL;
+
+      try {
+        const resolved = resolveProvider({ providerId: 'env' });
+        assert.equal(resolved.provider, undefined);
+        assert.equal(resolved.hasCredentials, true);
+
+        const env = toClaudeCodeEnv({ PATH: '/usr/bin' }, resolved);
+        assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'settings-token');
+        assert.equal(env.ANTHROPIC_BASE_URL, 'https://settings.example/anthropic');
+      } finally {
+        if (origHome !== undefined) process.env.HOME = origHome; else delete process.env.HOME;
+        if (origUserProfile !== undefined) process.env.USERPROFILE = origUserProfile; else delete process.env.USERPROFILE;
+        if (origApiKey !== undefined) process.env.ANTHROPIC_API_KEY = origApiKey; else delete process.env.ANTHROPIC_API_KEY;
+        if (origAuthToken !== undefined) process.env.ANTHROPIC_AUTH_TOKEN = origAuthToken; else delete process.env.ANTHROPIC_AUTH_TOKEN;
+        if (origBaseUrl !== undefined) process.env.ANTHROPIC_BASE_URL = origBaseUrl; else delete process.env.ANTHROPIC_BASE_URL;
+        fs.rmSync(tempRoot, { recursive: true, force: true });
+      }
+    });
+  });
+
   describe('toAiSdkConfig', () => {
-    it('anthropic protocol → anthropic SDK', () => {
+    it('anthropic protocol ?anthropic SDK', () => {
       const resolved: ResolvedProvider = {
         provider: {
           id: 'test', name: 'Test', provider_type: 'anthropic', protocol: 'anthropic',
@@ -484,7 +533,7 @@ describe('Provider Resolver', () => {
       assert.deepEqual(config.processEnvInjections, {});
     });
 
-    it('openrouter protocol → openai SDK with correct base URL', () => {
+    it('openrouter protocol ?openai SDK with correct base URL', () => {
       const resolved: ResolvedProvider = {
         provider: {
           id: 'test', name: 'OR', provider_type: 'openrouter', protocol: 'openrouter',
@@ -511,7 +560,7 @@ describe('Provider Resolver', () => {
       assert.equal(config.baseUrl, 'https://openrouter.ai/api');
     });
 
-    it('bedrock protocol → injects env overrides', () => {
+    it('bedrock protocol ?injects env overrides', () => {
       const resolved: ResolvedProvider = {
         provider: {
           id: 'test', name: 'Bedrock', provider_type: 'bedrock', protocol: 'bedrock',
@@ -536,14 +585,14 @@ describe('Provider Resolver', () => {
       };
 
       const config = toAiSdkConfig(resolved);
-      assert.equal(config.sdkType, 'bedrock'); // no base_url → native bedrock SDK
+      assert.equal(config.sdkType, 'bedrock'); // no base_url ?native bedrock SDK
       assert.deepEqual(config.processEnvInjections, {
         CLAUDE_CODE_USE_BEDROCK: '1',
         AWS_REGION: 'us-east-1',
       });
     });
 
-    it('openai-compatible protocol → openai SDK', () => {
+    it('openai-compatible protocol ?openai SDK', () => {
       const resolved: ResolvedProvider = {
         provider: {
           id: 'test', name: 'Custom', provider_type: 'custom', protocol: 'openai-compatible',
@@ -594,7 +643,7 @@ describe('Provider Resolver', () => {
       assert.equal(config.modelId, 'opus');
     });
 
-    it('gemini-image protocol → google SDK', () => {
+    it('gemini-image protocol ?google SDK', () => {
       const resolved: ResolvedProvider = {
         provider: {
           id: 'test', name: 'Gemini', provider_type: 'gemini-image', protocol: 'gemini-image',
@@ -623,7 +672,7 @@ describe('Provider Resolver', () => {
   });
 });
 
-// ── Entry Point Consistency Tests ───────────────────────────────
+//  Entry Point Consistency Tests 
 
 describe('Entry Point Consistency', () => {
   it('all Anthropic-compatible Chinese vendors infer correct protocol from legacy custom type', () => {
@@ -654,7 +703,7 @@ describe('Entry Point Consistency', () => {
   });
 });
 
-// ── Env Provider in AI SDK Path ─────────────────────────────────
+//  Env Provider in AI SDK Path 
 
 describe('Env Provider AI SDK Consistency', () => {
   it('env resolution with ANTHROPIC_API_KEY sets hasCredentials=true', () => {
@@ -692,30 +741,43 @@ describe('Env Provider AI SDK Consistency', () => {
   });
 
   it('toAiSdkConfig with env resolution produces valid anthropic config', () => {
-    const resolved: ResolvedProvider = {
-      provider: undefined,
-      protocol: 'anthropic',
-      authStyle: 'api_key',
-      model: 'sonnet',
-      upstreamModel: 'sonnet',
-      modelDisplayName: undefined,
-      headers: {},
-      envOverrides: {},
-      roleModels: {},
-      hasCredentials: true,
-      availableModels: [],
-      settingSources: ['user', 'project', 'local'],
-    };
-    const config = toAiSdkConfig(resolved);
-    assert.equal(config.sdkType, 'anthropic');
-    assert.equal(config.modelId, 'sonnet');
-    // No apiKey/baseUrl — SDK will read from process.env
-    assert.equal(config.apiKey, undefined);
-    assert.equal(config.baseUrl, undefined);
+    const origHome = process.env.HOME;
+    const origUserProfile = process.env.USERPROFILE;
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-empty-claude-home-'));
+
+    process.env.HOME = tempRoot;
+    process.env.USERPROFILE = tempRoot;
+
+    try {
+      const resolved: ResolvedProvider = {
+        provider: undefined,
+        protocol: 'anthropic',
+        authStyle: 'api_key',
+        model: 'sonnet',
+        upstreamModel: 'sonnet',
+        modelDisplayName: undefined,
+        headers: {},
+        envOverrides: {},
+        roleModels: {},
+        hasCredentials: true,
+        availableModels: [],
+        settingSources: ['user', 'project', 'local'],
+      };
+      const config = toAiSdkConfig(resolved);
+      assert.equal(config.sdkType, 'anthropic');
+      assert.equal(config.modelId, 'sonnet');
+      // No apiKey/baseUrl  SDK will read from process.env
+      assert.equal(config.apiKey, undefined);
+      assert.equal(config.baseUrl, undefined);
+    } finally {
+      if (origHome !== undefined) process.env.HOME = origHome; else delete process.env.HOME;
+      if (origUserProfile !== undefined) process.env.USERPROFILE = origUserProfile; else delete process.env.USERPROFILE;
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 });
 
-// ── Upstream Model ID Mapping ───────────────────────────────────
+//  Upstream Model ID Mapping 
 
 describe('Upstream Model ID Mapping', () => {
   it('toAiSdkConfig maps internal model ID to upstream via availableModels', () => {
@@ -742,15 +804,15 @@ describe('Upstream Model ID Mapping', () => {
       settingSources: ['project', 'local'],
     };
 
-    // Without override — uses resolved.upstreamModel
+    // Without override ?uses resolved.upstreamModel
     const config1 = toAiSdkConfig(resolved);
     assert.equal(config1.modelId, 'glm-4.7', 'should use upstream model ID from resolution');
 
-    // With override matching an available model — should map to upstream
+    // With override matching an available model ?should map to upstream
     const config2 = toAiSdkConfig(resolved, 'opus');
     assert.equal(config2.modelId, 'glm-5', 'override "opus" should map to upstream "glm-5"');
 
-    // With override NOT in available models — passes through as-is
+    // With override NOT in available models ?passes through as-is
     const config3 = toAiSdkConfig(resolved, 'unknown-model');
     assert.equal(config3.modelId, 'unknown-model', 'unknown override should pass through');
   });
@@ -784,7 +846,7 @@ describe('Upstream Model ID Mapping', () => {
   });
 });
 
-// ── Entry Point Resolution Contract ─────────────────────────────
+//  Entry Point Resolution Contract 
 // Verifies that ALL entry points (chat, bridge, onboarding, check-in, media plan)
 // produce identical resolution results for the same inputs, and that the AI SDK
 // path does not have any fallback logic outside the unified resolver.
@@ -793,7 +855,7 @@ describe('Entry Point Resolution Contract', () => {
   it('env provider with no credentials does not silently fallback', () => {
     // When providerId='env' is explicitly selected but shell has no credentials,
     // the resolver must return hasCredentials=false. The AI SDK path (text-generator)
-    // must then throw — NOT silently pick a random DB provider.
+    // must then throw ?NOT silently pick a random DB provider.
     const origKey = process.env.ANTHROPIC_API_KEY;
     const origToken = process.env.ANTHROPIC_AUTH_TOKEN;
     delete process.env.ANTHROPIC_API_KEY;
@@ -804,7 +866,7 @@ describe('Entry Point Resolution Contract', () => {
       // hasCredentials should be false when no env vars are set
       // (may be true if legacy DB setting exists, which is also valid)
       if (!resolved.hasCredentials) {
-        // This is the case text-generator should throw on — NOT fallback to DB
+        // This is the case text-generator should throw on ?NOT fallback to DB
         assert.equal(resolved.hasCredentials, false);
         assert.equal(resolved.provider, undefined);
         // Contract: any consumer seeing this result must throw, not fallback
@@ -847,27 +909,38 @@ describe('Entry Point Resolution Contract', () => {
   });
 
   it('toAiSdkConfig for env mode does not require provider record', () => {
-    // env mode: provider=undefined, hasCredentials=true
-    // toAiSdkConfig must produce a valid config that relies on process.env for auth
-    const resolved: ResolvedProvider = {
-      provider: undefined,
-      protocol: 'anthropic',
-      authStyle: 'api_key',
-      model: 'sonnet',
-      upstreamModel: 'sonnet',
-      modelDisplayName: undefined,
-      headers: {},
-      envOverrides: {},
-      roleModels: {},
-      hasCredentials: true,
-      availableModels: [],
-      settingSources: ['user', 'project', 'local'],
-    };
-    const config = toAiSdkConfig(resolved);
-    assert.equal(config.sdkType, 'anthropic');
-    assert.equal(config.apiKey, undefined, 'env mode should not inject apiKey — SDK reads from process.env');
-    assert.equal(config.baseUrl, undefined, 'env mode should not inject baseUrl — SDK reads from process.env');
-    assert.equal(config.modelId, 'sonnet');
+    const origHome = process.env.HOME;
+    const origUserProfile = process.env.USERPROFILE;
+    const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-empty-claude-home-'));
+
+    process.env.HOME = tempRoot;
+    process.env.USERPROFILE = tempRoot;
+
+    try {
+      const resolved: ResolvedProvider = {
+        provider: undefined,
+        protocol: 'anthropic',
+        authStyle: 'api_key',
+        model: 'sonnet',
+        upstreamModel: 'sonnet',
+        modelDisplayName: undefined,
+        headers: {},
+        envOverrides: {},
+        roleModels: {},
+        hasCredentials: true,
+        availableModels: [],
+        settingSources: ['user', 'project', 'local'],
+      };
+      const config = toAiSdkConfig(resolved);
+      assert.equal(config.sdkType, 'anthropic');
+      assert.equal(config.apiKey, undefined, 'env mode should not inject apiKey  SDK reads from process.env');
+      assert.equal(config.baseUrl, undefined, 'env mode should not inject baseUrl when no Claude settings are present');
+      assert.equal(config.modelId, 'sonnet');
+    } finally {
+      if (origHome !== undefined) process.env.HOME = origHome; else delete process.env.HOME;
+      if (origUserProfile !== undefined) process.env.USERPROFILE = origUserProfile; else delete process.env.USERPROFILE;
+      fs.rmSync(tempRoot, { recursive: true, force: true });
+    }
   });
 
   it('upstream model mapping is consistent between AI SDK and Claude Code paths', () => {
@@ -908,3 +981,6 @@ describe('Entry Point Resolution Contract', () => {
     assert.equal(aiConfig.modelId, ccEnv.ANTHROPIC_MODEL, 'AI SDK and Claude Code must use same upstream model');
   });
 });
+
+
+

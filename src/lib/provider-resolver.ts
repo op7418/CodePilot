@@ -1,5 +1,5 @@
 /**
- * Provider Resolver — unified provider/model resolution for all consumers.
+ * Provider Resolver - unified provider/model resolution for all consumers.
  *
  * Every entry point (chat, bridge, onboarding, check-in, media plan) calls
  * this module instead of doing its own provider resolution. This guarantees
@@ -24,8 +24,9 @@ import {
   getSetting,
   getModelsForProvider,
 } from './db';
+import { readClaudeSettingsEnv } from './platform';
 
-// ── Resolution result ───────────────────────────────────────────
+// Resolution result
 
 export interface ResolvedProvider {
   /** The DB provider record (undefined = use env vars) */
@@ -36,7 +37,7 @@ export interface ResolvedProvider {
   authStyle: AuthStyle;
   /** Resolved model ID (internal/UI model ID) */
   model: string | undefined;
-  /** Upstream model ID (what actually gets sent to the API — may differ from model) */
+  /** Upstream model ID (what actually gets sent to the API - may differ from model) */
   upstreamModel: string | undefined;
   /** Display name for the model */
   modelDisplayName: string | undefined;
@@ -54,7 +55,7 @@ export interface ResolvedProvider {
   settingSources: string[];
 }
 
-// ── Public API ──────────────────────────────────────────────────
+// Public API
 
 export interface ResolveOptions {
   /** Explicit provider ID from request (highest priority) */
@@ -65,7 +66,7 @@ export interface ResolveOptions {
   model?: string;
   /** Session's stored model */
   sessionModel?: string;
-  /** Use case — affects which role model to pick */
+  /** Use case - affects which role model to pick */
   useCase?: 'default' | 'reasoning' | 'small';
 }
 
@@ -86,7 +87,7 @@ export function resolveProvider(opts: ResolveOptions = {}): ResolvedProvider {
   let provider: ApiProvider | undefined;
 
   if (effectiveProviderId && effectiveProviderId !== 'env') {
-    // Explicit provider — look it up
+    // Explicit provider - look it up
     provider = getProvider(effectiveProviderId);
     if (!provider) {
       // Requested provider not found, fall back to default
@@ -94,11 +95,11 @@ export function resolveProvider(opts: ResolveOptions = {}): ResolvedProvider {
       if (defaultId) provider = getProvider(defaultId);
     }
   } else if (!effectiveProviderId) {
-    // No provider specified — use global default
+    // No provider specified - use global default
     const defaultId = getDefaultProviderId();
     if (defaultId) provider = getProvider(defaultId);
   }
-  // effectiveProviderId === 'env' → provider stays undefined
+  // effectiveProviderId === 'env' -> provider stays undefined
 
   return buildResolution(provider, opts);
 }
@@ -124,7 +125,7 @@ export function resolveForClaudeCode(
   if (!resolved.provider && !opts.providerId && !opts.sessionProviderId) {
     const defaultId = getDefaultProviderId();
     if (!defaultId) {
-      // No default configured either — last resort backwards compat
+      // No default configured either - last resort backwards compat
       const active = getActiveProvider();
       if (active) return buildResolution(active, opts);
     }
@@ -132,7 +133,7 @@ export function resolveForClaudeCode(
   return resolved;
 }
 
-// ── Claude Code env builder ─────────────────────────────────────
+// Claude Code env builder
 
 /**
  * Build environment variables for a Claude Code SDK subprocess.
@@ -147,6 +148,7 @@ export function toClaudeCodeEnv(
   resolved: ResolvedProvider,
 ): Record<string, string> {
   const env = { ...baseEnv };
+  const claudeSettingsEnv = readClaudeSettingsEnv();
 
   // Managed env vars that must be cleaned when switching providers to prevent leaks
   const MANAGED_ENV_KEYS = new Set([
@@ -220,7 +222,7 @@ export function toClaudeCodeEnv(
     }
 
     // Inject env overrides (empty string = delete).
-    // Skip auth-related keys — they were already correctly injected above based on authStyle.
+    // Skip auth-related keys - they were already correctly injected above based on authStyle.
     // Legacy extra_env often contains placeholder entries like {"ANTHROPIC_AUTH_TOKEN":""} or
     // {"ANTHROPIC_API_KEY":""} that would delete the freshly-injected credentials.
     const AUTH_ENV_KEYS = new Set([
@@ -239,7 +241,12 @@ export function toClaudeCodeEnv(
       }
     }
   } else if (!resolved.provider) {
-    // No provider — check legacy DB settings, then fall back to existing env
+    // No provider - inherit CLI env defaults from ~/.claude/settings.json,
+    // then allow explicit app-level settings to override them.
+    for (const [key, value] of Object.entries(claudeSettingsEnv)) {
+      if (env[key] === undefined) env[key] = value;
+    }
+
     const appToken = getSetting('anthropic_auth_token');
     const appBaseUrl = getSetting('anthropic_base_url');
     if (appToken) env.ANTHROPIC_AUTH_TOKEN = appToken;
@@ -249,7 +256,7 @@ export function toClaudeCodeEnv(
   return env;
 }
 
-// ── AI SDK config builder ───────────────────────────────────────
+// AI SDK config builder
 
 export interface AiSdkConfig {
   /** Which AI SDK factory to use */
@@ -307,20 +314,24 @@ export function toAiSdkConfig(
   // and they are mutually exclusive. We must pick the right one based on authStyle.
   const resolveAnthropicAuth = (): { apiKey: string | undefined; authToken: string | undefined } => {
     if (provider) {
-      // Configured provider — use authStyle to decide
+      // Configured provider - use authStyle to decide
       if (resolved.authStyle === 'auth_token') {
         return { apiKey: undefined, authToken: provider.api_key || undefined };
       }
       return { apiKey: provider.api_key || undefined, authToken: undefined };
     }
-    // Env mode — check env vars and legacy DB settings.
+    // Env mode - check env vars and legacy DB settings.
     // ANTHROPIC_AUTH_TOKEN takes precedence (it's the Claude Code SDK auth path).
-    const envAuthToken = process.env.ANTHROPIC_AUTH_TOKEN || getSetting('anthropic_auth_token');
+    const claudeSettingsEnv = readClaudeSettingsEnv();
+    const envAuthToken =
+      process.env.ANTHROPIC_AUTH_TOKEN ||
+      claudeSettingsEnv.ANTHROPIC_AUTH_TOKEN ||
+      getSetting('anthropic_auth_token');
     if (envAuthToken) {
       // If we also have an API key, prefer auth_token (matches Claude Code SDK behavior)
       return { apiKey: undefined, authToken: envAuthToken };
     }
-    const envApiKey = process.env.ANTHROPIC_API_KEY;
+    const envApiKey = process.env.ANTHROPIC_API_KEY || claudeSettingsEnv.ANTHROPIC_API_KEY;
     return { apiKey: envApiKey || undefined, authToken: undefined };
   };
 
@@ -339,7 +350,13 @@ export function toAiSdkConfig(
   switch (protocol) {
     case 'anthropic': {
       const auth = resolveAnthropicAuth();
-      const rawBaseUrl = provider?.base_url || process.env.ANTHROPIC_BASE_URL || getSetting('anthropic_base_url') || undefined;
+      const claudeSettingsEnv = readClaudeSettingsEnv();
+      const rawBaseUrl =
+        provider?.base_url ||
+        process.env.ANTHROPIC_BASE_URL ||
+        claudeSettingsEnv.ANTHROPIC_BASE_URL ||
+        getSetting('anthropic_base_url') ||
+        undefined;
       return {
         sdkType: 'anthropic',
         ...auth,
@@ -444,17 +461,21 @@ export function toAiSdkConfig(
   }
 }
 
-// ── Internal helpers ────────────────────────────────────────────
+// Internal helpers
 
 function buildResolution(
   provider: ApiProvider | undefined,
   opts: ResolveOptions,
 ): ResolvedProvider {
   if (!provider) {
-    // Environment-based provider (no DB record) — credentials come from shell env or legacy DB settings
+    // Environment-based provider (no DB record) - credentials can come from shell env,
+    // ~/.claude/settings.json, or legacy DB settings.
+    const claudeSettingsEnv = readClaudeSettingsEnv();
     const envHasCredentials = !!(
       process.env.ANTHROPIC_API_KEY ||
       process.env.ANTHROPIC_AUTH_TOKEN ||
+      claudeSettingsEnv.ANTHROPIC_API_KEY ||
+      claudeSettingsEnv.ANTHROPIC_AUTH_TOKEN ||
       getSetting('anthropic_auth_token')
     );
     const model = opts.model || opts.sessionModel || getSetting('default_model') || undefined;
@@ -513,7 +534,7 @@ function buildResolution(
     }
   } catch { /* provider_models table may not exist in old DBs */ }
 
-  // Resolve model — priority:
+  // Resolve model - priority:
   //   1. Explicit request model (opts.model)
   //   2. Session's stored model (opts.sessionModel)
   //   3. Provider's roleModels.default (configured per-provider default, e.g. "ark-code-latest")
@@ -545,7 +566,7 @@ function buildResolution(
   // Has credentials?
   const hasCredentials = !!(provider.api_key) || authStyle === 'env_only';
 
-  // Settings sources — always include 'user' so SDK can load skills from
+  // Settings sources - always include 'user' so SDK can load skills from
   // ~/.claude/skills/. Env override conflicts are handled by envOverrides.
   const settingSources = ['user', 'project', 'local'];
 
@@ -605,4 +626,4 @@ function safeParseCapabilities(json: string | undefined | null): CatalogModel['c
 }
 
 // ApiProvider now includes protocol, headers_json, env_overrides_json, role_models_json
-// directly — no type augmentation needed.
+// directly - no type augmentation needed.

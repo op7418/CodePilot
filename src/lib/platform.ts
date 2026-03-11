@@ -9,6 +9,25 @@ const execFileAsync = promisify(execFile);
 export const isWindows = process.platform === 'win32';
 export const isMac = process.platform === 'darwin';
 
+export function readClaudeSettingsEnv(settingsPath = path.join(process.env.USERPROFILE || process.env.HOME || os.homedir(), '.claude', 'settings.json')): Record<string, string> {
+  try {
+    if (!fs.existsSync(settingsPath)) return {};
+    const parsed = JSON.parse(fs.readFileSync(settingsPath, 'utf8')) as { env?: Record<string, unknown> };
+    const env = parsed?.env;
+    if (!env || typeof env !== 'object') return {};
+
+    const clean: Record<string, string> = {};
+    for (const [key, value] of Object.entries(env)) {
+      if (typeof value === 'string' && value !== '') {
+        clean[key] = value;
+      }
+    }
+    return clean;
+  } catch {
+    return {};
+  }
+}
+
 /**
  * Whether the given binary path requires shell execution.
  * On Windows, .cmd/.bat files cannot be executed directly by execFileSync.

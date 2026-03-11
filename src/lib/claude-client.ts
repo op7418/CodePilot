@@ -50,6 +50,26 @@ function sanitizeEnv(env: Record<string, string>): Record<string, string> {
   }
   return clean;
 }
+const claudeLaunchLogDir = path.join(process.env.CLAUDE_GUI_DATA_DIR || path.join(os.homedir(), '.codepilot'), 'logs');
+const claudeLaunchLogPath = path.join(claudeLaunchLogDir, 'claude-launch.log');
+
+function maskSecret(value: string | undefined): string | undefined {
+  if (!value) return undefined;
+  if (value.length <= 8) return '***';
+  return `${value.slice(0, 4)}***${value.slice(-4)}`;
+}
+
+function appendClaudeLaunchLog(event: string, payload: Record<string, unknown>): void {
+  try {
+    if (!fs.existsSync(claudeLaunchLogDir)) {
+      fs.mkdirSync(claudeLaunchLogDir, { recursive: true });
+    }
+    const line = JSON.stringify({ ts: new Date().toISOString(), pid: process.pid, event, ...payload });
+    fs.appendFileSync(claudeLaunchLogPath, line + '\n', 'utf8');
+  } catch {
+    // best effort only
+  }
+}
 
 export interface ClaudeLaunchConfig {
   executable?: 'node';
@@ -73,6 +93,23 @@ export function resolveClaudeLaunchConfig(claudePath: string): ClaudeLaunchConfi
     };
   }
   return { pathToClaudeCodeExecutable: claudePath };
+}
+
+export function normalizeClaudeCodeModel(
+  requestedModel: string | undefined,
+  availableModels: Array<{ modelId: string; upstreamModelId?: string }>,
+): string | undefined {
+  if (!requestedModel) return undefined;
+  const normalized = requestedModel.trim();
+  if (!normalized) return undefined;
+
+  const exactModel = availableModels.find(m => m.modelId === normalized);
+  if (exactModel) return exactModel.modelId;
+
+  const upstreamMatch = availableModels.find(m => m.upstreamModelId === normalized);
+  if (upstreamMatch) return upstreamMatch.modelId;
+
+  return normalized;
 }
 
 export function classifyClaudeLaunchFailure(rawMessage: string, code?: string): 'missing_node_runtime' | 'missing_claude_cli' | null {
@@ -316,8 +353,12 @@ export async function generateTextViaSdk(params: {
     maxTurns: 1,
   };
 
-  if (params.model) {
-    queryOptions.model = params.model;
+  const normalizedModel = normalizeClaudeCodeModel(
+    params.model,
+    resolved.availableModels,
+  );
+  if (normalizedModel) {
+    queryOptions.model = normalizedModel;
   }
 
   const claudePath = findClaudePath();
@@ -469,9 +510,36 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           }
         }
 
-        if (model) {
-          queryOptions.model = model;
+        const normalizedModel = normalizeClaudeCodeModel(
+          model,
+          resolved.availableModels,
+        );
+        if (normalizedModel) {
+          queryOptions.model = normalizedModel;
         }
+
+        appendClaudeLaunchLog('stream_start', {
+          sessionId,
+          providerId: resolved.provider?.id,
+          providerName: resolved.provider?.name,
+          requestedModel: model,
+          normalizedModel,
+          resolvedModel: resolved.model,
+          resolvedUpstreamModel: resolved.upstreamModel,
+          queryModel: queryOptions.model,
+          availableModels: resolved.availableModels.map(m => ({ modelId: m.modelId, upstreamModelId: m.upstreamModelId })),
+          cwd: workingDirectory || os.homedir(),
+          home: sdkEnv.HOME,
+          userProfile: sdkEnv.USERPROFILE,
+          claudeCodeGitBashPath: sdkEnv.CLAUDE_CODE_GIT_BASH_PATH,
+          anthropicBaseUrl: sdkEnv.ANTHROPIC_BASE_URL,
+          anthropicAuthToken: maskSecret(sdkEnv.ANTHROPIC_AUTH_TOKEN),
+          anthropicApiKey: maskSecret(sdkEnv.ANTHROPIC_API_KEY),
+          settingSources: resolved.settingSources,
+          claudePath,
+          launchExecutable: queryOptions.executable,
+          launchPath: queryOptions.pathToClaudeCodeExecutable,
+        });
 
         if (systemPrompt) {
           // Use preset append mode to keep Claude Code's default system prompt
@@ -617,6 +685,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             .replace(/\n{3,}/g, '\n\n')                // Collapse multiple blank lines
             .trim();
           if (cleaned) {
+            appendClaudeLaunchLog('stderr', { sessionId, data: cleaned.slice(0, 4000) });
             controller.enqueue(formatSSE({
               type: 'tool_output',
               data: cleaned,
@@ -1039,7 +1108,17 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           }
         }
 
-        controller.enqueue(formatSSE({ type: 'error', data: errorMessage }));
+        appendClaudeLaunchLog('stream_error', {
+          sessionId,
+          message: rawMessage,
+          stack: error instanceof Error ? error.stack : undefined,
+          cause: error instanceof Error ? String((error as { cause?: unknown }).cause ?? '') : undefined,
+          stderr: error instanceof Error ? (error as { stderr?: string }).stderr : undefined,
+          code: error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined,
+          logPath: claudeLaunchLogPath,
+        });
+
+        controller.enqueue(formatSSE({ type: 'error', data: `${errorMessage}\n\nDiagnostic log: ${claudeLaunchLogPath}` }));
         controller.enqueue(formatSSE({ type: 'done', data: '' }));
 
         // Always clear sdk_session_id on crash so the next message starts fresh.

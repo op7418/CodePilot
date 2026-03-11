@@ -80,7 +80,7 @@ export async function POST(request: NextRequest) {
     };
     notifySessionStart(telegramNotifyOpts).catch(() => {});
 
-    // Save user message — persist file metadata so attachments survive page reload
+    // Save user message 鈥?persist file metadata so attachments survive page reload
     // Skip saving for autoTrigger messages (invisible system triggers for assistant hooks)
     // Use displayOverride for DB storage if provided (e.g. /skillName instead of expanded prompt)
     let savedContent = displayOverride || content;
@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
       updateSessionProviderId(session_id, persistProviderId);
     }
 
-    // Determine permission mode from chat mode: code → acceptEdits, plan → plan, ask → default (no tools)
+    // Determine permission mode from chat mode: code 鈫?acceptEdits, plan 鈫?plan, ask 鈫?default (no tools)
     const effectiveMode = mode || session.mode || 'code';
     let permissionMode: string;
     let systemPromptOverride: string | undefined;
@@ -312,14 +312,14 @@ Start by greeting the user and asking the first question.
         finalSystemPrompt = (finalSystemPrompt || '') + '\n\n' + cliToolsCtx;
       }
     } catch {
-      // CLI tools context injection failed — don't block chat
+      // CLI tools context injection failed 鈥?don't block chat
     }
 
     // Load recent conversation history from DB as fallback context.
     // This is used when SDK session resume is unavailable or fails,
     // so the model still has conversation context.
     const { messages: recentMsgs } = getMessages(session_id, { limit: 50 });
-    // Exclude the user message we just saved (last in the list) — it's already the prompt
+    // Exclude the user message we just saved (last in the list) 鈥?it's already the prompt
     const historyMsgs = recentMsgs.slice(0, -1).map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
@@ -481,9 +481,6 @@ async function collectStreamResponse(
                 if (statusData.session_id) {
                   updateSdkSessionId(sessionId, statusData.session_id);
                 }
-                if (statusData.model) {
-                  updateSessionModel(sessionId, statusData.model);
-                }
               } catch {
                 // skip malformed status data
               }
@@ -577,7 +574,7 @@ async function collectStreamResponse(
       }
     }
   } finally {
-    // ── Server-side completion detection (reliable path) ──
+    // 鈹€鈹€ Server-side completion detection (reliable path) 鈹€鈹€
     // After persisting the assistant message, check for onboarding/checkin
     // fences and process them directly on the server. This ensures completion
     // is captured even if the frontend misses it (page refresh, parse failure, etc.).
@@ -616,7 +613,7 @@ async function collectStreamResponse(
 
 /**
  * Process a detected onboarding/checkin completion on the server side.
- * Calls the shared processor functions directly — no HTTP round-trip needed.
+ * Calls the shared processor functions directly 鈥?no HTTP round-trip needed.
  *
  * Both processors are internally idempotent:
  * - processOnboarding checks state.onboardingComplete
