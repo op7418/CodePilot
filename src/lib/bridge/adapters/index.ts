@@ -10,3 +10,4 @@
  */
 
 import './telegram-adapter';
+import './discord-adapter';

@@ -383,13 +383,23 @@ async function handleMessage(
       );
     }, taskAbort.signal, hasAttachments ? msg.attachments : undefined);
 
-    // Send response text — render Markdown to Telegram HTML
+    // Send response text back to the IM channel.
+    // Telegram needs Markdown→HTML conversion; other platforms receive raw Markdown.
     if (result.responseText) {
-      const chunks = markdownToTelegramChunks(result.responseText, 4096);
-      if (chunks.length > 0) {
-        await deliverRendered(adapter, msg.address, chunks, {
-          sessionId: binding.codepilotSessionId,
-        });
+      if (adapter.channelType === 'telegram') {
+        const chunks = markdownToTelegramChunks(result.responseText, 4096);
+        if (chunks.length > 0) {
+          await deliverRendered(adapter, msg.address, chunks, {
+            sessionId: binding.codepilotSessionId,
+          });
+        }
+      } else {
+        // Discord and other platforms: send raw Markdown, let deliver() handle chunking
+        await deliver(adapter, {
+          address: msg.address,
+          text: result.responseText,
+          parseMode: 'plain',
+        }, { sessionId: binding.codepilotSessionId });
       }
     } else if (result.hasError) {
       const errorResponse: OutboundMessage = {
