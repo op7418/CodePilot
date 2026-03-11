@@ -237,11 +237,12 @@ function handleSSEEvent(
 export async function consumeSSEStream(
   reader: ReadableStreamDefaultReader<Uint8Array>,
   callbacks: SSECallbacks,
-): Promise<{ accumulated: string; tokenUsage: TokenUsage | null }> {
+): Promise<{ accumulated: string; tokenUsage: TokenUsage | null; receivedDone: boolean }> {
   const decoder = new TextDecoder();
   let buffer = '';
   let accumulated = '';
   let tokenUsage: TokenUsage | null = null;
+  let receivedDone = false;
 
   const wrappedCallbacks: SSECallbacks = {
     ...callbacks,
@@ -264,6 +265,9 @@ export async function consumeSSEStream(
 
       try {
         const event: SSEEvent = JSON.parse(line.slice(6));
+        if (event.type === 'done') {
+          receivedDone = true;
+        }
         accumulated = handleSSEEvent(event, accumulated, wrappedCallbacks);
       } catch {
         // skip malformed SSE lines
@@ -271,7 +275,20 @@ export async function consumeSSEStream(
     }
   }
 
-  return { accumulated, tokenUsage };
+  // Flush any residual buffer in case the final chunk didn't end with \n
+  if (buffer.trim().startsWith('data: ')) {
+    try {
+      const event: SSEEvent = JSON.parse(buffer.trim().slice(6));
+      if (event.type === 'done') {
+        receivedDone = true;
+      }
+      accumulated = handleSSEEvent(event, accumulated, wrappedCallbacks);
+    } catch {
+      // skip malformed residual data
+    }
+  }
+
+  return { accumulated, tokenUsage, receivedDone };
 }
 
 /**

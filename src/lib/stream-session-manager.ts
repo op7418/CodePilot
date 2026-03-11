@@ -358,6 +358,42 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
       },
     });
 
+    // Detect premature stream end (connection drop without server 'done' event)
+    if (!result.receivedDone) {
+      cleanupTimers(stream);
+
+      const dropMsg = 'Connection lost — the server stream ended unexpectedly. Claude may still be running in the background. Please try sending your message again.';
+      const errContent = stream.accumulatedText.trim()
+        ? stream.accumulatedText.trim() + `\n\n**Error:** ${dropMsg}`
+        : `**Error:** ${dropMsg}`;
+
+      stream.snapshot = {
+        ...buildSnapshot(stream),
+        phase: 'error',
+        completedAt: Date.now(),
+        error: dropMsg,
+        finalMessageContent: errContent,
+        statusText: undefined,
+        pendingPermission: null,
+        permissionResolved: null,
+      };
+      stream.accumulatedText = '';
+      stream.toolUsesArray = [];
+      stream.toolResultsArray = [];
+      stream.toolOutputAccumulated = '';
+      emit(stream, 'completed');
+
+      // Clear stale SDK session so next message starts fresh
+      fetch(`/api/chat/sessions/${encodeURIComponent(stream.sessionId)}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ sdk_session_id: '' }),
+      }).catch(() => {});
+
+      scheduleGC(stream);
+      return;
+    }
+
     // Stream completed successfully — build final message content
     const accumulated = result.accumulated;
     const finalToolUses = stream.toolUsesArray;
