@@ -23,6 +23,9 @@ interface FeishuBridgeSettings {
   bridge_feishu_app_id: string;
   bridge_feishu_app_secret: string;
   bridge_feishu_domain: string;
+  bridge_feishu_mode: string;
+  bridge_feishu_webhook_port: string;
+  bridge_feishu_webhook_verification_token: string;
   bridge_feishu_allowed_users: string;
   bridge_feishu_group_policy: string;
   bridge_feishu_group_allow_from: string;
@@ -33,6 +36,9 @@ const DEFAULT_SETTINGS: FeishuBridgeSettings = {
   bridge_feishu_app_id: "",
   bridge_feishu_app_secret: "",
   bridge_feishu_domain: "feishu",
+  bridge_feishu_mode: "websocket",
+  bridge_feishu_webhook_port: "9898",
+  bridge_feishu_webhook_verification_token: "",
   bridge_feishu_allowed_users: "",
   bridge_feishu_group_policy: "open",
   bridge_feishu_group_allow_from: "",
@@ -45,6 +51,9 @@ export function FeishuBridgeSection() {
   const [appId, setAppId] = useState("");
   const [appSecret, setAppSecret] = useState("");
   const [domain, setDomain] = useState("feishu");
+  const [mode, setMode] = useState("websocket");
+  const [webhookPort, setWebhookPort] = useState("9898");
+  const [verificationToken, setVerificationToken] = useState("");
   const [allowedUsers, setAllowedUsers] = useState("");
   const [groupPolicy, setGroupPolicy] = useState("open");
   const [groupAllowFrom, setGroupAllowFrom] = useState("");
@@ -67,6 +76,9 @@ export function FeishuBridgeSection() {
         setAppId(s.bridge_feishu_app_id);
         setAppSecret(s.bridge_feishu_app_secret);
         setDomain(s.bridge_feishu_domain || "feishu");
+        setMode(s.bridge_feishu_mode || "websocket");
+        setWebhookPort(s.bridge_feishu_webhook_port || "9898");
+        setVerificationToken(s.bridge_feishu_webhook_verification_token || "");
         setAllowedUsers(s.bridge_feishu_allowed_users);
         setGroupPolicy(s.bridge_feishu_group_policy || "open");
         setGroupAllowFrom(s.bridge_feishu_group_allow_from);
@@ -103,9 +115,14 @@ export function FeishuBridgeSection() {
     const updates: Partial<FeishuBridgeSettings> = {
       bridge_feishu_app_id: appId,
       bridge_feishu_domain: domain,
+      bridge_feishu_mode: mode,
+      bridge_feishu_webhook_port: webhookPort,
     };
     if (appSecret && !appSecret.startsWith("***")) {
       updates.bridge_feishu_app_secret = appSecret;
+    }
+    if (verificationToken && !verificationToken.startsWith("***")) {
+      updates.bridge_feishu_webhook_verification_token = verificationToken;
     }
     saveSettings(updates);
   };
@@ -220,6 +237,68 @@ export function FeishuBridgeSection() {
               {t("feishu.domainHint")}
             </p>
           </div>
+
+          {/* Connection Mode */}
+          <div>
+            <label className="text-xs font-medium text-muted-foreground mb-1 block">
+              {t("feishu.mode")}
+            </label>
+            <Select value={mode} onValueChange={(v) => {
+              setMode(v);
+              if (v === 'webhook' && domain === 'feishu') {
+                setDomain('lark');
+              }
+            }}>
+              <SelectTrigger className="w-full text-sm">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="websocket">
+                  {t("feishu.modeWebsocket")}
+                </SelectItem>
+                <SelectItem value="webhook">
+                  {t("feishu.modeWebhook")}
+                </SelectItem>
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-muted-foreground mt-1">
+              {t("feishu.modeHint")}
+            </p>
+          </div>
+
+          {mode === "webhook" && (
+            <>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                  {t("feishu.webhookPort")}
+                </label>
+                <Input
+                  value={webhookPort}
+                  onChange={(e) => setWebhookPort(e.target.value)}
+                  placeholder="9898"
+                  className="font-mono text-sm w-32"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t("feishu.webhookPortDesc")}
+                </p>
+              </div>
+              <div>
+                <label className="text-xs font-medium text-muted-foreground mb-1 block">
+                  {t("feishu.verificationToken")}
+                </label>
+                <Input
+                  type="password"
+                  value={verificationToken}
+                  onChange={(e) => setVerificationToken(e.target.value)}
+                  placeholder="xxxxxxxxxxxxxxxxxxxxxxxx"
+                  className="font-mono text-sm"
+                />
+                <p className="text-xs text-muted-foreground mt-1">
+                  {t("feishu.verificationTokenDesc")}
+                </p>
+              </div>
+            </>
+          )}
         </div>
 
         <div className="flex items-center gap-2">
@@ -356,15 +435,26 @@ export function FeishuBridgeSection() {
       {/* Setup Guide */}
       <div className="rounded-lg border border-border/50 p-4 transition-shadow hover:shadow-sm">
         <h2 className="text-sm font-medium mb-2">
-          {t("feishu.setupGuide")}
+          {mode === "webhook" ? t("feishu.webhookSetupGuide") : t("feishu.setupGuide")}
         </h2>
         <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4">
-          <li>{t("feishu.step1")}</li>
-          <li>{t("feishu.step2")}</li>
-          <li>{t("feishu.step3")}</li>
-          <li>{t("feishu.step4")}</li>
-          <li>{t("feishu.step5")}</li>
-          <li>{t("feishu.step6")}</li>
+          {mode === "webhook" ? (
+            <>
+              <li>{t("feishu.webhookStep1")}</li>
+              <li>{t("feishu.webhookStep2")}</li>
+              <li>{t("feishu.webhookStep3")}</li>
+              <li>{t("feishu.webhookStep4")}</li>
+            </>
+          ) : (
+            <>
+              <li>{t("feishu.step1")}</li>
+              <li>{t("feishu.step2")}</li>
+              <li>{t("feishu.step3")}</li>
+              <li>{t("feishu.step4")}</li>
+              <li>{t("feishu.step5")}</li>
+              <li>{t("feishu.step6")}</li>
+            </>
+          )}
         </ol>
       </div>
     </div>
