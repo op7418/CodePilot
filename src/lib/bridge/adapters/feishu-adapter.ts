@@ -16,6 +16,7 @@
  */
 
 import crypto from 'crypto';
+import http from 'http';
 import * as lark from '@larksuiteoapi/node-sdk';
 import type {
   ChannelType,
@@ -43,6 +44,20 @@ const MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 /** Feishu emoji type for typing indicator (same as Openclaw). */
 const TYPING_EMOJI = 'Typing';
+
+/** Default port for webhook mode local server. */
+const DEFAULT_WEBHOOK_PORT = 9898;
+
+/** Verify a Lark event's token matches the expected verification token. */
+function verifyEventToken(payload: { header?: { token?: string }; token?: string }, expected: string): boolean {
+  const token = payload.header?.token ?? payload.token ?? '';
+  return token === expected;
+}
+
+/** Check if a payload is a URL verification challenge. */
+function isUrlVerification(payload: Record<string, unknown>): payload is { type: 'url_verification'; challenge: string; token: string } {
+  return payload.type === 'url_verification' && typeof payload.challenge === 'string';
+}
 
 /** Shape of the SDK's im.message.receive_v1 event data. */
 type FeishuMessageEventData = {
@@ -96,6 +111,7 @@ export class FeishuAdapter extends BaseChannelAdapter {
   private lastIncomingMessageId = new Map<string, string>();
   /** Track active typing reaction IDs per chat for cleanup. */
   private typingReactions = new Map<string, string>();
+  private webhookServer: http.Server | null = null;
 
   // ── Lifecycle ───────────────────────────────────────────────
 
@@ -114,8 +130,9 @@ export class FeishuAdapter extends BaseChannelAdapter {
     const domain = domainSetting === 'lark'
       ? lark.Domain.Lark
       : lark.Domain.Feishu;
+    const mode = getSetting('bridge_feishu_mode') || 'websocket';
 
-    // Create REST client
+    // Create REST client (needed for both modes — sends replies via REST API)
     this.restClient = new lark.Client({
       appId,
       appSecret,
@@ -127,25 +144,27 @@ export class FeishuAdapter extends BaseChannelAdapter {
 
     this.running = true;
 
-    // Create EventDispatcher and register event handlers.
-    // NOTE: card.action.trigger requires HTTP webhook (not supported via WSClient).
-    // Openclaw uses an HTTP server for card callbacks — CodePilot is a desktop app
-    // without a public endpoint, so we rely on text-based /perm commands instead.
-    const dispatcher = new lark.EventDispatcher({}).register({
-      'im.message.receive_v1': async (data) => {
-        await this.handleIncomingEvent(data as FeishuMessageEventData);
-      },
-    });
+    if (mode === 'webhook') {
+      // Webhook mode: start local HTTP server to receive forwarded events
+      const port = parseInt(getSetting('bridge_feishu_webhook_port') || '', 10) || DEFAULT_WEBHOOK_PORT;
+      await this.startWebhookServer(port);
+      console.log('[feishu-adapter] Started in WEBHOOK mode on port', port, '(botOpenId:', this.botOpenId || 'unknown', ')');
+    } else {
+      // WebSocket mode (default): use SDK's WSClient
+      const dispatcher = new lark.EventDispatcher({}).register({
+        'im.message.receive_v1': async (data) => {
+          await this.handleIncomingEvent(data as FeishuMessageEventData);
+        },
+      });
 
-    // Create and start WSClient
-    this.wsClient = new lark.WSClient({
-      appId,
-      appSecret,
-      domain,
-    });
-    this.wsClient.start({ eventDispatcher: dispatcher });
-
-    console.log('[feishu-adapter] Started (botOpenId:', this.botOpenId || 'unknown', ')');
+      this.wsClient = new lark.WSClient({
+        appId,
+        appSecret,
+        domain,
+      });
+      this.wsClient.start({ eventDispatcher: dispatcher });
+      console.log('[feishu-adapter] Started in WEBSOCKET mode (botOpenId:', this.botOpenId || 'unknown', ')');
+    }
   }
 
   async stop(): Promise<void> {
@@ -161,6 +180,15 @@ export class FeishuAdapter extends BaseChannelAdapter {
       }
       this.wsClient = null;
     }
+
+    // Close webhook HTTP server
+    if (this.webhookServer) {
+      await new Promise<void>((resolve) => {
+        this.webhookServer!.close(() => resolve());
+      });
+      this.webhookServer = null;
+    }
+
     this.restClient = null;
 
     // Reject all waiting consumers
@@ -179,6 +207,84 @@ export class FeishuAdapter extends BaseChannelAdapter {
 
   isRunning(): boolean {
     return this.running;
+  }
+
+  /**
+   * Start a local HTTP server to receive Lark webhook events.
+   * Only listens on 127.0.0.1 — traffic arrives via Cloudflare Tunnel.
+   */
+  private startWebhookServer(port: number): Promise<void> {
+    const verificationToken = getSetting('bridge_feishu_webhook_verification_token') || '';
+
+    return new Promise((resolve, reject) => {
+      this.webhookServer = http.createServer(async (req, res) => {
+        // Only accept POST
+        if (req.method !== 'POST') {
+          res.writeHead(405);
+          res.end('Method Not Allowed');
+          return;
+        }
+
+        // Read body
+        const chunks: Buffer[] = [];
+        for await (const chunk of req) {
+          chunks.push(typeof chunk === 'string' ? Buffer.from(chunk) : chunk);
+        }
+        const body = Buffer.concat(chunks).toString('utf-8');
+
+        let payload: Record<string, unknown>;
+        try {
+          payload = JSON.parse(body);
+        } catch {
+          res.writeHead(400);
+          res.end('Bad Request');
+          return;
+        }
+
+        // Handle URL verification challenge (for direct webhook without Worker relay)
+        if (isUrlVerification(payload)) {
+          if (verificationToken && payload.token !== verificationToken) {
+            res.writeHead(403);
+            res.end('Forbidden');
+            return;
+          }
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ challenge: payload.challenge }));
+          return;
+        }
+
+        // Verify token if configured
+        if (verificationToken && !verifyEventToken(payload as { header?: { token?: string }; token?: string }, verificationToken)) {
+          console.warn('[feishu-adapter] Webhook token verification failed');
+          res.writeHead(403);
+          res.end('Forbidden');
+          return;
+        }
+
+        // Extract event data and process
+        const eventData = payload.event as FeishuMessageEventData | undefined;
+        if (eventData) {
+          // Fire-and-forget — respond 200 immediately to Lark/relay
+          res.writeHead(200, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({ code: 0, msg: 'ok' }));
+
+          // Process asynchronously (same handler as WSClient mode)
+          await this.handleIncomingEvent(eventData);
+        } else {
+          res.writeHead(200);
+          res.end('OK');
+        }
+      });
+
+      this.webhookServer.listen(port, '127.0.0.1', () => {
+        resolve();
+      });
+
+      this.webhookServer.on('error', (err) => {
+        console.error('[feishu-adapter] Webhook server error:', err.message);
+        reject(err);
+      });
+    });
   }
 
   // ── Queue ───────────────────────────────────────────────────
