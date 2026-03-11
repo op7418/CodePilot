@@ -1054,8 +1054,8 @@ export function createProvider(data: CreateProviderRequest): ApiProvider {
   const maxRow = db.prepare('SELECT MAX(sort_order) as max_order FROM api_providers').get() as { max_order: number | null };
   const sortOrder = (maxRow.max_order ?? -1) + 1;
 
-  // Deactivate all existing providers so the new one becomes the sole active provider
-  db.prepare('UPDATE api_providers SET is_active = 0').run();
+  // Activate the new provider only if there is no existing active provider (e.g. first-time onboarding)
+  const hasActive = db.prepare('SELECT 1 FROM api_providers WHERE is_active = 1 LIMIT 1').get();
 
   db.prepare(
     `INSERT INTO api_providers (id, name, provider_type, protocol, base_url, api_key, is_active, sort_order, extra_env, headers_json, env_overrides_json, role_models_json, notes, created_at, updated_at)
@@ -1067,7 +1067,7 @@ export function createProvider(data: CreateProviderRequest): ApiProvider {
     data.protocol || '',
     data.base_url || '',
     data.api_key || '',
-    1,
+    hasActive ? 0 : 1,
     sortOrder,
     data.extra_env || '{}',
     data.headers_json || '{}',
