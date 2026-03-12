@@ -1,5 +1,5 @@
 /**
- * Conversation Engine 閳?processes inbound IM messages through Claude.
+ * Conversation Engine - processes inbound IM messages through Claude.
  *
  * Takes a ChannelBinding + inbound message, calls streamClaude(),
  * consumes the SSE stream server-side, saves messages to DB,
@@ -20,6 +20,7 @@ import {
   releaseSessionLock,
   setSessionRuntimeStatus,
   updateSdkSessionId,
+  updateSessionModel,
   syncSdkTasks,
   getSession,
   getSetting,
@@ -63,7 +64,7 @@ export type OnPermissionRequest = (perm: PermissionRequestInfo) => Promise<void>
 
 /**
  * Callback invoked on each `text` SSE event with the full accumulated text so far.
- * Must return synchronously 閳?the bridge-manager handles throttling and fire-and-forget.
+ * Must return synchronously - the bridge-manager handles throttling and fire-and-forget.
  */
 export type OnPartialText = (fullText: string) => void;
 
@@ -114,10 +115,10 @@ export async function processMessage(
   }, 60_000);
 
   try {
-    // Resolve session early 閳?needed for workingDirectory and provider resolution
+    // Resolve session early - needed for workingDirectory and provider resolution
     const session = getSession(sessionId);
 
-    // Save user message 閳?persist file attachments to disk using the same
+    // Save user message - persist file attachments to disk using the same
     // <!--files:JSON--> format as the desktop chat route, so the UI can render them.
     // Also attach filePath to the file objects so streamClaude() can reuse
     // on-disk copies (matching the desktop route behavior, preventing duplicate writes).
@@ -215,7 +216,7 @@ export async function processMessage(
 
     // Consume the stream server-side (replicate collectStreamResponse pattern).
     // Permission requests are forwarded immediately via the callback during streaming
-    // because the stream blocks until permission is resolved 閳?we can't wait until after.
+    // because the stream blocks until permission is resolved - we can't wait until after.
     return await consumeStream(stream, sessionId, onPermissionRequest, onPartialText);
   } finally {
     clearInterval(renewalInterval);
@@ -237,7 +238,7 @@ async function consumeStream(
   const reader = stream.getReader();
   const contentBlocks: MessageContentBlock[] = [];
   let currentText = '';
-  /** Monotonically accumulated text for streaming preview 閳?never resets on tool_use. */
+  /** Monotonically accumulated text for streaming preview - never resets on tool_use. */
   let previewText = '';
   let tokenUsage: TokenUsage | null = null;
   let hasError = false;
@@ -320,7 +321,7 @@ async function consumeStream(
                 suggestions: permData.suggestions,
               };
               permissionRequests.push(perm);
-              // Forward immediately 閳?the stream blocks until the permission is
+              // Forward immediately - the stream blocks until the permission is
               // resolved, so we must send the IM prompt *now*, not after the stream ends.
               if (onPermissionRequest) {
                 onPermissionRequest(perm).catch((err) => {
@@ -337,6 +338,9 @@ async function consumeStream(
               if (statusData.session_id) {
                 capturedSdkSessionId = statusData.session_id;
                 updateSdkSessionId(sessionId, statusData.session_id);
+              }
+              if (statusData.model) {
+                updateSessionModel(sessionId, statusData.model);
               }
             } catch { /* skip */ }
             break;
@@ -370,7 +374,7 @@ async function consumeStream(
             break;
           }
 
-          // tool_output, tool_timeout, mode_changed, done 閳?ignored for bridge
+          // tool_output, tool_timeout, mode_changed, done - ignored for bridge
         }
       }
     }

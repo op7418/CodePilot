@@ -87,10 +87,13 @@ export function resolveClaudeLaunchConfig(claudePath: string): ClaudeLaunchConfi
   const ext = path.extname(claudePath).toLowerCase();
   if (process.platform === 'win32' && (ext === '.cmd' || ext === '.bat')) {
     const installDir = path.dirname(claudePath);
-    return {
-      executable: 'node',
-      pathToClaudeCodeExecutable: path.join(installDir, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js'),
-    };
+    const npmCliPath = path.join(installDir, 'node_modules', '@anthropic-ai', 'claude-code', 'cli.js');
+    if (fs.existsSync(npmCliPath)) {
+      return {
+        executable: 'node',
+        pathToClaudeCodeExecutable: npmCliPath,
+      };
+    }
   }
   return { pathToClaudeCodeExecutable: claudePath };
 }
@@ -1145,3 +1148,4 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
     },
   });
 }
+

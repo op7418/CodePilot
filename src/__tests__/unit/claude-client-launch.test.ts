@@ -14,6 +14,15 @@ describe('claude client launch', () => {
     assert.equal(config.executable, 'node');
   });
 
+  it('preserves non-npm Windows cmd shims instead of rewriting them to a node_modules path', () => {
+    if (process.platform !== 'win32') return;
+
+    const scoopShimPath = 'C:\\Users\\zy\\scoop\\shims\\claude.cmd';
+    const config = resolveClaudeLaunchConfig(scoopShimPath);
+
+    assert.equal(config.pathToClaudeCodeExecutable, scoopShimPath);
+    assert.equal(config.executable, undefined);
+  });
 
   it('normalizes upstream Anthropic model ids back to Claude Code aliases', () => {
     const normalized = normalizeClaudeCodeModel('claude-sonnet-4-20250514', [
