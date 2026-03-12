@@ -40,6 +40,7 @@ export function getExtraPathDirs(): string[] {
     '/usr/bin',
     '/bin',
     path.join(home, '.npm-global', 'bin'),
+    path.join(home, '.bun', 'bin'),
     path.join(home, '.nvm', 'current', 'bin'),
     path.join(home, '.local', 'bin'),
     path.join(home, '.claude', 'bin'),
@@ -74,6 +75,7 @@ export function getClaudeCandidatePaths(): string[] {
     '/usr/local/bin/claude',
     '/opt/homebrew/bin/claude',
     path.join(home, '.npm-global', 'bin', 'claude'),
+    path.join(home, '.bun', 'bin', 'claude'),
     path.join(home, '.local', 'bin', 'claude'),
     path.join(home, '.claude', 'bin', 'claude'),
   ];

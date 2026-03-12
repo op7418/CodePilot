@@ -1026,7 +1026,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             const detailHint = extraDetail ? `\n\nDetails: ${extraDetail}` : '';
             const hasImages = files && files.some(f => isImageFile(f.type));
             const imageHint = hasImages ? '\n• Provider may not support image/vision input' : '';
-            errorMessage = `Claude Code process exited with an error${providerHint}. This is often caused by:\n• Invalid or missing API Key\n• Incorrect Base URL configuration\n• Network connectivity issues${imageHint}${detailHint}\n\nOriginal error: ${rawMessage}`;
+            errorMessage = `Claude Code process exited with an error${providerHint}. This is often caused by:\n• Invalid or missing API Key\n• Incorrect Base URL configuration\n• Network connectivity issues\n• API provider not activated (check Settings → API Providers and ensure your provider is set as active)${imageHint}${detailHint}\n\nOriginal error: ${rawMessage}`;
           } else if (rawMessage.includes('exited with code')) {
             const providerHint = resolved.provider?.name ? ` (Provider: ${resolved.provider?.name})` : '';
             errorMessage = `Claude Code process crashed unexpectedly${providerHint}.\n\nOriginal error: ${rawMessage}`;
