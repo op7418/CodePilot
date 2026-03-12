@@ -58,6 +58,58 @@ export interface FilePreview {
 export type SkillKind = 'agent_skill' | 'slash_command' | 'sdk_command' | 'codepilot_command';
 
 // ==========================================
+// Popover / Command Input Types
+// ==========================================
+
+import type { TranslationKey } from '@/i18n';
+import type { ComponentType, SVGAttributes, RefAttributes } from 'react';
+
+/** Generic icon component type — compatible with Phosphor, Lucide, or any SVG icon. */
+export type IconComponent = ComponentType<
+  SVGAttributes<SVGSVGElement> & RefAttributes<SVGSVGElement> & { size?: number | string; className?: string }
+>;
+
+/** Shared model for popover items (slash commands, file mentions, skills). */
+export interface PopoverItem {
+  label: string;
+  value: string;
+  description?: string;
+  descriptionKey?: TranslationKey;
+  builtIn?: boolean;
+  immediate?: boolean;
+  installedSource?: 'agents' | 'claude';
+  source?: 'global' | 'project' | 'plugin' | 'installed' | 'sdk';
+  kind?: SkillKind;
+  icon?: IconComponent;
+}
+
+/** Which popover is currently active in the command input. */
+export type PopoverMode = 'file' | 'skill' | 'cli' | null;
+
+/** Active slash-command badge shown above the textarea. */
+export interface CommandBadge {
+  command: string;
+  label: string;
+  description: string;
+  kind: SkillKind;
+  installedSource?: 'agents' | 'claude';
+}
+
+/** Active CLI tool badge shown above the textarea. */
+export interface CliBadge {
+  id: string;
+  name: string;
+}
+
+/** A detected CLI tool available for use. */
+export interface CliToolItem {
+  id: string;
+  name: string;
+  version: string | null;
+  summary: string;
+}
+
+// ==========================================
 // Task Types
 // ==========================================
 

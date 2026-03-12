@@ -3,7 +3,7 @@
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Trash, PencilSimple, HardDrives, WifiHigh, Globe, ArrowsClockwise, SpinnerGap } from "@phosphor-icons/react";
+import { Trash, PencilSimple, HardDrives, WifiHigh, Globe, ArrowsClockwise, SpinnerGap } from "@/components/ui/icon";
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
 import type { MCPServer } from '@/types';
@@ -29,7 +29,7 @@ function getServerTypeInfo(server: MCPServer) {
     case 'sse':
       return { label: 'SSE', icon: WifiHigh, color: 'text-primary' };
     case 'http':
-      return { label: 'HTTP', icon: Globe, color: 'text-green-500' };
+      return { label: 'HTTP', icon: Globe, color: 'text-status-success-foreground' };
     default:
       return { label: 'stdio', icon: HardDrives, color: 'text-muted-foreground' };
   }
@@ -38,11 +38,11 @@ function getServerTypeInfo(server: MCPServer) {
 function getStatusBadge(status: McpRuntimeStatus['status']) {
   switch (status) {
     case 'connected':
-      return { label: 'Connected', className: 'bg-green-500/10 text-green-600 border-green-500/20' };
+      return { label: 'Connected', className: 'bg-status-success-muted text-status-success-foreground border-status-success-border' };
     case 'failed':
-      return { label: 'Failed', className: 'bg-red-500/10 text-red-600 border-red-500/20' };
+      return { label: 'Failed', className: 'bg-status-error-muted text-status-error-foreground border-status-error-border' };
     case 'needs-auth':
-      return { label: 'Auth Required', className: 'bg-yellow-500/10 text-yellow-600 border-yellow-500/20' };
+      return { label: 'Auth Required', className: 'bg-status-warning-muted text-status-warning-foreground border-status-warning-border' };
     case 'pending':
       return { label: 'Pending', className: 'bg-primary/10 text-primary border-primary/20' };
     case 'disabled':

@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
-import { Plus, List, Code, SpinnerGap, ArrowsClockwise, WifiHigh } from "@phosphor-icons/react";
+import { Plus, List, Code, SpinnerGap, ArrowsClockwise, WifiHigh } from "@/components/ui/icon";
 import { McpServerList } from "@/components/plugins/McpServerList";
 import { McpServerEditor } from "@/components/plugins/McpServerEditor";
 import { ConfigEditor } from "@/components/plugins/ConfigEditor";
@@ -265,7 +265,7 @@ export function McpManager() {
                 Object.entries(servers)
                   .filter(([, v]) => v._source !== 'claude.json')
                   .map(([k, v]) => {
-                    const { _source, ...rest } = v;
+                    const { _source: _unused, ...rest } = v; // eslint-disable-line @typescript-eslint/no-unused-vars
                     return [k, rest];
                   })
               ),
@@ -311,11 +311,11 @@ export function McpManager() {
               <div key={s.name} className="flex items-center justify-between py-1.5 px-2 rounded-md bg-muted/30">
                 <div className="flex items-center gap-2 min-w-0">
                   <span className={`h-2 w-2 rounded-full shrink-0 ${
-                    s.status === 'connected' ? 'bg-green-500' :
-                    s.status === 'failed' ? 'bg-red-500' :
+                    s.status === 'connected' ? 'bg-status-success' :
+                    s.status === 'failed' ? 'bg-status-error' :
                     s.status === 'pending' ? 'bg-primary' :
                     s.status === 'disabled' ? 'bg-gray-400' :
-                    'bg-yellow-500'
+                    'bg-status-warning'
                   }`} />
                   <span className="text-xs font-medium truncate">{s.name}</span>
                 </div>

@@ -1,6 +1,6 @@
 'use client';
 
-import { PaintBrush, Heart } from '@phosphor-icons/react';
+import { PaintBrush, Heart } from '@/components/ui/icon';
 
 export interface GalleryItem {
   id: string;
@@ -73,7 +73,7 @@ export function GalleryGrid({ items, onSelect }: GalleryGridProps) {
               )}
               {item.favorited && (
                 <span className="absolute top-1.5 left-1.5">
-                  <Heart size={16} className="text-red-500 drop-shadow" weight="fill" />
+                  <Heart size={16} className="text-status-error-foreground drop-shadow" weight="fill" />
                 </span>
               )}
             </div>

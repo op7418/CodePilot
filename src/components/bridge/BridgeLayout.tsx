@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useCallback, useSyncExternalStore } from "react";
-import { WifiHigh, TelegramLogo, ChatTeardrop, GameController, ChatsCircle } from "@phosphor-icons/react";
-import type { Icon } from "@phosphor-icons/react";
+import { WifiHigh, TelegramLogo, ChatTeardrop, GameController, ChatsCircle, type Icon } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { BridgeSection } from "./BridgeSection";
 import { TelegramBridgeSection } from "./TelegramBridgeSection";
 import { FeishuBridgeSection } from "./FeishuBridgeSection";
@@ -75,11 +75,12 @@ export function BridgeLayout() {
       <div className="flex min-h-0 flex-1">
         <nav className="flex w-52 shrink-0 flex-col gap-1 border-r border-border/50 p-3">
           {sidebarItems.map((item) => (
-            <button
+            <Button
               key={item.id}
+              variant="ghost"
               onClick={() => handleSectionChange(item.id)}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-left",
+                "justify-start gap-3 px-3 py-2 text-sm font-medium text-left w-full",
                 activeSection === item.id
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
@@ -87,7 +88,7 @@ export function BridgeLayout() {
             >
               <item.icon size={16} className="shrink-0" />
               {t(bridgeLabelKeys[item.label])}
-            </button>
+            </Button>
           ))}
         </nav>
 

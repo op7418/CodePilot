@@ -21,6 +21,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import type { ToolUIPart } from 'ai';
 import type { PermissionRequestEvent } from '@/types';
 
@@ -112,54 +114,56 @@ function AskUserQuestionUI({
               {q.options.map((opt) => {
                 const isSelected = selected.has(opt.label);
                 return (
-                  <button
+                  <Button
                     key={opt.label}
+                    variant="outline"
+                    size="sm"
                     onClick={() => toggleOption(qIdx, opt.label, q.multiSelect)}
-                    className={`rounded-lg border h-8 px-3 text-sm font-medium transition-colors ${
-                      isSelected
-                        ? 'border-primary bg-primary/10 text-primary'
-                        : 'border-border bg-background text-foreground hover:bg-muted'
-                    }`}
+                    className={isSelected
+                      ? 'border-primary bg-primary/10 text-primary'
+                      : 'border-border bg-background text-foreground hover:bg-muted'
+                    }
                     title={opt.description}
                   >
                     {q.multiSelect && (
                       <span className="mr-1.5">{isSelected ? '☑' : '☐'}</span>
                     )}
                     {opt.label}
-                  </button>
+                  </Button>
                 );
               })}
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={() => toggleOther(qIdx, q.multiSelect)}
-                className={`rounded-lg border h-8 px-3 text-sm font-medium transition-colors ${
-                  useOther[qIdx]
-                    ? 'border-primary bg-primary/10 text-primary'
-                    : 'border-border bg-background text-foreground hover:bg-muted'
-                }`}
+                className={useOther[qIdx]
+                  ? 'border-primary bg-primary/10 text-primary'
+                  : 'border-border bg-background text-foreground hover:bg-muted'
+                }
               >
                 Other
-              </button>
+              </Button>
             </div>
             {useOther[qIdx] && (
-              <input
+              <Input
                 type="text"
                 placeholder="Type your answer..."
                 value={otherTexts[qIdx] || ''}
                 onChange={(e) => setOtherTexts((prev) => ({ ...prev, [qIdx]: e.target.value }))}
-                className="w-full rounded-md border border-border bg-background px-3 py-1.5 text-xs focus:border-primary focus:outline-none"
+                className="text-xs"
                 autoFocus
               />
             )}
           </div>
         );
       })}
-      <button
+      <Button
         onClick={handleSubmit}
         disabled={!hasAnswer}
-        className="rounded-lg bg-primary h-8 px-4 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90 disabled:opacity-40"
+        size="sm"
       >
         Submit
-      </button>
+      </Button>
     </div>
   );
 }
@@ -221,14 +225,18 @@ function ExitPlanModeUI({
         </div>
       )}
       <div className="flex gap-2">
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={onDeny}
-          className="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-muted"
+          className="text-xs"
         >
           Reject
-        </button>
+        </Button>
         {planFilePath && (
-          <button
+          <Button
+            variant="outline"
+            size="sm"
             onClick={async () => {
               setPlanLoading(true);
               try {
@@ -246,20 +254,21 @@ function ExitPlanModeUI({
               setPlanOpen(true);
             }}
             disabled={planLoading}
-            className="rounded-lg border border-primary/30 px-3 py-1.5 text-xs font-medium text-primary transition-colors hover:bg-primary/10 disabled:opacity-50"
+            className="border-primary/30 text-xs text-primary hover:bg-primary/10"
           >
             {planLoading ? 'Loading...' : 'View Plan'}
-          </button>
+          </Button>
         )}
-        <button
+        <Button
+          size="sm"
           onClick={onApprove}
-          className="rounded-lg bg-primary px-4 py-1.5 text-xs font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+          className="text-xs"
         >
           Approve & Execute
-        </button>
+        </Button>
       </div>
       <div className="flex gap-2">
-        <input
+        <Input
           type="text"
           placeholder="Provide feedback on the plan..."
           value={feedback}
@@ -269,17 +278,19 @@ function ExitPlanModeUI({
               onDenyWithMessage(feedback.trim());
             }
           }}
-          className="flex-1 rounded-lg border border-border bg-background px-3 py-1.5 text-xs focus:border-primary focus:outline-none"
+          className="flex-1 text-xs"
         />
-        <button
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => {
             if (feedback.trim()) onDenyWithMessage(feedback.trim());
           }}
           disabled={!feedback.trim()}
-          className="rounded-lg border border-border px-3 py-1.5 text-xs transition-colors hover:bg-muted disabled:opacity-40"
+          className="text-xs"
         >
           Do this instead
-        </button>
+        </Button>
       </div>
 
       {planOpen && planContent && (
@@ -365,10 +376,10 @@ export function PermissionPrompt({
         />
       )}
       {pendingPermission?.toolName === 'ExitPlanMode' && permissionResolved === 'allow' && (
-        <p className="py-1 text-xs text-green-600 dark:text-green-400">Plan approved — executing</p>
+        <p className="py-1 text-xs text-status-success-foreground">Plan approved — executing</p>
       )}
       {pendingPermission?.toolName === 'ExitPlanMode' && permissionResolved === 'deny' && (
-        <p className="py-1 text-xs text-red-600 dark:text-red-400">Plan rejected</p>
+        <p className="py-1 text-xs text-status-error-foreground">Plan rejected</p>
       )}
 
       {/* AskUserQuestion */}
@@ -379,7 +390,7 @@ export function PermissionPrompt({
         />
       )}
       {pendingPermission?.toolName === 'AskUserQuestion' && permissionResolved && (
-        <p className="py-1 text-xs text-green-600 dark:text-green-400">Answer submitted</p>
+        <p className="py-1 text-xs text-status-success-foreground">Answer submitted</p>
       )}
 
       {/* Generic confirmation for other tools */}
@@ -429,11 +440,11 @@ export function PermissionPrompt({
           </ConfirmationRequest>
 
           <ConfirmationAccepted>
-            <p className="text-xs text-green-600 dark:text-green-400">{t('streaming.allowed')}</p>
+            <p className="text-xs text-status-success-foreground">{t('streaming.allowed')}</p>
           </ConfirmationAccepted>
 
           <ConfirmationRejected>
-            <p className="text-xs text-red-600 dark:text-red-400">{t('streaming.denied')}</p>
+            <p className="text-xs text-status-error-foreground">{t('streaming.denied')}</p>
           </ConfirmationRejected>
         </Confirmation>
       )}

@@ -24,15 +24,15 @@ interface ToolResultInfo {
 
 export default function NewChatPage() {
   const router = useRouter();
-  const { setWorkingDirectory, setPanelOpen, setPendingApprovalSessionId } = usePanel();
+  const { setPendingApprovalSessionId } = usePanel();
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
   const [toolUses, setToolUses] = useState<ToolUseInfo[]>([]);
   const [toolResults, setToolResults] = useState<ToolResultInfo[]>([]);
   const [statusText, setStatusText] = useState<string | undefined>();
-  const [workingDir, setWorkingDir] = useState('');
-  const [mode, setMode] = useState('code');
+  const [workingDir] = useState('');
+  const [mode] = useState('code');
   const [currentModel, setCurrentModel] = useState('sonnet');
   const [currentProviderId, setCurrentProviderId] = useState('');
   const [pendingPermission, setPendingPermission] = useState<PermissionRequestEvent | null>(null);
@@ -419,8 +419,6 @@ export default function NewChatPage() {
           setCurrentModel(model);
         }}
         workingDirectory={workingDir}
-        mode={mode}
-        onModeChange={setMode}
         effort={selectedEffort}
         onEffortChange={setSelectedEffort}
       />

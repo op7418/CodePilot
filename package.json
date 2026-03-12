@@ -1,6 +1,6 @@
 {
   "name": "codepilot",
-  "version": "0.32.0",
+  "version": "0.32.1",
   "private": true,
   "workspaces": [
     "apps/*",
@@ -21,7 +21,9 @@
     "test:unit": "tsx --test src/__tests__/unit/*.test.ts",
     "test:smoke": "npx playwright test --grep @smoke",
     "test:e2e": "npx playwright test",
+    "test:visual": "npx playwright test --grep @visual",
     "test": "npm run typecheck && npm run test:unit",
+    "lint:colors": "! grep -rn --include='*.tsx' --include='*.ts' -E '(bg|text|border)-(green|emerald|red|orange|yellow|amber|blue)-(400|500|600|700)' src/components/ src/app/ --exclude-dir=ui --exclude-dir=ai-elements | grep -v 'lint-allow-raw-color'",
     "prepare": "node -e \"try{require('husky')()}catch(e){}\"",
     "electron:dev": "concurrently -k \"next dev\" \"wait-on http://localhost:3000 && electron .\"",
     "electron:build": "next build && node scripts/build-electron.mjs",
@@ -59,7 +61,6 @@
     "cmdk": "^1.1.1",
     "discord.js": "^14.25.1",
     "electron-updater": "^6.8.3",
-    "lucide-react": "^0.563.0",
     "markdown-it": "^14.1.1",
     "motion": "^12.33.0",
     "nanoid": "^5.1.6",

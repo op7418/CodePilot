@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+
 import { useTranslation } from "@/hooks/useTranslation";
 import { InstallWizard } from "@/components/layout/InstallWizard";
 
@@ -119,15 +120,17 @@ export function ConnectionStatus() {
 
   return (
     <>
-      <button
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => setDialogOpen(true)}
         className={cn(
-          "flex h-7 shrink-0 items-center gap-1.5 rounded-full px-2.5 text-[11px] font-medium transition-colors",
+          "h-7 rounded-full px-2.5 text-[11px] font-medium gap-1.5",
           status === null
             ? "bg-muted text-muted-foreground"
             : connected
-              ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"
-              : "bg-red-500/15 text-red-700 dark:text-red-400"
+              ? "bg-status-success-muted text-status-success-foreground"
+              : "bg-status-error-muted text-status-error-foreground"
         )}
       >
         <span
@@ -136,8 +139,8 @@ export function ConnectionStatus() {
             status === null
               ? "bg-muted-foreground/40"
               : connected
-                ? "bg-emerald-500"
-                : "bg-red-500"
+                ? "bg-status-success"
+                : "bg-status-error"
           )}
         />
         {status === null
@@ -145,7 +148,7 @@ export function ConnectionStatus() {
           : connected
             ? t('connection.connected')
             : t('connection.disconnected')}
-      </button>
+      </Button>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
         <DialogContent className="sm:max-w-md">
@@ -162,19 +165,19 @@ export function ConnectionStatus() {
 
           {connected ? (
             <div className="space-y-3 text-sm">
-              <div className="flex items-center gap-3 rounded-lg bg-emerald-500/10 px-4 py-3">
-                <span className="block h-2.5 w-2.5 shrink-0 rounded-full bg-emerald-500" />
+              <div className="flex items-center gap-3 rounded-lg bg-status-success-muted px-4 py-3">
+                <span className="block h-2.5 w-2.5 shrink-0 rounded-full bg-status-success" />
                 <div>
-                  <p className="font-medium text-emerald-700 dark:text-emerald-400">Active</p>
+                  <p className="font-medium text-status-success-foreground">Active</p>
                   <p className="text-xs text-muted-foreground">{t('connection.version', { version: status?.version ?? '' })}</p>
                 </div>
               </div>
             </div>
           ) : (
             <div className="space-y-4 text-sm">
-              <div className="flex items-center gap-3 rounded-lg bg-red-500/10 px-4 py-3">
-                <span className="block h-2.5 w-2.5 shrink-0 rounded-full bg-red-500" />
-                <p className="font-medium text-red-700 dark:text-red-400">Not detected</p>
+              <div className="flex items-center gap-3 rounded-lg bg-status-error-muted px-4 py-3">
+                <span className="block h-2.5 w-2.5 shrink-0 rounded-full bg-status-error" />
+                <p className="font-medium text-status-error-foreground">Not detected</p>
               </div>
 
               <div>

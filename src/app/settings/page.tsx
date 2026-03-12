@@ -1,7 +1,7 @@
 "use client";
 
 import { Suspense } from "react";
-import { SpinnerGap } from "@phosphor-icons/react";
+import { SpinnerGap } from "@/components/ui/icon";
 import { SettingsLayout } from "@/components/settings/SettingsLayout";
 
 export default function SettingsPage() {

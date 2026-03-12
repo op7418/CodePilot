@@ -1,7 +1,6 @@
 "use client";
 
-import { Lightning, Trash } from "@phosphor-icons/react";
-import { Badge } from "@/components/ui/badge";
+import { Lightning, Trash } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,

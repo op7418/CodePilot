@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback } from "react";
-import { TreeStructure, SidebarSimple } from "@phosphor-icons/react";
+import { TreeStructure, SidebarSimple } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,

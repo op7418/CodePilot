@@ -18,7 +18,8 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
-import { Lock, LockOpen, CaretDown } from '@phosphor-icons/react';
+import { Button } from '@/components/ui/button';
+import { Lock, LockOpen, CaretDown } from '@/components/ui/icon';
 
 interface ChatPermissionSelectorProps {
   sessionId?: string;
@@ -70,16 +71,17 @@ export function ChatPermissionSelector({
     <>
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
-          <button
-            type="button"
-            className={`flex items-center gap-1 rounded-md px-2 py-1 text-xs font-medium transition-colors ${
+          <Button
+            variant="ghost"
+            size="sm"
+            className={`gap-1 px-2 py-1 text-xs font-medium ${
               isFullAccess
-                ? 'bg-red-500/10 text-red-600 dark:text-red-400 hover:bg-red-500/20'
+                ? 'bg-status-error-muted text-status-error-foreground hover:bg-status-error-muted'
                 : 'bg-muted text-muted-foreground hover:bg-muted/80'
             }`}
           >
             {isFullAccess ? (
-              <LockOpen size={14} className="text-red-500" />
+              <LockOpen size={14} className="text-status-error-foreground" />
             ) : (
               <Lock size={14} />
             )}
@@ -87,7 +89,7 @@ export function ChatPermissionSelector({
               {isFullAccess ? t('permission.fullAccess') : t('permission.default')}
             </span>
             <CaretDown size={10} className="opacity-60" />
-          </button>
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="start" className="min-w-[140px]">
           <DropdownMenuItem onClick={() => handleSelect('default')}>
@@ -95,7 +97,7 @@ export function ChatPermissionSelector({
             <span>{t('permission.default')}</span>
           </DropdownMenuItem>
           <DropdownMenuItem onClick={() => handleSelect('full_access')}>
-            <LockOpen size={14} className="text-red-500" />
+            <LockOpen size={14} className="text-status-error-foreground" />
             <span>{t('permission.fullAccess')}</span>
           </DropdownMenuItem>
         </DropdownMenuContent>

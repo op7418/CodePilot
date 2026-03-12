@@ -9,7 +9,7 @@ import {
   resolveShikiThemes,
 } from "@/lib/theme/code-themes";
 import { useTranslation } from "@/hooks/useTranslation";
-import { Sun, Moon, Desktop } from "@phosphor-icons/react";
+import { Sun, Moon, Desktop } from "@/components/ui/icon";
 import {
   Select,
   SelectContent,
@@ -17,7 +17,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { SettingsCard } from "@/components/patterns/SettingsCard";
+import { FieldRow } from "@/components/patterns/FieldRow";
 
 // ── Theme Mode Pill Selector ────────────────────────────────────────
 
@@ -40,22 +43,23 @@ function ThemeModePills({
       {MODE_OPTIONS.map((opt) => {
         const selected = value === opt.value;
         return (
-          <button
+          <Button
             key={opt.value}
+            variant="ghost"
+            size="sm"
             role="radio"
             aria-checked={selected}
             onClick={() => onChange(opt.value)}
             className={cn(
-              "flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all",
-              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
+              "gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-all h-auto",
               selected
-                ? "bg-primary text-primary-foreground shadow-sm"
+                ? "bg-primary text-primary-foreground shadow-sm hover:bg-primary hover:text-primary-foreground"
                 : "text-muted-foreground hover:bg-accent hover:text-accent-foreground"
             )}
           >
             <opt.icon size={14} />
             {t(opt.labelKey)}
-          </button>
+          </Button>
         );
       })}
     </div>
@@ -113,15 +117,9 @@ function ShikiCodePreview({ isDark }: { isDark: boolean }) {
 function UIPreview() {
   return (
     <div className="flex flex-wrap gap-2">
-      <button className="rounded-md bg-primary px-3 py-1 text-xs font-medium text-primary-foreground">
-        Primary
-      </button>
-      <button className="rounded-md bg-secondary px-3 py-1 text-xs font-medium text-secondary-foreground">
-        Secondary
-      </button>
-      <button className="rounded-md bg-destructive px-3 py-1 text-xs font-medium text-primary-foreground">
-        Destructive
-      </button>
+      <Button size="sm" className="text-xs h-auto py-1">Primary</Button>
+      <Button size="sm" variant="secondary" className="text-xs h-auto py-1">Secondary</Button>
+      <Button size="sm" variant="destructive" className="text-xs h-auto py-1">Destructive</Button>
       <span className="inline-flex items-center rounded-full bg-accent px-2.5 py-0.5 text-[10px] font-medium text-accent-foreground">
         Badge
       </span>
@@ -159,15 +157,14 @@ export function AppearanceSection() {
         <p className="text-xs text-muted-foreground">{t("settings.appearanceDesc")}</p>
       </div>
 
-      <div className="rounded-lg border border-border/50 p-4 space-y-4 transition-shadow hover:shadow-sm">
+      <SettingsCard>
       {/* Mode */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h3 className="text-xs font-medium">{t("settings.themeMode")}</h3>
-          <p className="text-[11px] text-muted-foreground">{t("settings.themeModeDesc")}</p>
-        </div>
+      <FieldRow
+        label={t("settings.themeMode")}
+        description={t("settings.themeModeDesc")}
+      >
         <ThemeModePills value={theme || "system"} onChange={setTheme} />
-      </div>
+      </FieldRow>
 
       {theme === "system" && resolvedTheme && (
         <p className="text-[11px] text-muted-foreground pl-1">
@@ -175,14 +172,12 @@ export function AppearanceSection() {
         </p>
       )}
 
-      <div className="border-t border-border/30" />
-
       {/* Family */}
-      <div className="flex items-center justify-between gap-4">
-        <div className="min-w-0">
-          <h3 className="text-xs font-medium">{t("settings.themeFamily")}</h3>
-          <p className="text-[11px] text-muted-foreground">{t("settings.themeFamilyDesc")}</p>
-        </div>
+      <FieldRow
+        label={t("settings.themeFamily")}
+        description={t("settings.themeFamilyDesc")}
+        separator
+      >
         <Select value={family} onValueChange={setFamily}>
           <SelectTrigger className="w-[200px]">
             <SelectValue />
@@ -209,17 +204,15 @@ export function AppearanceSection() {
             ))}
           </SelectContent>
         </Select>
-      </div>
-
-      <div className="border-t border-border/30" />
+      </FieldRow>
 
       {/* Preview */}
-      <div className="space-y-3">
+      <div className="border-t border-border/30 pt-4 space-y-3">
         <h3 className="text-xs font-medium text-muted-foreground">Preview</h3>
         <UIPreview />
         <ShikiCodePreview isDark={isDark} />
       </div>
-      </div>
+      </SettingsCard>
     </div>
   );
 }

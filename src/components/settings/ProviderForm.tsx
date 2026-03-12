@@ -20,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { SpinnerGap, CaretDown, CaretUp } from "@phosphor-icons/react";
+import { SpinnerGap, CaretDown, CaretUp } from "@/components/ui/icon";
 import type { ApiProvider } from "@/types";
 import { useTranslation } from "@/hooks/useTranslation";
 
@@ -278,14 +278,15 @@ export function ProviderForm({
           </div>
 
           {/* Advanced options toggle */}
-          <button
-            type="button"
-            className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
+          <Button
+            variant="ghost"
+            size="sm"
+            className="gap-1.5 text-xs text-muted-foreground hover:text-foreground px-0 h-auto"
             onClick={() => setShowAdvanced(!showAdvanced)}
           >
             {showAdvanced ? <CaretUp size={12} /> : <CaretDown size={12} />}
             {t('provider.advancedOptions')}
-          </button>
+          </Button>
 
           {showAdvanced && (
             <div className="space-y-4 border-t border-border/50 pt-4">

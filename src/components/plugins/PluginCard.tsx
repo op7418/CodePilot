@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
-import { CaretDown, CaretUp, Lightning } from "@phosphor-icons/react";
+import { CaretDown, CaretUp, Lightning } from "@/components/ui/icon";
 
 export interface SkillInfo {
   name: string;

@@ -23,7 +23,7 @@ import {
   Code,
   SlidersHorizontal,
   SpinnerGap,
-} from "@phosphor-icons/react";
+} from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { TranslationKey } from "@/i18n";
 
@@ -266,7 +266,7 @@ export function CliSettingsSection() {
                 {t('cli.reset')}
               </Button>
               {saveSuccess && (
-                <span className="text-sm text-green-600 dark:text-green-400">
+                <span className="text-sm text-status-success-foreground">
                   {t('cli.settingsSaved')}
                 </span>
               )}
@@ -305,7 +305,7 @@ export function CliSettingsSection() {
                 {t('cli.reset')}
               </Button>
               {saveSuccess && (
-                <span className="text-sm text-green-600 dark:text-green-400">
+                <span className="text-sm text-status-success-foreground">
                   {t('cli.settingsSaved')}
                 </span>
               )}

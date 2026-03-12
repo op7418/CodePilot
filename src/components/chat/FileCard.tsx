@@ -1,6 +1,6 @@
 'use client';
 
-import { File } from "@phosphor-icons/react";
+import { File } from "@/components/ui/icon";
 import { formatFileSize } from '@/types';
 
 interface FileCardProps {

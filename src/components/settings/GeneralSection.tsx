@@ -13,12 +13,16 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { ArrowClockwise, SpinnerGap } from "@phosphor-icons/react";
+import { ArrowClockwise, SpinnerGap } from "@/components/ui/icon";
 import { useUpdate } from "@/hooks/useUpdate";
 import { useTranslation } from "@/hooks/useTranslation";
+import { useAccountInfo } from "@/hooks/useAccountInfo";
 import { SUPPORTED_LOCALES, type Locale } from "@/i18n";
 import type { TranslationKey } from "@/i18n";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { SettingsCard } from "@/components/patterns/SettingsCard";
+import { FieldRow } from "@/components/patterns/FieldRow";
+import { StatusBanner } from "@/components/patterns/StatusBanner";
 import { AppearanceSection } from "./AppearanceSection";
 
 function UpdateCard() {
@@ -30,7 +34,7 @@ function UpdateCard() {
     && updateInfo.downloadProgress != null;
 
   return (
-    <div className="rounded-lg border border-border/50 p-4 transition-shadow hover:shadow-sm">
+    <SettingsCard>
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-medium">{t('settings.codepilot')}</h2>
@@ -75,7 +79,7 @@ function UpdateCard() {
           {updateInfo.updateAvailable ? (
             <div className="space-y-2">
               <div className="flex items-center gap-2">
-                <span className={`h-2 w-2 rounded-full ${updateInfo.readyToInstall ? 'bg-green-500' : isDownloading ? 'bg-yellow-500 animate-pulse' : 'bg-primary'}`} />
+                <span className={`h-2 w-2 rounded-full ${updateInfo.readyToInstall ? 'bg-status-success' : isDownloading ? 'bg-status-warning animate-pulse' : 'bg-primary'}`} />
                 <span className="text-sm">
                   {updateInfo.readyToInstall
                     ? t('update.readyToInstall', { version: updateInfo.latestVersion })
@@ -104,7 +108,7 @@ function UpdateCard() {
                 </div>
               )}
               {updateInfo.lastError && (
-                <p className="text-xs text-red-600 dark:text-red-400">
+                <p className="text-xs text-status-error-foreground">
                   {updateInfo.lastError}
                 </p>
               )}
@@ -114,7 +118,7 @@ function UpdateCard() {
           )}
         </div>
       )}
-    </div>
+    </SettingsCard>
   );
 }
 
@@ -123,7 +127,7 @@ export function GeneralSection() {
   const [showSkipPermWarning, setShowSkipPermWarning] = useState(false);
   const [skipPermSaving, setSkipPermSaving] = useState(false);
   const [thinkingMode, setThinkingMode] = useState<string>('adaptive');
-  const [accountInfo, setAccountInfo] = useState<{ email?: string; organization?: string; subscriptionType?: string } | null>(null);
+  const { accountInfo } = useAccountInfo();
   const { t, locale, setLocale } = useTranslation();
 
   const fetchAppSettings = useCallback(async () => {
@@ -142,24 +146,9 @@ export function GeneralSection() {
     }
   }, []);
 
-  const fetchAccountInfo = useCallback(async () => {
-    try {
-      const res = await fetch("/api/sdk/account");
-      if (res.ok) {
-        const data = await res.json();
-        if (data.account) {
-          setAccountInfo(data.account);
-        }
-      }
-    } catch {
-      // Account info not available
-    }
-  }, []);
-
   useEffect(() => {
     fetchAppSettings();
-    fetchAccountInfo();
-  }, [fetchAppSettings, fetchAccountInfo]);
+  }, [fetchAppSettings]);
 
   const saveThinkingMode = async (mode: string) => {
     setThinkingMode(mode);
@@ -210,36 +199,31 @@ export function GeneralSection() {
       <UpdateCard />
 
       {/* General settings card */}
-      <div className={`rounded-lg border p-4 space-y-4 transition-shadow hover:shadow-sm ${skipPermissions ? "border-orange-500/50 bg-orange-500/5" : "border-border/50"}`}>
+      <SettingsCard className={skipPermissions ? "border-status-warning-border bg-status-warning-muted" : undefined}>
         {/* Auto-approve toggle */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-medium">{t('settings.autoApproveTitle')}</h2>
-            <p className="text-xs text-muted-foreground">
-              {t('settings.autoApproveDesc')}
-            </p>
-          </div>
+        <FieldRow
+          label={t('settings.autoApproveTitle')}
+          description={t('settings.autoApproveDesc')}
+        >
           <Switch
             checked={skipPermissions}
             onCheckedChange={handleSkipPermToggle}
             disabled={skipPermSaving}
           />
-        </div>
+        </FieldRow>
         {skipPermissions && (
-          <div className="flex items-center gap-2 rounded-md bg-orange-500/10 px-3 py-2 text-xs text-orange-600 dark:text-orange-400">
-            <span className="h-2 w-2 shrink-0 rounded-full bg-orange-500" />
+          <StatusBanner variant="warning">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-status-warning inline-block mr-1" />
             {t('settings.autoApproveWarning')}
-          </div>
+          </StatusBanner>
         )}
 
-        <div className="border-t border-border/30" />
-
         {/* Language picker */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-medium">{t('settings.language')}</h2>
-            <p className="text-xs text-muted-foreground">{t('settings.languageDesc')}</p>
-          </div>
+        <FieldRow
+          label={t('settings.language')}
+          description={t('settings.languageDesc')}
+          separator
+        >
           <Select value={locale} onValueChange={(v) => setLocale(v as Locale)}>
             <SelectTrigger className="w-[140px]">
               <SelectValue />
@@ -250,16 +234,14 @@ export function GeneralSection() {
               ))}
             </SelectContent>
           </Select>
-        </div>
-
-        <div className="border-t border-border/30" />
+        </FieldRow>
 
         {/* Thinking mode */}
-        <div className="flex items-center justify-between">
-          <div>
-            <h2 className="text-sm font-medium">{t('settings.thinkingMode' as TranslationKey)}</h2>
-            <p className="text-xs text-muted-foreground">{t('settings.thinkingModeDesc' as TranslationKey)}</p>
-          </div>
+        <FieldRow
+          label={t('settings.thinkingMode' as TranslationKey)}
+          description={t('settings.thinkingModeDesc' as TranslationKey)}
+          separator
+        >
           <Select value={thinkingMode} onValueChange={saveThinkingMode}>
             <SelectTrigger className="w-[140px]">
               <SelectValue />
@@ -270,16 +252,15 @@ export function GeneralSection() {
               <SelectItem value="disabled">{t('settings.thinkingDisabled' as TranslationKey)}</SelectItem>
             </SelectContent>
           </Select>
-        </div>
-      </div>
+        </FieldRow>
+      </SettingsCard>
 
       {/* Appearance */}
       <AppearanceSection />
 
       {/* Account info */}
       {accountInfo && (
-        <div className="rounded-lg border border-border/50 p-4 transition-shadow hover:shadow-sm">
-          <h2 className="text-sm font-medium mb-2">{t('settings.accountInfo' as TranslationKey)}</h2>
+        <SettingsCard title={t('settings.accountInfo' as TranslationKey)}>
           <div className="space-y-1">
             {accountInfo.email && (
               <p className="text-xs text-muted-foreground">
@@ -297,7 +278,7 @@ export function GeneralSection() {
               </p>
             )}
           </div>
-        </div>
+        </SettingsCard>
       )}
 
       {/* Skip-permissions warning dialog */}
@@ -315,7 +296,7 @@ export function GeneralSection() {
                   <li>{t('settings.autoApproveFileOps')}</li>
                   <li>{t('settings.autoApproveNetwork')}</li>
                 </ul>
-                <p className="font-medium text-orange-600 dark:text-orange-400">
+                <p className="font-medium text-status-warning-foreground">
                   {t('settings.autoApproveTrustWarning')}
                 </p>
               </div>
@@ -325,7 +306,7 @@ export function GeneralSection() {
             <AlertDialogCancel>{t('settings.cancel')}</AlertDialogCancel>
             <AlertDialogAction
               onClick={() => saveSkipPermissions(true)}
-              className="bg-orange-600 hover:bg-orange-700 text-white"
+              className="bg-status-warning hover:bg-status-warning/80 text-white"
             >
               {t('settings.enableAutoApprove')}
             </AlertDialogAction>

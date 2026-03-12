@@ -11,7 +11,8 @@ import { UpdateDialog } from "./UpdateDialog";
 import { UpdateBanner } from "./UpdateBanner";
 import { DocPreview } from "./DocPreview";
 import { PanelContext, type PanelContent, type PreviewViewMode } from "@/hooks/usePanel";
-import { UpdateContext, type UpdateInfo } from "@/hooks/useUpdate";
+import { UpdateContext } from "@/hooks/useUpdate";
+import { useUpdateChecker } from "@/hooks/useUpdateChecker";
 import { ImageGenContext, useImageGenState } from "@/hooks/useImageGen";
 import { BatchImageGenContext, useBatchImageGenState } from "@/hooks/useBatchImageGen";
 import { SplitContext, type SplitSession } from "@/hooks/useSplit";
@@ -65,14 +66,15 @@ function defaultViewMode(filePath: string): PreviewViewMode {
 }
 
 const LG_BREAKPOINT = 1024;
-const CHECK_INTERVAL = 8 * 60 * 60 * 1000; // 8 hours
-const DISMISSED_VERSION_KEY = "codepilot_dismissed_update_version";
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
 
-  const [chatListOpen, setChatListOpenRaw] = useState(false);
+  const [chatListOpenRaw, setChatListOpenRaw] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return window.matchMedia(`(min-width: ${LG_BREAKPOINT}px)`).matches;
+  });
 
   // Panel width state with localStorage persistence
   const [chatListWidth, setChatListWidth] = useState(() => {
@@ -104,20 +106,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // Panel state
+  // Panel state — chatListOpen is derived: raw state gated by route
   const isChatRoute = pathname.startsWith("/chat/") || pathname === "/chat";
+  const chatListOpen = chatListOpenRaw && isChatRoute;
 
-  // Auto-close chat list when leaving chat routes
   const setChatListOpen = useCallback((open: boolean) => {
     setChatListOpenRaw(open);
   }, []);
-
-  useEffect(() => {
-    if (!isChatRoute) {
-      setChatListOpenRaw(false);
-    }
-  }, [isChatRoute]);
-  const [panelOpen, setPanelOpenRaw] = useState(false);
+  const [panelOpenRaw, setPanelOpenRaw] = useState(false);
   const [panelContent, setPanelContent] = useState<PanelContent>("files");
   const [workingDirectory, setWorkingDirectory] = useState("");
   const [sessionId, setSessionId] = useState("");
@@ -263,13 +259,15 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     return () => window.removeEventListener("session-deleted", handler);
   }, []);
 
-  // Exit split when navigating to non-chat routes
+  // Exit split when navigating to non-chat routes — setState is intentional here
+  // (derived-from-route-change pattern, not subscribing to external system)
   useEffect(() => {
     if (isSplitActive && !pathname.startsWith("/chat")) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setSplitSessions([]);
       setActiveColumnIdRaw("");
     }
-  }, [isSplitActive, pathname]);
+  }, [pathname, isSplitActive]);
 
   const splitContextValue = useMemo(
     () => ({
@@ -321,209 +319,57 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     });
   }, []);
 
-  // Auto-open panel on chat detail routes, close on others
-  // Also close doc preview when navigating away or switching sessions
+  // Sync panel state on route changes: open on chat detail, close otherwise.
+  // Reset doc preview when navigating between pages/sessions.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setPanelOpenRaw(isChatDetailRoute);
     setPreviewFileRaw(null);
-  }, [isChatDetailRoute, pathname]);
+  }, [pathname, isChatDetailRoute]);
+  const panelOpen = panelOpenRaw;
 
   const setPanelOpen = useCallback((open: boolean) => {
     setPanelOpenRaw(open);
   }, []);
 
-  // Keep chat list state in sync when resizing across the breakpoint (only on chat routes)
+  // Keep chat list state in sync when resizing across the breakpoint
   useEffect(() => {
-    if (!isChatRoute) return;
     const mql = window.matchMedia(`(min-width: ${LG_BREAKPOINT}px)`);
     const handler = (e: MediaQueryListEvent) => setChatListOpenRaw(e.matches);
     mql.addEventListener("change", handler);
-    setChatListOpenRaw(mql.matches);
     return () => mql.removeEventListener("change", handler);
-  }, [isChatRoute]);
+  }, []);
 
   // --- Skip-permissions indicator ---
   const [skipPermissionsActive, setSkipPermissionsActive] = useState(false);
 
-  const fetchSkipPermissions = useCallback(async () => {
-    try {
-      const res = await fetch("/api/settings/app");
-      if (res.ok) {
-        const data = await res.json();
-        setSkipPermissionsActive(data.settings?.dangerously_skip_permissions === "true");
-      }
-    } catch {
-      // ignore
-    }
-  }, []);
-
-  // Re-fetch when window gains focus / becomes visible instead of polling every 5s
+  // Fetch on mount + re-fetch when window gains focus / becomes visible
   useEffect(() => {
-    fetchSkipPermissions();
+    let cancelled = false;
+    const doFetch = async () => {
+      try {
+        const res = await fetch("/api/settings/app");
+        if (res.ok && !cancelled) {
+          const data = await res.json();
+          setSkipPermissionsActive(data.settings?.dangerously_skip_permissions === "true");
+        }
+      } catch { /* ignore */ }
+    };
+    doFetch();
     const handleVisibility = () => {
-      if (document.visibilityState === "visible") {
-        fetchSkipPermissions();
-      }
+      if (document.visibilityState === "visible") doFetch();
     };
     document.addEventListener("visibilitychange", handleVisibility);
-    window.addEventListener("focus", fetchSkipPermissions);
+    window.addEventListener("focus", doFetch);
     return () => {
+      cancelled = true;
       document.removeEventListener("visibilitychange", handleVisibility);
-      window.removeEventListener("focus", fetchSkipPermissions);
+      window.removeEventListener("focus", doFetch);
     };
-  }, [fetchSkipPermissions]);
-
-  // --- Update check state ---
-  const [updateInfo, setUpdateInfo] = useState<UpdateInfo | null>(null);
-  const [checking, setChecking] = useState(false);
-  const [showDialog, setShowDialog] = useState(false);
-
-  // Runtime detection: native updater available when running in Electron with updater bridge
-  const isNativeUpdater = typeof window !== "undefined" && !!window.electronAPI?.updater;
-
-  // --- Native updater status listener ---
-  useEffect(() => {
-    if (!isNativeUpdater) return;
-    const cleanup = window.electronAPI!.updater!.onStatus((event) => {
-      switch (event.status) {
-        case 'available':
-          setUpdateInfo((prev) => ({
-            updateAvailable: true,
-            latestVersion: event.info?.version ?? prev?.latestVersion ?? '',
-            currentVersion: prev?.currentVersion ?? '',
-            releaseName: event.info?.releaseName ?? prev?.releaseName ?? '',
-            releaseNotes: typeof event.info?.releaseNotes === 'string' ? event.info.releaseNotes : prev?.releaseNotes ?? '',
-            releaseUrl: prev?.releaseUrl ?? '',
-            publishedAt: event.info?.releaseDate ?? prev?.publishedAt ?? '',
-            downloadProgress: null,
-            readyToInstall: false,
-            isNativeUpdate: true,
-            lastError: null,
-          }));
-          {
-            const ver = event.info?.version;
-            const dismissed = localStorage.getItem(DISMISSED_VERSION_KEY);
-            if (ver && dismissed !== ver) {
-              setShowDialog(true);
-            }
-          }
-          break;
-        case 'not-available':
-          setUpdateInfo((prev) => prev ? { ...prev, updateAvailable: false, isNativeUpdate: true, lastError: null } : prev);
-          break;
-        case 'downloading':
-          setUpdateInfo((prev) => prev ? {
-            ...prev,
-            downloadProgress: event.progress?.percent ?? prev.downloadProgress,
-            isNativeUpdate: true,
-            lastError: null,
-          } : prev);
-          break;
-        case 'downloaded':
-          setUpdateInfo((prev) => prev ? {
-            ...prev,
-            readyToInstall: true,
-            downloadProgress: 100,
-            isNativeUpdate: true,
-            lastError: null,
-          } : prev);
-          break;
-        case 'error':
-          setUpdateInfo((prev) => prev ? {
-            ...prev,
-            lastError: event.error ?? 'Unknown error',
-            isNativeUpdate: true,
-          } : prev);
-          break;
-      }
-      if (event.status === 'checking') {
-        setChecking(true);
-      } else {
-        setChecking(false);
-      }
-    });
-    return cleanup;
-  }, [isNativeUpdater]);
-
-  // --- Browser-mode update check (fallback for non-Electron) ---
-  const checkForUpdatesBrowser = useCallback(async () => {
-    setChecking(true);
-    try {
-      const res = await fetch("/api/app/updates");
-      if (!res.ok) return;
-      const data = await res.json();
-      const info: UpdateInfo = {
-        ...data,
-        downloadProgress: null,
-        readyToInstall: false,
-        isNativeUpdate: false,
-        lastError: null,
-      };
-      setUpdateInfo(info);
-
-      if (info.updateAvailable) {
-        const dismissed = localStorage.getItem(DISMISSED_VERSION_KEY);
-        if (dismissed !== info.latestVersion) {
-          setShowDialog(true);
-        }
-      }
-    } catch {
-      // silently ignore network errors
-    } finally {
-      setChecking(false);
-    }
   }, []);
 
-  // --- Unified check: native first, browser fallback ---
-  const checkForUpdates = useCallback(async () => {
-    if (isNativeUpdater) {
-      try {
-        await window.electronAPI!.updater!.checkForUpdates();
-        return;
-      } catch {
-        // native check failed, fall through to browser mode
-      }
-    }
-    await checkForUpdatesBrowser();
-  }, [isNativeUpdater, checkForUpdatesBrowser]);
-
-  // Browser mode: periodic check (non-Electron or as fallback)
-  useEffect(() => {
-    if (isNativeUpdater) return; // native updater handles its own initial check
-    checkForUpdatesBrowser();
-    const id = setInterval(checkForUpdatesBrowser, CHECK_INTERVAL);
-    return () => clearInterval(id);
-  }, [isNativeUpdater, checkForUpdatesBrowser]);
-
-  const dismissUpdate = useCallback(() => {
-    setShowDialog(false);
-  }, []);
-
-  const downloadUpdate = useCallback(async () => {
-    if (isNativeUpdater) {
-      await window.electronAPI!.updater!.downloadUpdate();
-    }
-  }, [isNativeUpdater]);
-
-  const quitAndInstall = useCallback(() => {
-    if (isNativeUpdater) {
-      window.electronAPI!.updater!.quitAndInstall();
-    }
-  }, [isNativeUpdater]);
-
-  const updateContextValue = useMemo(
-    () => ({
-      updateInfo,
-      checking,
-      checkForUpdates,
-      downloadUpdate,
-      dismissUpdate,
-      showDialog,
-      setShowDialog,
-      quitAndInstall,
-    }),
-    [updateInfo, checking, checkForUpdates, downloadUpdate, dismissUpdate, showDialog, quitAndInstall]
-  );
+  // --- Update checker (native Electron + browser fallback) ---
+  const updateContextValue = useUpdateChecker();
 
   const panelContextValue = useMemo(
     () => ({
@@ -565,8 +411,8 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             <NavRail
               chatListOpen={chatListOpen}
               onToggleChatList={() => setChatListOpen(!chatListOpen)}
-              hasUpdate={updateInfo?.updateAvailable ?? false}
-              readyToInstall={updateInfo?.readyToInstall ?? false}
+              hasUpdate={updateContextValue.updateInfo?.updateAvailable ?? false}
+              readyToInstall={updateContextValue.updateInfo?.readyToInstall ?? false}
               skipPermissionsActive={skipPermissionsActive}
             />
             <ErrorBoundary>

@@ -99,7 +99,7 @@ export function UpdateDialog() {
         )}
 
         {updateInfo.lastError && (
-          <p className="rounded-md border border-red-500/20 bg-red-500/10 px-2 py-1 text-xs text-red-600 dark:text-red-400">
+          <p className="rounded-md border border-status-error-border bg-status-error-muted px-2 py-1 text-xs text-status-error-foreground">
             {updateInfo.lastError}
           </p>
         )}

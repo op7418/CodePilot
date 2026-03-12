@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { X } from "lucide-react";
+import { X } from "@/components/ui/icon";
 import type { Message, MessagesResponse, ChatSession } from "@/types";
 import { ChatView } from "@/components/chat/ChatView";
 import { Button } from "@/components/ui/button";

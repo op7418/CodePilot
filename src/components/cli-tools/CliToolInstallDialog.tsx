@@ -9,7 +9,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { SpinnerGap, CheckCircle, X } from "@phosphor-icons/react";
+import { SpinnerGap, CheckCircle, X } from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { CliToolDefinition } from "@/types";
 
@@ -133,10 +133,10 @@ export function CliToolInstallDialog({
               <SpinnerGap size={20} className="animate-spin text-primary" />
             )}
             {phase === "success" && (
-              <CheckCircle size={20} className="text-green-500" />
+              <CheckCircle size={20} className="text-status-success-foreground" />
             )}
             {phase === "error" && (
-              <X size={20} className="text-red-500" />
+              <X size={20} className="text-status-error-foreground" />
             )}
             {phase === "running"
               ? `${t('cliTools.installing')} ${tool.name}...`

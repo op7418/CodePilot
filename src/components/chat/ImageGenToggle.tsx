@@ -4,6 +4,7 @@ import { cn } from '@/lib/utils';
 import { useImageGen } from '@/hooks/useImageGen';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
+import { Button } from '@/components/ui/button';
 import {
   Tooltip,
   TooltipContent,
@@ -21,18 +22,19 @@ export function ImageGenToggle() {
   return (
     <Tooltip>
       <TooltipTrigger asChild>
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="sm"
           onClick={handleToggle}
           className={cn(
-            'inline-flex items-center justify-center rounded-full px-2.5 h-7 text-xs font-medium border transition-all',
+            'rounded-full px-2.5 h-7 text-xs font-medium border transition-all',
             state.enabled
               ? 'bg-primary/15 text-primary border-primary/30'
               : 'text-muted-foreground border-border/60 hover:text-foreground hover:border-foreground/30 hover:bg-accent/50'
           )}
         >
           {t('composer.designAgent' as TranslationKey)}
-        </button>
+        </Button>
       </TooltipTrigger>
       <TooltipContent>
         {t('composer.designAgentTooltip' as TranslationKey)}

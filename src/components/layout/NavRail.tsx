@@ -10,7 +10,7 @@ import {
   Gear,
   WifiHigh,
   Terminal,
-} from "@phosphor-icons/react";
+} from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,
@@ -120,8 +120,8 @@ export function NavRail({ onToggleChatList, hasUpdate, readyToInstall, skipPermi
             <TooltipTrigger asChild>
               <div className="flex h-8 w-8 items-center justify-center">
                 <span className="relative flex h-3 w-3">
-                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-orange-400 opacity-75" />
-                  <span className="relative inline-flex h-3 w-3 rounded-full bg-orange-500" />
+                  <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-status-warning opacity-75" />
+                  <span className="relative inline-flex h-3 w-3 rounded-full bg-status-warning" />
                 </span>
               </div>
             </TooltipTrigger>
@@ -148,7 +148,7 @@ export function NavRail({ onToggleChatList, hasUpdate, readyToInstall, skipPermi
               {hasUpdate && (
                 <span className={cn(
                   "absolute top-0.5 right-0.5 h-2 w-2 rounded-full",
-                  readyToInstall ? "bg-green-500 animate-pulse" : "bg-primary"
+                  readyToInstall ? "bg-status-success animate-pulse" : "bg-primary"
                 )} />
               )}
             </div>

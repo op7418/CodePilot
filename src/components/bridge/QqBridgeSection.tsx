@@ -4,8 +4,11 @@ import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
-import { SpinnerGap, CheckCircle, Warning } from "@phosphor-icons/react";
+import { SpinnerGap, CheckCircle, Warning } from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
+import { SettingsCard } from "@/components/patterns/SettingsCard";
+import { FieldRow } from "@/components/patterns/FieldRow";
+import { StatusBanner } from "@/components/patterns/StatusBanner";
 
 interface QqBridgeSettings {
   bridge_qq_app_id: string;
@@ -144,14 +147,10 @@ export function QqBridgeSection() {
   return (
     <div className="max-w-3xl space-y-6">
       {/* App Credentials */}
-      <div className="rounded-lg border border-border/50 p-4 space-y-4 transition-shadow hover:shadow-sm">
-        <div>
-          <h2 className="text-sm font-medium">{t("qq.credentials")}</h2>
-          <p className="text-xs text-muted-foreground">
-            {t("qq.credentialsDesc")}
-          </p>
-        </div>
-
+      <SettingsCard
+        title={t("qq.credentials")}
+        description={t("qq.credentialsDesc")}
+      >
         <div className="space-y-3">
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">
@@ -200,28 +199,20 @@ export function QqBridgeSection() {
         </div>
 
         {verifyResult && (
-          <div
-            className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs ${
-              verifyResult.ok
-                ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                : "bg-red-500/10 text-red-600 dark:text-red-400"
-            }`}
+          <StatusBanner
+            variant={verifyResult.ok ? "success" : "error"}
+            icon={verifyResult.ok ? <CheckCircle size={16} className="shrink-0" /> : <Warning size={16} className="shrink-0" />}
           >
-            {verifyResult.ok ? <CheckCircle size={16} className="shrink-0" /> : <Warning size={16} className="shrink-0" />}
             {verifyResult.message}
-          </div>
+          </StatusBanner>
         )}
-      </div>
+      </SettingsCard>
 
       {/* Allowed Users */}
-      <div className="rounded-lg border border-border/50 p-4 space-y-4 transition-shadow hover:shadow-sm">
-        <div>
-          <h2 className="text-sm font-medium">{t("qq.allowedUsers")}</h2>
-          <p className="text-xs text-muted-foreground">
-            {t("qq.allowedUsersDesc")}
-          </p>
-        </div>
-
+      <SettingsCard
+        title={t("qq.allowedUsers")}
+        description={t("qq.allowedUsersDesc")}
+      >
         <div>
           <Input
             value={allowedUsers}
@@ -237,30 +228,23 @@ export function QqBridgeSection() {
         <Button size="sm" onClick={handleSaveAllowedUsers} disabled={saving}>
           {saving ? t("common.loading") : t("common.save")}
         </Button>
-      </div>
+      </SettingsCard>
 
       {/* Image Settings */}
-      <div className="rounded-lg border border-border/50 p-4 space-y-4 transition-shadow hover:shadow-sm">
-        <div>
-          <h2 className="text-sm font-medium">{t("qq.imageSettings")}</h2>
-          <p className="text-xs text-muted-foreground">
-            {t("qq.imageSettingsDesc")}
-          </p>
-        </div>
-
+      <SettingsCard
+        title={t("qq.imageSettings")}
+        description={t("qq.imageSettingsDesc")}
+      >
         <div className="space-y-3">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm">{t("qq.imageEnabled")}</p>
-              <p className="text-xs text-muted-foreground">
-                {t("qq.imageEnabledDesc")}
-              </p>
-            </div>
+          <FieldRow
+            label={t("qq.imageEnabled")}
+            description={t("qq.imageEnabledDesc")}
+          >
             <Switch
               checked={imageEnabled}
               onCheckedChange={setImageEnabled}
             />
-          </div>
+          </FieldRow>
 
           {imageEnabled && (
             <div>
@@ -284,11 +268,10 @@ export function QqBridgeSection() {
         <Button size="sm" onClick={handleSaveImageSettings} disabled={saving}>
           {saving ? t("common.loading") : t("common.save")}
         </Button>
-      </div>
+      </SettingsCard>
 
       {/* Setup Guide */}
-      <div className="rounded-lg border border-border/50 p-4 transition-shadow hover:shadow-sm">
-        <h2 className="text-sm font-medium mb-2">{t("qq.setupGuide")}</h2>
+      <SettingsCard title={t("qq.setupGuide")}>
         <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4">
           <li>{t("qq.step1")}</li>
           <li>{t("qq.step2")}</li>
@@ -296,7 +279,7 @@ export function QqBridgeSection() {
           <li>{t("qq.step4")}</li>
           <li>{t("qq.step5")}</li>
         </ol>
-      </div>
+      </SettingsCard>
     </div>
   );
 }

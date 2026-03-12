@@ -5,6 +5,7 @@ import { useBatchImageGen } from '@/hooks/useBatchImageGen';
 import { usePanel } from '@/hooks/usePanel';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
+import { Button } from '@/components/ui/button';
 import type { PlannerOutput, PlannerItem } from '@/types';
 import { BatchPlanRow } from './BatchPlanRow';
 import { BatchExecutionDashboard } from './BatchExecutionDashboard';
@@ -15,7 +16,7 @@ interface BatchPlanInlinePreviewProps {
   messageId: string;
 }
 
-export function BatchPlanInlinePreview({ plan: initialPlan, messageId }: BatchPlanInlinePreviewProps) {
+export function BatchPlanInlinePreview({ plan: initialPlan }: BatchPlanInlinePreviewProps) {
   const batchImageGen = useBatchImageGen();
   const { sessionId } = usePanel();
   const { t } = useTranslation();
@@ -105,22 +106,23 @@ export function BatchPlanInlinePreview({ plan: initialPlan, messageId }: BatchPl
 
       {/* Footer Actions */}
       <div className="px-4 py-3 border-t border-border/40 flex items-center gap-2">
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={handleAddItem}
-          className="text-xs text-purple-600 dark:text-purple-400 hover:underline"
+          className="text-xs text-purple-600 dark:text-purple-400 hover:underline h-auto px-1 py-0.5"
         >
           + {t('batchImageGen.addItem' as TranslationKey)}
-        </button>
+        </Button>
         <div className="flex-1" />
-        <button
-          type="button"
+        <Button
+          size="sm"
           onClick={handleExecute}
           disabled={localPlan.items.length === 0}
-          className="inline-flex items-center justify-center rounded-lg px-4 py-1.5 text-xs font-medium bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          className="bg-purple-600 text-white hover:bg-purple-700"
         >
           {t('batchImageGen.confirmAndExecute' as TranslationKey)}
-        </button>
+        </Button>
       </div>
     </div>
   );

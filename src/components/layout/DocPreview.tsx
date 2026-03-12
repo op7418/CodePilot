@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useMemo } from "react";
 import { useTheme } from "next-themes";
-import { X, Copy, Check, SpinnerGap } from "@phosphor-icons/react";
+import { X, Copy, Check, SpinnerGap } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Light as SyntaxHighlighter } from "react-syntax-highlighter";
 import { useThemeFamily } from "@/lib/theme/context";
@@ -93,7 +93,7 @@ export function DocPreview({
     return () => {
       cancelled = true;
     };
-  }, [filePath]);
+  }, [filePath, workingDirectory]);
 
   const handleCopyContent = async () => {
     const text = preview?.content || filePath;
@@ -131,7 +131,7 @@ export function DocPreview({
 
         <Button variant="ghost" size="icon-sm" onClick={handleCopyContent}>
           {copied ? (
-            <Check size={14} className="text-green-500" />
+            <Check size={14} className="text-status-success-foreground" />
           ) : (
             <Copy size={14} />
           )}
@@ -188,8 +188,10 @@ function ViewModeToggle({
 }) {
   return (
     <div className="flex h-6 items-center rounded-full bg-muted p-0.5 text-[11px]">
-      <button
-        className={`rounded-full px-2 py-0.5 font-medium transition-colors ${
+      <Button
+        variant="ghost"
+        size="sm"
+        className={`rounded-full px-2 py-0.5 font-medium h-auto ${
           value === "source"
             ? "bg-background text-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground"
@@ -197,9 +199,11 @@ function ViewModeToggle({
         onClick={() => onChange("source")}
       >
         Source
-      </button>
-      <button
-        className={`rounded-full px-2 py-0.5 font-medium transition-colors ${
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        className={`rounded-full px-2 py-0.5 font-medium h-auto ${
           value === "rendered"
             ? "bg-background text-foreground shadow-sm"
             : "text-muted-foreground hover:text-foreground"
@@ -207,7 +211,7 @@ function ViewModeToggle({
         onClick={() => onChange("rendered")}
       >
         Preview
-      </button>
+      </Button>
     </div>
   );
 }

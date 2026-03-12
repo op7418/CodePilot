@@ -3,6 +3,7 @@
 import type { Message } from '@/types';
 import { useContextUsage } from '@/hooks/useContextUsage';
 import { useTranslation } from '@/hooks/useTranslation';
+import { Button } from '@/components/ui/button';
 import {
   HoverCard,
   HoverCardTrigger,
@@ -32,15 +33,15 @@ export function ContextUsageIndicator({ messages, modelName }: ContextUsageIndic
   // Color based on usage ratio — used portion is dark gray by default
   let strokeColor = 'text-muted-foreground';
   if (usage.hasData) {
-    if (usage.ratio > 0.8) strokeColor = 'text-red-500';
-    else if (usage.ratio > 0.6) strokeColor = 'text-yellow-500';
+    if (usage.ratio > 0.8) strokeColor = 'text-status-error-foreground';
+    else if (usage.ratio > 0.6) strokeColor = 'text-status-warning-foreground';
     else strokeColor = 'text-zinc-600 dark:text-zinc-400';
   }
 
   return (
     <HoverCard openDelay={200} closeDelay={100}>
       <HoverCardTrigger asChild>
-        <button className="flex items-center justify-center p-1 rounded hover:bg-muted transition-colors" type="button">
+        <Button variant="ghost" size="icon-xs" className="p-1">
           <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="block">
             {/* Background circle */}
             <circle
@@ -68,7 +69,7 @@ export function ContextUsageIndicator({ messages, modelName }: ContextUsageIndic
               />
             )}
           </svg>
-        </button>
+        </Button>
       </HoverCardTrigger>
       <HoverCardContent side="top" align="center" className="w-56 p-3 text-xs">
         {!usage.hasData ? (

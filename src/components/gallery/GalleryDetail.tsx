@@ -10,7 +10,7 @@ import {
   ArrowLeft,
   ArrowRight,
   Heart,
-} from '@phosphor-icons/react';
+} from '@/components/ui/icon';
 import { cn, parseDBDate } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -140,20 +140,22 @@ export function GalleryDetail({
 
             {hasMultipleImages && (
               <>
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setCurrentImageIndex((i) => (i > 0 ? i - 1 : item.images.length - 1))}
-                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white hover:bg-black/70 transition z-10"
+                  className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 text-white hover:bg-black/70 z-10"
                 >
                   <ArrowLeft size={20} />
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="icon"
                   onClick={() => setCurrentImageIndex((i) => (i < item.images.length - 1 ? i + 1 : 0))}
-                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 p-1.5 text-white hover:bg-black/70 transition z-10"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-black/50 text-white hover:bg-black/70 z-10"
                 >
                   <ArrowRight size={20} />
-                </button>
+                </Button>
                 <div className="absolute bottom-2 left-1/2 -translate-x-1/2 rounded-full bg-black/50 px-2 py-0.5 text-xs text-white z-10">
                   {currentImageIndex + 1} / {item.images.length}
                 </div>
@@ -164,14 +166,15 @@ export function GalleryDetail({
           {/* Right: Info panel */}
           <div className="flex-1 min-w-0 border-l border-border/50 overflow-y-auto p-6 space-y-5">
             {/* Favorite button */}
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => onToggleFavorite?.(item.id)}
               className={cn(
-                'flex items-center gap-1.5 text-sm transition-colors',
+                'gap-1.5',
                 item.favorited
-                  ? 'text-red-500'
-                  : 'text-muted-foreground hover:text-red-500',
+                  ? 'text-status-error-foreground'
+                  : 'text-muted-foreground hover:text-status-error-foreground',
               )}
             >
               <Heart
@@ -181,7 +184,7 @@ export function GalleryDetail({
               {item.favorited
                 ? t('gallery.removeFromFavorites' as TranslationKey)
                 : t('gallery.addToFavorites' as TranslationKey)}
-            </button>
+            </Button>
 
             {/* Prompt */}
             <div>

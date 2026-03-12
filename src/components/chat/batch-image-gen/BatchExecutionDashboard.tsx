@@ -3,6 +3,7 @@
 import { useBatchImageGen } from '@/hooks/useBatchImageGen';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
+import { Button } from '@/components/ui/button';
 import { BatchExecutionItem } from './BatchExecutionItem';
 
 export function BatchExecutionDashboard() {
@@ -32,7 +33,7 @@ export function BatchExecutionDashboard() {
           <span className="text-xs text-muted-foreground">
             {progress.completed}/{progress.total}
             {progress.failed > 0 && (
-              <span className="text-red-500 ml-1">({progress.failed} failed)</span>
+              <span className="text-status-error-foreground ml-1">({progress.failed} failed)</span>
             )}
           </span>
         </div>
@@ -62,54 +63,58 @@ export function BatchExecutionDashboard() {
       <div className="px-4 py-3 border-t border-border/40 flex items-center gap-2">
         {isRunning && (
           <>
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={pauseJob}
-              className="text-xs px-3 py-1.5 rounded-md border border-border/40 hover:bg-accent/50 text-foreground transition-colors"
+              className="text-xs border-border/40 hover:bg-accent/50"
             >
               {t('batchImageGen.pause' as TranslationKey)}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={cancelJob}
-              className="text-xs px-3 py-1.5 rounded-md border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors"
+              className="text-xs border-status-error-border text-status-error-foreground hover:bg-status-error-muted"
             >
               {t('batchImageGen.cancel' as TranslationKey)}
-            </button>
+            </Button>
           </>
         )}
 
         {isPaused && (
           <>
-            <button
-              type="button"
+            <Button
+              size="sm"
               onClick={resumeJob}
-              className="text-xs px-3 py-1.5 rounded-md bg-purple-600 text-white hover:bg-purple-700 transition-colors"
+              className="text-xs bg-purple-600 text-white hover:bg-purple-700"
             >
               {t('batchImageGen.resume' as TranslationKey)}
-            </button>
-            <button
-              type="button"
+            </Button>
+            <Button
+              variant="outline"
+              size="sm"
               onClick={cancelJob}
-              className="text-xs px-3 py-1.5 rounded-md border border-red-500/30 text-red-500 hover:bg-red-500/10 transition-colors"
+              className="text-xs border-status-error-border text-status-error-foreground hover:bg-status-error-muted"
             >
               {t('batchImageGen.cancel' as TranslationKey)}
-            </button>
+            </Button>
           </>
         )}
 
         {isCompleted && hasFailedItems && (
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={retryFailed}
-            className="text-xs px-3 py-1.5 rounded-md border border-border/40 hover:bg-accent/50 text-foreground transition-colors"
+            className="text-xs border-border/40 hover:bg-accent/50"
           >
             {t('batchImageGen.retryFailed' as TranslationKey)}
-          </button>
+          </Button>
         )}
 
         {state.error && (
-          <p className="text-xs text-red-500 ml-2">{state.error}</p>
+          <p className="text-xs text-status-error-foreground ml-2">{state.error}</p>
         )}
       </div>
     </div>

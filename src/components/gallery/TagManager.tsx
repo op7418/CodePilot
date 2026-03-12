@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import { Plus, X } from '@phosphor-icons/react';
+import { Plus, X } from '@/components/ui/icon';
 import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
 
@@ -62,11 +63,12 @@ export function TagManager({
         {tags.map((tag) => {
           const isSelected = selectedTags.includes(tag.id);
           return (
-            <button
+            <Button
               key={tag.id}
-              type="button"
+              variant="ghost"
+              size="xs"
               onClick={() => onToggleTag?.(tag.id)}
-              className="group inline-flex items-center gap-1"
+              className="group inline-flex items-center gap-1 h-auto p-0"
             >
               <Badge
                 variant={isSelected ? 'default' : 'outline'}
@@ -85,19 +87,20 @@ export function TagManager({
                 )}
                 {tag.name}
                 {editable && onRemoveTag && (
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
                     onClick={(e) => {
                       e.stopPropagation();
                       onRemoveTag(tag.id);
                     }}
-                    className="ml-0.5 rounded-full p-0.5 opacity-0 group-hover:opacity-100 hover:bg-foreground/10 transition-opacity"
+                    className="ml-0.5 rounded-full h-4 w-4 opacity-0 group-hover:opacity-100 hover:bg-foreground/10"
                   >
                     <X size={10} />
-                  </button>
+                  </Button>
                 )}
               </Badge>
-            </button>
+            </Button>
           );
         })}
 
@@ -115,7 +118,7 @@ export function TagManager({
 
       {adding && (
         <div className="flex items-center gap-2">
-          <input
+          <Input
             type="text"
             value={newName}
             onChange={(e) => setNewName(e.target.value)}
@@ -124,17 +127,18 @@ export function TagManager({
               if (e.key === 'Escape') setAdding(false);
             }}
             placeholder={t('gallery.newTagPlaceholder' as TranslationKey)}
-            className="flex-1 h-7 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+            className="flex-1 h-7 text-xs"
             autoFocus
           />
           <div className="flex items-center gap-1">
             {PRESET_COLORS.map((color) => (
-              <button
+              <Button
                 key={color}
-                type="button"
+                variant="ghost"
+                size="icon-xs"
                 onClick={() => setNewColor(color)}
                 className={cn(
-                  'h-4 w-4 rounded-full transition-all',
+                  'h-4 w-4 rounded-full p-0',
                   newColor === color ? 'ring-2 ring-offset-1 ring-offset-background' : 'hover:scale-110'
                 )}
                 style={{ backgroundColor: color, '--tw-ring-color': color } as React.CSSProperties}

@@ -10,7 +10,7 @@ import {
   ArrowSquareOut,
   Lightning,
   SpinnerGap,
-} from "@phosphor-icons/react";
+} from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
 import { InstallProgressDialog } from "./InstallProgressDialog";
 import ReactMarkdown from "react-markdown";
@@ -92,7 +92,7 @@ export function MarketplaceSkillDetail({
               {skill.isInstalled && (
                 <Badge
                   variant="outline"
-                  className="text-[10px] px-1.5 py-0 border-green-500/40 text-green-600 dark:text-green-400 shrink-0"
+                  className="text-[10px] px-1.5 py-0 border-status-success-border text-status-success-foreground shrink-0"
                 >
                   <CheckCircle size={10} className="mr-0.5" />
                   {t('skills.installed')}

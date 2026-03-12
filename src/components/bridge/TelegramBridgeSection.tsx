@@ -3,8 +3,10 @@
 import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { SpinnerGap, CheckCircle, Warning } from "@phosphor-icons/react";
+import { SpinnerGap, CheckCircle, Warning } from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
+import { SettingsCard } from "@/components/patterns/SettingsCard";
+import { StatusBanner } from "@/components/patterns/StatusBanner";
 
 interface TelegramBridgeSettings {
   telegram_bot_token: string;
@@ -19,7 +21,7 @@ const DEFAULT_SETTINGS: TelegramBridgeSettings = {
 };
 
 export function TelegramBridgeSection() {
-  const [settings, setSettings] = useState<TelegramBridgeSettings>(DEFAULT_SETTINGS);
+  const [, setSettings] = useState<TelegramBridgeSettings>(DEFAULT_SETTINGS);
   const [botToken, setBotToken] = useState("");
   const [chatId, setChatId] = useState("");
   const [allowedUsers, setAllowedUsers] = useState("");
@@ -172,14 +174,10 @@ export function TelegramBridgeSection() {
   return (
     <div className="max-w-3xl space-y-6">
       {/* Bot Credentials */}
-      <div className="rounded-lg border border-border/50 p-4 space-y-4 transition-shadow hover:shadow-sm">
-        <div>
-          <h2 className="text-sm font-medium">{t("telegram.credentials")}</h2>
-          <p className="text-xs text-muted-foreground">
-            {t("telegram.credentialsDesc")}
-          </p>
-        </div>
-
+      <SettingsCard
+        title={t("telegram.credentials")}
+        description={t("telegram.credentialsDesc")}
+      >
         <div className="space-y-3">
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">
@@ -252,28 +250,20 @@ export function TelegramBridgeSection() {
         </div>
 
         {verifyResult && (
-          <div
-            className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs ${
-              verifyResult.ok
-                ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                : "bg-red-500/10 text-red-600 dark:text-red-400"
-            }`}
+          <StatusBanner
+            variant={verifyResult.ok ? "success" : "error"}
+            icon={verifyResult.ok ? <CheckCircle size={16} className="shrink-0" /> : <Warning size={16} className="shrink-0" />}
           >
-            {verifyResult.ok ? <CheckCircle size={16} className="shrink-0" /> : <Warning size={16} className="shrink-0" />}
             {verifyResult.message}
-          </div>
+          </StatusBanner>
         )}
-      </div>
+      </SettingsCard>
 
       {/* Allowed Users */}
-      <div className="rounded-lg border border-border/50 p-4 space-y-4 transition-shadow hover:shadow-sm">
-        <div>
-          <h2 className="text-sm font-medium">{t("bridge.allowedUsers")}</h2>
-          <p className="text-xs text-muted-foreground">
-            {t("bridge.allowedUsersDesc")}
-          </p>
-        </div>
-
+      <SettingsCard
+        title={t("bridge.allowedUsers")}
+        description={t("bridge.allowedUsersDesc")}
+      >
         <div>
           <Input
             value={allowedUsers}
@@ -285,13 +275,10 @@ export function TelegramBridgeSection() {
             {t("bridge.allowedUsersHint")}
           </p>
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Setup Guide */}
-      <div className="rounded-lg border border-border/50 p-4 transition-shadow hover:shadow-sm">
-        <h2 className="text-sm font-medium mb-2">
-          {t("telegram.setupGuide")}
-        </h2>
+      <SettingsCard title={t("telegram.setupGuide")}>
         <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4">
           <li>{t("telegram.step1")}</li>
           <li>{t("telegram.step2")}</li>
@@ -300,7 +287,7 @@ export function TelegramBridgeSection() {
           <li>{t("telegram.step5")}</li>
           <li>{t("telegram.step6")}</li>
         </ol>
-      </div>
+      </SettingsCard>
     </div>
   );
 }

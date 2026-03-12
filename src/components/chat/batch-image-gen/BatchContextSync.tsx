@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useBatchImageGen } from '@/hooks/useBatchImageGen';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
+import { Button } from '@/components/ui/button';
 
 export function BatchContextSync() {
   const { state, syncToLlm, resetJob } = useBatchImageGen();
@@ -37,41 +38,43 @@ export function BatchContextSync() {
       <div className="px-4 py-3 flex items-center gap-2">
         {!synced ? (
           <>
-            <button
-              type="button"
+            <Button
+              size="sm"
               onClick={() => handleSync('manual')}
               disabled={isSyncing}
-              className="text-xs px-3 py-1.5 rounded-md bg-purple-600 text-white hover:bg-purple-700 disabled:opacity-50 transition-colors"
+              className="text-xs bg-purple-600 text-white hover:bg-purple-700"
             >
               {isSyncing ? '...' : t('batchImageGen.syncToChat' as TranslationKey)}
-            </button>
+            </Button>
             <div className="flex-1" />
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={resetJob}
               className="text-xs text-muted-foreground hover:text-foreground"
             >
               {t('common.close' as TranslationKey)}
-            </button>
+            </Button>
           </>
         ) : (
           <>
-            <span className="text-xs text-green-500">
+            <span className="text-xs text-status-success-foreground">
               {t('batchImageGen.syncComplete' as TranslationKey)}
             </span>
             <div className="flex-1" />
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={resetJob}
               className="text-xs text-muted-foreground hover:text-foreground"
             >
               {t('common.close' as TranslationKey)}
-            </button>
+            </Button>
           </>
         )}
 
         {state.error && (
-          <p className="text-xs text-red-500">{state.error}</p>
+          <p className="text-xs text-status-error-foreground">{state.error}</p>
         )}
       </div>
     </div>

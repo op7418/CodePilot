@@ -12,7 +12,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { SpinnerGap, Globe, FolderOpen } from "@phosphor-icons/react";
+import { SpinnerGap, Globe, FolderOpen } from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
 import { cn } from "@/lib/utils";
 
@@ -127,11 +127,11 @@ export function CreateSkillDialog({
           <div className="space-y-2">
             <Label>{t('skills.scope')}</Label>
             <div className="flex gap-2">
-              <button
-                type="button"
+              <Button
+                variant="outline"
                 onClick={() => setScope("project")}
                 className={cn(
-                  "flex-1 flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors",
+                  "flex-1 justify-start",
                   scope === "project"
                     ? "border-primary/50 bg-primary/10 text-primary"
                     : "border-border hover:bg-accent"
@@ -139,20 +139,20 @@ export function CreateSkillDialog({
               >
                 <FolderOpen size={16} />
                 {t('skills.project')}
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="outline"
                 onClick={() => setScope("global")}
                 className={cn(
-                  "flex-1 flex items-center gap-2 rounded-md border px-3 py-2 text-sm transition-colors",
+                  "flex-1 justify-start",
                   scope === "global"
-                    ? "border-green-500/50 bg-green-500/10 text-green-600 dark:text-green-400"
+                    ? "border-status-success-border bg-status-success-muted text-status-success-foreground"
                     : "border-border hover:bg-accent"
                 )}
               >
                 <Globe size={16} />
                 {t('skills.global')}
-              </button>
+              </Button>
             </div>
             <p className="text-xs text-muted-foreground">
               {scope === "project"
@@ -166,19 +166,19 @@ export function CreateSkillDialog({
             <Label>{t('skills.template')}</Label>
             <div className="flex gap-2 flex-wrap">
               {TEMPLATES.map((tpl, i) => (
-                <button
+                <Button
                   key={tpl.label}
-                  type="button"
+                  variant="outline"
+                  size="xs"
                   onClick={() => setTemplateIdx(i)}
                   className={cn(
-                    "rounded-md border px-3 py-1 text-xs transition-colors",
                     templateIdx === i
                       ? "border-primary bg-primary/10 text-primary"
                       : "border-border hover:bg-accent"
                   )}
                 >
                   {tpl.label}
-                </button>
+                </Button>
               ))}
             </div>
           </div>

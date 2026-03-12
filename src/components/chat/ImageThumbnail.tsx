@@ -1,5 +1,7 @@
 'use client';
 
+import { Button } from '@/components/ui/button';
+
 interface ImageThumbnailProps {
   src: string;
   alt: string;
@@ -8,10 +10,10 @@ interface ImageThumbnailProps {
 
 export function ImageThumbnail({ src, alt, onClick }: ImageThumbnailProps) {
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
       onClick={onClick}
-      className="rounded-lg overflow-hidden cursor-pointer hover:opacity-80 transition"
+      className="rounded-lg overflow-hidden cursor-pointer hover:opacity-80 p-0 h-auto"
     >
       {/* eslint-disable-next-line @next/next/no-img-element */}
       <img
@@ -19,6 +21,6 @@ export function ImageThumbnail({ src, alt, onClick }: ImageThumbnailProps) {
         alt={alt}
         className="max-h-32 w-full object-cover rounded-lg"
       />
-    </button>
+    </Button>
   );
 }

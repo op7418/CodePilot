@@ -9,7 +9,7 @@ import {
   DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { Copy, ArrowSquareOut, Plus, CaretDown } from "@phosphor-icons/react";
+import { Copy, ArrowSquareOut, Plus, CaretDown } from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { CliToolDefinition, CliToolPlatform } from "@/types";
 
@@ -172,16 +172,18 @@ export function CliToolDetailDialog({
             {showMethodPicker && availableMethods.length > 1 && (
               <div className="absolute right-0 bottom-10 z-10 rounded-md border bg-popover p-1 shadow-md min-w-[180px]">
                 {availableMethods.map(m => (
-                  <button
+                  <Button
                     key={m.method}
-                    className="w-full text-left px-2 py-1.5 text-xs rounded hover:bg-muted transition-colors"
+                    variant="ghost"
+                    size="sm"
+                    className="w-full justify-start px-2 py-1.5 text-xs h-auto"
                     onClick={() => {
                       setShowMethodPicker(false);
                       onInstall(tool, m.method);
                     }}
                   >
                     {m.method}: {m.command}
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}

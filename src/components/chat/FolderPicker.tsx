@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { Folder, FolderOpen, ArrowRight, CaretUp } from "@phosphor-icons/react";
+import { Folder, FolderOpen, ArrowRight, CaretUp } from "@/components/ui/icon";
 import { Button } from '@/components/ui/button';
 import {
   Dialog,
@@ -172,15 +172,16 @@ export function FolderPicker({ open, onOpenChange, onSelect, initialPath }: Fold
             ) : (
               <div className="p-1">
                 {directories.map((dir) => (
-                  <button
+                  <Button
                     key={dir.path}
-                    className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-sm hover:bg-accent transition-colors text-left"
+                    variant="ghost"
+                    className="flex w-full items-center gap-2 justify-start px-3 py-1.5 text-sm text-left h-auto"
                     onClick={() => handleNavigate(dir.path)}
                   >
                     <Folder size={16} className="shrink-0 text-primary" />
                     <span className="truncate">{dir.name}</span>
                     <ArrowRight size={12} className="ml-auto shrink-0 text-muted-foreground" />
-                  </button>
+                  </Button>
                 ))}
               </div>
             )}

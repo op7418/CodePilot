@@ -3,7 +3,7 @@
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
-import { X, Lightning } from "@phosphor-icons/react";
+import { X, Lightning } from "@/components/ui/icon";
 import type { SkillInfo } from './PluginCard';
 
 interface PluginDetailProps {

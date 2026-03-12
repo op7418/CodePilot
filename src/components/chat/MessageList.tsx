@@ -4,6 +4,7 @@ import { useRef, useEffect, useState, useCallback } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
 import { useStickToBottomContext } from 'use-stick-to-bottom';
+import { Button } from '@/components/ui/button';
 import type { Message } from '@/types';
 import {
   Conversation,
@@ -92,7 +93,7 @@ function RewindButton({ sessionId, userMessageId }: { sessionId: string; userMes
 
   if (state === 'done') {
     return (
-      <span className="text-[10px] text-green-600 dark:text-green-400 ml-2">
+      <span className="text-[10px] text-status-success-foreground ml-2">
         {t('messageList.rewindDone' as TranslationKey)}
       </span>
     );
@@ -104,30 +105,36 @@ function RewindButton({ sessionId, userMessageId }: { sessionId: string; userMes
         <span className="text-[10px] text-muted-foreground">
           {preview.filesChanged?.length || 0} files, +{preview.insertions || 0}/-{preview.deletions || 0}
         </span>
-        <button
+        <Button
+          variant="link"
+          size="xs"
           onClick={handleRewind}
-          className="text-[10px] text-primary hover:underline"
+          className="text-[10px] text-primary h-auto p-0"
         >
           {t('messageList.rewindConfirm' as TranslationKey)}
-        </button>
-        <button
+        </Button>
+        <Button
+          variant="link"
+          size="xs"
           onClick={() => setState('idle')}
-          className="text-[10px] text-muted-foreground hover:underline"
+          className="text-[10px] text-muted-foreground h-auto p-0"
         >
           {t('messageList.rewindCancel' as TranslationKey)}
-        </button>
+        </Button>
       </span>
     );
   }
 
   return (
-    <button
+    <Button
+      variant="ghost"
+      size="xs"
       onClick={handleDryRun}
       disabled={state === 'loading'}
-      className="text-[10px] text-muted-foreground hover:text-foreground transition-colors ml-2 opacity-0 group-hover:opacity-100"
+      className="text-[10px] text-muted-foreground hover:text-foreground ml-2 opacity-0 group-hover:opacity-100 h-auto p-0"
     >
       {state === 'loading' ? '...' : t('messageList.rewindToHere' as TranslationKey)}
-    </button>
+    </Button>
   );
 }
 
@@ -223,13 +230,15 @@ export function MessageList({
       <ConversationContent className="mx-auto max-w-3xl px-4 py-6 gap-6">
         {hasMore && (
           <div className="flex justify-center">
-            <button
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={handleLoadMore}
               disabled={loadingMore}
-              className="text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+              className="text-muted-foreground hover:text-foreground"
             >
               {loadingMore ? t('messageList.loading') : t('messageList.loadEarlier')}
-            </button>
+            </Button>
           </div>
         )}
         {messages.map((message) => {

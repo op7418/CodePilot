@@ -2,7 +2,7 @@
 
 import { useTheme } from "next-themes";
 import { useCallback, useSyncExternalStore } from "react";
-import { Moon, Sun } from "@phosphor-icons/react";
+import { Moon, Sun } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import {
   Tooltip,

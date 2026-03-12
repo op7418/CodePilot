@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { usePanel } from "@/hooks/usePanel";
 
-import { Plus, MagnifyingGlass, Lightning, SpinnerGap } from "@phosphor-icons/react";
+import { Plus, MagnifyingGlass, Lightning, SpinnerGap } from "@/components/ui/icon";
 import { SkillListItem } from "./SkillListItem";
 import { SkillEditor } from "./SkillEditor";
 import { CreateSkillDialog } from "./CreateSkillDialog";
@@ -157,9 +157,11 @@ export function SkillsManager() {
         <h3 className="text-lg font-semibold">{t('extensions.skills')}</h3>
         {/* Segmented control */}
         <div className="flex items-center bg-muted rounded-md p-0.5">
-          <button
+          <Button
+            variant="ghost"
+            size="sm"
             className={cn(
-              "px-3 py-1 text-xs font-medium rounded transition-colors",
+              "px-3 py-1 text-xs font-medium rounded h-auto",
               viewTab === "local"
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -167,10 +169,12 @@ export function SkillsManager() {
             onClick={() => setViewTab("local")}
           >
             {t('skills.mySkills')}
-          </button>
-          <button
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
             className={cn(
-              "px-3 py-1 text-xs font-medium rounded transition-colors",
+              "px-3 py-1 text-xs font-medium rounded h-auto",
               viewTab === "marketplace"
                 ? "bg-background text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
@@ -178,7 +182,7 @@ export function SkillsManager() {
             onClick={() => setViewTab("marketplace")}
           >
             {t('skills.marketplace')}
-          </button>
+          </Button>
         </div>
         <div className="flex-1" />
         {viewTab === "local" && (

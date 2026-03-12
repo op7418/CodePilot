@@ -1,8 +1,9 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import { Trash } from "@phosphor-icons/react";
+import { Trash } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn, parseDBDate } from "@/lib/utils";
 import type { TaskItem, TaskStatus } from "@/types";
 
@@ -13,10 +14,10 @@ interface TaskCardProps {
 }
 
 const statusColors: Record<TaskStatus, string> = {
-  pending: "bg-yellow-500",
+  pending: "bg-status-warning",
   in_progress: "bg-primary",
-  completed: "bg-green-500",
-  failed: "bg-red-500",
+  completed: "bg-status-success",
+  failed: "bg-status-error",
 };
 
 const nextStatus: Record<TaskStatus, TaskStatus> = {
@@ -73,9 +74,11 @@ export function TaskCard({ task, onUpdate, onDelete }: TaskCardProps) {
       onMouseLeave={() => setHovered(false)}
     >
       {/* Status dot */}
-      <button
+      <Button
+        variant="ghost"
+        size="icon"
         onClick={handleStatusClick}
-        className="mt-1 shrink-0"
+        className="mt-1 shrink-0 h-auto w-auto p-0"
         title={`Status: ${task.status} (click to change)`}
       >
         <span
@@ -84,12 +87,12 @@ export function TaskCard({ task, onUpdate, onDelete }: TaskCardProps) {
             statusColors[task.status]
           )}
         />
-      </button>
+      </Button>
 
       {/* Content */}
       <div className="min-w-0 flex-1">
         {editing ? (
-          <input
+          <Input
             ref={inputRef}
             value={editTitle}
             onChange={(e) => setEditTitle(e.target.value)}
@@ -101,7 +104,7 @@ export function TaskCard({ task, onUpdate, onDelete }: TaskCardProps) {
                 setEditing(false);
               }
             }}
-            className="w-full rounded border-none bg-transparent p-0 text-xs font-medium outline-none ring-1 ring-ring/30 px-1"
+            className="w-full border-none bg-transparent p-0 text-xs font-medium px-1 h-auto"
           />
         ) : (
           <p

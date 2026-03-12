@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { ArrowLeft, Copy, Check, SpinnerGap } from "@phosphor-icons/react";
+import { ArrowLeft, Copy, Check, SpinnerGap } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -57,16 +57,13 @@ export function FilePreview({ filePath, onBack }: FilePreviewProps) {
     }
 
     loadPreview();
-  }, [filePath]);
+  }, [filePath, t, workingDirectory]);
 
   const handleCopyPath = async () => {
     await navigator.clipboard.writeText(filePath);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
-
-  // Extract filename from path
-  const fileName = filePath.split("/").pop() || filePath;
 
   // Build breadcrumb segments
   const segments = filePath.split("/").filter(Boolean);
@@ -87,7 +84,7 @@ export function FilePreview({ filePath, onBack }: FilePreviewProps) {
         </div>
         <Button variant="ghost" size="icon-sm" onClick={handleCopyPath}>
           {copied ? (
-            <Check size={14} className="text-green-500" />
+            <Check size={14} className="text-status-success-foreground" />
           ) : (
             <Copy size={14} />
           )}

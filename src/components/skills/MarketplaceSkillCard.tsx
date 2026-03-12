@@ -1,6 +1,6 @@
 "use client";
 
-import { Lightning, DownloadSimple, CheckCircle } from "@phosphor-icons/react";
+import { Lightning, DownloadSimple, CheckCircle } from "@/components/ui/icon";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { useTranslation } from "@/hooks/useTranslation";
@@ -36,7 +36,7 @@ export function MarketplaceSkillCard({
           {skill.isInstalled ? (
             <Badge
               variant="outline"
-              className="text-[10px] px-1.5 py-0 border-green-500/40 text-green-600 dark:text-green-400"
+              className="text-[10px] px-1.5 py-0 border-status-success-border text-status-success-foreground"
             >
               <CheckCircle size={10} className="mr-0.5" />
               {t('skills.installed')}

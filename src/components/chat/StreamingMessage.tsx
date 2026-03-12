@@ -8,6 +8,7 @@ import {
   MessageResponse,
 } from '@/components/ai-elements/message';
 import { ToolActionsGroup } from '@/components/ai-elements/tool-actions-group';
+import { Button } from '@/components/ui/button';
 import { Shimmer } from '@/components/ai-elements/shimmer';
 import { ImageGenConfirmation } from './ImageGenConfirmation';
 import { BatchPlanInlinePreview } from './batch-image-gen/BatchPlanInlinePreview';
@@ -140,26 +141,27 @@ function StreamingStatusBar({ statusText, onForceStop }: { statusText?: string; 
   return (
     <div className="flex items-center gap-3 py-2 px-1 text-xs text-muted-foreground">
       <div className="flex items-center gap-2">
-        <span className={isCritical ? 'text-red-500' : isWarning ? 'text-yellow-500' : undefined}>
+        <span className={isCritical ? 'text-status-error-foreground' : isWarning ? 'text-status-warning-foreground' : undefined}>
           <Shimmer duration={1.5}>{displayText}</Shimmer>
         </span>
         {isWarning && !isCritical && (
-          <span className="text-yellow-500 text-[10px]">Running longer than usual</span>
+          <span className="text-status-warning-foreground text-[10px]">Running longer than usual</span>
         )}
         {isCritical && (
-          <span className="text-red-500 text-[10px]">Tool may be stuck</span>
+          <span className="text-status-error-foreground text-[10px]">Tool may be stuck</span>
         )}
       </div>
       <span className="text-muted-foreground/50">|</span>
       <ElapsedTimer />
       {isCritical && onForceStop && (
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="xs"
           onClick={onForceStop}
-          className="ml-auto rounded-md border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-500 transition-colors hover:bg-red-500/20"
+          className="ml-auto border-status-error-border bg-status-error-muted text-[10px] font-medium text-status-error-foreground hover:bg-status-error-muted"
         >
           Force stop
-        </button>
+        </Button>
       )}
     </div>
   );

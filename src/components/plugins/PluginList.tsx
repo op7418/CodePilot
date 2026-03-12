@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { PluginCard, type SkillInfo } from './PluginCard';
-import { MagnifyingGlass, Globe, FolderOpen, Plug } from "@phosphor-icons/react";
+import { MagnifyingGlass, Globe, FolderOpen, Plug } from "@/components/ui/icon";
 
 interface PluginListProps {
   plugins: SkillInfo[];

@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback, useRef } from "react";
 import { Input } from "@/components/ui/input";
-import { MagnifyingGlass, SpinnerGap, Storefront } from "@phosphor-icons/react";
+import { MagnifyingGlass, SpinnerGap, Storefront } from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
 import { MarketplaceSkillCard } from "./MarketplaceSkillCard";
 import { MarketplaceSkillDetail } from "./MarketplaceSkillDetail";
@@ -92,7 +92,7 @@ export function MarketplaceBrowser({ onInstalled }: MarketplaceBrowserProps) {
             )}
             {error && (
               <div className="flex flex-col items-center gap-2 py-8 text-muted-foreground px-3">
-                <p className="text-xs text-center text-red-500">{t('skills.marketplaceError')}</p>
+                <p className="text-xs text-center text-status-error-foreground">{t('skills.marketplaceError')}</p>
                 <p className="text-[10px] text-center">{error}</p>
               </div>
             )}

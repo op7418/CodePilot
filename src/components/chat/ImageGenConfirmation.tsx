@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 import { ImageGenCard } from './ImageGenCard';
 import { useTranslation } from '@/hooks/useTranslation';
 import { usePanel } from '@/hooks/usePanel';
@@ -71,7 +72,7 @@ export function ImageGenConfirmation({
     } catch {
       // ignore
     }
-  }, [initialPrompt]);
+  }, [initialPrompt, sessionId]);
 
   const handleStop = useCallback(() => {
     if (abortRef.current) {
@@ -193,7 +194,7 @@ export function ImageGenConfirmation({
     } finally {
       abortRef.current = null;
     }
-  }, [prompt, aspectRatio, resolution, initialPrompt, sessionId, referenceImages]);
+  }, [prompt, aspectRatio, resolution, initialPrompt, sessionId, messageId, referenceImages]);
 
   const handleRegenerate = useCallback(() => {
     setResult(null);
@@ -203,7 +204,7 @@ export function ImageGenConfirmation({
     } catch {
       // ignore
     }
-  }, [initialPrompt]);
+  }, [initialPrompt, sessionId]);
 
   // ── Completed: show result only ──
   if (status === 'completed' && result && result.images.length > 0) {
@@ -258,14 +259,13 @@ export function ImageGenConfirmation({
           <label className="text-xs font-medium text-muted-foreground mb-1 block">
             {t('imageGen.prompt' as TranslationKey)}
           </label>
-          <textarea
+          <Textarea
             value={prompt}
             onChange={(e) => setPrompt(e.target.value)}
             disabled={status === 'generating'}
             rows={3}
             className={cn(
-              'w-full rounded-md border border-border bg-background px-3 py-2 text-sm',
-              'resize-none focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary/30',
+              'resize-none',
               'disabled:opacity-60 disabled:cursor-not-allowed'
             )}
           />
@@ -278,21 +278,20 @@ export function ImageGenConfirmation({
           </label>
           <div className="flex flex-wrap gap-1.5">
             {ASPECT_RATIOS.map((ratio) => (
-              <button
+              <Button
                 key={ratio}
-                type="button"
+                variant="outline"
+                size="xs"
                 disabled={status === 'generating'}
                 onClick={() => setAspectRatio(ratio)}
                 className={cn(
-                  'px-2.5 py-1 text-xs font-medium rounded-md border transition-colors',
-                  'disabled:opacity-60 disabled:cursor-not-allowed',
                   aspectRatio === ratio
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30'
                 )}
               >
                 {ratio}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -304,21 +303,20 @@ export function ImageGenConfirmation({
           </label>
           <div className="flex items-center gap-1.5">
             {RESOLUTIONS.map((res) => (
-              <button
+              <Button
                 key={res}
-                type="button"
+                variant="outline"
+                size="xs"
                 disabled={status === 'generating'}
                 onClick={() => setResolution(res)}
                 className={cn(
-                  'px-3 py-1 text-xs font-medium rounded-md border transition-colors',
-                  'disabled:opacity-60 disabled:cursor-not-allowed',
                   resolution === res
                     ? 'border-primary bg-primary/10 text-primary'
                     : 'border-border/60 text-muted-foreground hover:text-foreground hover:border-foreground/30'
                 )}
               >
                 {res}
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -357,7 +355,7 @@ export function ImageGenConfirmation({
         {/* Error */}
         {status === 'error' && error && (
           <div className="space-y-2">
-            <p className="text-sm text-red-600 dark:text-red-400">{error}</p>
+            <p className="text-sm text-status-error-foreground">{error}</p>
             <Button onClick={handleGenerate} variant="outline" size="sm">
               {t('imageGen.retryButton' as TranslationKey)}
             </Button>

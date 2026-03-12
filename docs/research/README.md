@@ -10,3 +10,4 @@
 |------|------|
 | chat-sdk-integration-feasibility.md | Vercel Chat SDK 集成可行性调研 |
 | context-storage-migration-plan.md | 上下文共享与存储迁移设计（详细方案；执行跟踪见 `docs/exec-plans/active/context-storage-migration.md`） |
+| mobile-remote-control-overall-plan.md | 移动端远程控制整体方案（Host / Controller / Lease / 多设备控制） |

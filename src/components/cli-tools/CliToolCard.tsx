@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, CaretDown } from "@phosphor-icons/react";
+import { Plus, CaretDown } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { TranslationKey } from "@/i18n";
@@ -102,13 +102,15 @@ export function CliToolCard({
           {showMethodPicker && availableMethods.length > 1 && (
             <div className="absolute right-0 top-8 z-10 rounded-md border bg-popover p-1 shadow-md min-w-[140px]">
               {availableMethods.map(m => (
-                <button
+                <Button
                   key={m.method}
-                  className="w-full text-left px-2 py-1 text-xs rounded hover:bg-muted transition-colors"
+                  variant="ghost"
+                  size="sm"
+                  className="w-full justify-start px-2 py-1 text-xs h-auto"
                   onClick={(e) => handleMethodSelect(e, m.method)}
                 >
                   {m.method}: {m.command}
-                </button>
+                </Button>
               ))}
             </div>
           )}

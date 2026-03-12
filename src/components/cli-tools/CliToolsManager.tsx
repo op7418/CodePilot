@@ -9,7 +9,7 @@ import { CliToolDetailDialog } from "./CliToolDetailDialog";
 import { CliToolExtraDetailDialog } from "./CliToolExtraDetailDialog";
 import { CliToolInstallDialog } from "./CliToolInstallDialog";
 import { CliToolBatchDescribeDialog } from "./CliToolBatchDescribeDialog";
-import { SpinnerGap, Sparkle, ArrowSquareOut, Warning } from "@phosphor-icons/react";
+import { SpinnerGap, Sparkle, ArrowSquareOut, Warning } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { EXTRA_WELL_KNOWN_BINS } from "@/lib/cli-tools-catalog";
 
@@ -175,8 +175,8 @@ export function CliToolsManager() {
 
         {/* Brew not installed warning */}
         {!hasBrew && (platform === 'darwin' || platform === 'linux') && (
-          <div className="flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/5 px-3 py-2.5 mb-3">
-            <Warning size={16} className="text-amber-500 shrink-0 mt-0.5" />
+          <div className="flex items-start gap-2 rounded-lg border border-status-warning-border bg-status-warning-muted px-3 py-2.5 mb-3">
+            <Warning size={16} className="text-status-warning-foreground shrink-0 mt-0.5" />
             <div className="text-xs text-muted-foreground">
               <p className="font-medium text-foreground mb-1">{t('cliTools.brewNotInstalled')}</p>
               <p>{t('cliTools.brewInstallGuide')}</p>

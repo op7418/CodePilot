@@ -4,7 +4,8 @@ import { useEffect, useState, useRef, useCallback, use } from 'react';
 import Link from 'next/link';
 import type { Message, MessagesResponse, ChatSession } from '@/types';
 import { ChatView } from '@/components/chat/ChatView';
-import { SpinnerGap, PencilSimple } from "@phosphor-icons/react";
+import { SpinnerGap, PencilSimple } from "@/components/ui/icon";
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip';
 import { usePanel } from '@/hooks/usePanel';
@@ -37,7 +38,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
   const handleStartEditTitle = useCallback(() => {
     setEditTitle(sessionTitle || t('chat.newConversation'));
     setIsEditingTitle(true);
-  }, [sessionTitle]);
+  }, [sessionTitle, t]);
 
   const handleSaveTitle = useCallback(async () => {
     const trimmed = editTitle.trim();
@@ -120,7 +121,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
 
     loadSession();
     return () => { cancelled = true; };
-  }, [id, setWorkingDirectory, setSessionId, setPanelSessionTitle, setPanelOpen]);
+  }, [id, setWorkingDirectory, setSessionId, setPanelSessionTitle, setPanelOpen, t]);
 
   useEffect(() => {
     // Reset state when switching sessions
@@ -192,8 +193,10 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
             <>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <button
-                    className="text-xs text-muted-foreground shrink-0 hover:text-foreground transition-colors cursor-pointer"
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-xs text-muted-foreground shrink-0 hover:text-foreground transition-colors h-auto p-0"
                     style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
                     onClick={() => {
                       if (sessionWorkingDir) {
@@ -210,7 +213,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
                     }}
                   >
                     {projectName}
-                  </button>
+                  </Button>
                 </TooltipTrigger>
                 <TooltipContent>
                   <p className="text-xs break-all">{sessionWorkingDir || projectName}</p>
@@ -239,12 +242,14 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
               <h2 className="text-sm font-medium text-foreground/80 truncate">
                 {sessionTitle}
               </h2>
-              <button
+              <Button
+                variant="ghost"
+                size="icon"
                 onClick={handleStartEditTitle}
-                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 p-0.5 rounded hover:bg-muted"
+                className="opacity-0 group-hover:opacity-100 transition-opacity shrink-0 h-auto w-auto p-0.5"
               >
                 <PencilSimple size={12} className="text-muted-foreground" />
-              </button>
+              </Button>
             </div>
           )}
         </div>

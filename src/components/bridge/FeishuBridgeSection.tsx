@@ -11,8 +11,11 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { SpinnerGap, CheckCircle, Warning } from "@phosphor-icons/react";
+import { SpinnerGap, CheckCircle, Warning } from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
+import { SettingsCard } from "@/components/patterns/SettingsCard";
+import { FieldRow } from "@/components/patterns/FieldRow";
+import { StatusBanner } from "@/components/patterns/StatusBanner";
 
 interface FeishuBridgeSettings {
   bridge_feishu_app_id: string;
@@ -160,14 +163,10 @@ export function FeishuBridgeSection() {
   return (
     <div className="max-w-3xl space-y-6">
       {/* App Credentials */}
-      <div className="rounded-lg border border-border/50 p-4 space-y-4 transition-shadow hover:shadow-sm">
-        <div>
-          <h2 className="text-sm font-medium">{t("feishu.credentials")}</h2>
-          <p className="text-xs text-muted-foreground">
-            {t("feishu.credentialsDesc")}
-          </p>
-        </div>
-
+      <SettingsCard
+        title={t("feishu.credentials")}
+        description={t("feishu.credentialsDesc")}
+      >
         <div className="space-y-3">
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">
@@ -238,30 +237,20 @@ export function FeishuBridgeSection() {
         </div>
 
         {verifyResult && (
-          <div
-            className={`flex items-center gap-2 rounded-md px-3 py-2 text-xs ${
-              verifyResult.ok
-                ? "bg-green-500/10 text-green-600 dark:text-green-400"
-                : "bg-red-500/10 text-red-600 dark:text-red-400"
-            }`}
+          <StatusBanner
+            variant={verifyResult.ok ? "success" : "error"}
+            icon={verifyResult.ok ? <CheckCircle size={16} className="shrink-0" /> : <Warning size={16} className="shrink-0" />}
           >
-            {verifyResult.ok ? <CheckCircle size={16} className="shrink-0" /> : <Warning size={16} className="shrink-0" />}
             {verifyResult.message}
-          </div>
+          </StatusBanner>
         )}
-      </div>
+      </SettingsCard>
 
       {/* Allowed Users */}
-      <div className="rounded-lg border border-border/50 p-4 space-y-4 transition-shadow hover:shadow-sm">
-        <div>
-          <h2 className="text-sm font-medium">
-            {t("feishu.allowedUsers")}
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            {t("feishu.allowedUsersDesc")}
-          </p>
-        </div>
-
+      <SettingsCard
+        title={t("feishu.allowedUsers")}
+        description={t("feishu.allowedUsersDesc")}
+      >
         <div>
           <Input
             value={allowedUsers}
@@ -273,19 +262,13 @@ export function FeishuBridgeSection() {
             {t("feishu.allowedUsersHint")}
           </p>
         </div>
-      </div>
+      </SettingsCard>
 
       {/* Group Chat Settings */}
-      <div className="rounded-lg border border-border/50 p-4 space-y-4 transition-shadow hover:shadow-sm">
-        <div>
-          <h2 className="text-sm font-medium">
-            {t("feishu.groupSettings")}
-          </h2>
-          <p className="text-xs text-muted-foreground">
-            {t("feishu.groupSettingsDesc")}
-          </p>
-        </div>
-
+      <SettingsCard
+        title={t("feishu.groupSettings")}
+        description={t("feishu.groupSettingsDesc")}
+      >
         <div className="space-y-3">
           <div>
             <label className="text-xs font-medium text-muted-foreground mb-1 block">
@@ -326,30 +309,24 @@ export function FeishuBridgeSection() {
             </div>
           )}
 
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm">{t("feishu.requireMention")}</p>
-              <p className="text-xs text-muted-foreground">
-                {t("feishu.requireMentionDesc")}
-              </p>
-            </div>
+          <FieldRow
+            label={t("feishu.requireMention")}
+            description={t("feishu.requireMentionDesc")}
+          >
             <Switch
               checked={requireMention}
               onCheckedChange={setRequireMention}
             />
-          </div>
+          </FieldRow>
         </div>
 
         <Button size="sm" onClick={handleSaveGroupSettings} disabled={saving}>
           {saving ? t("common.loading") : t("common.save")}
         </Button>
-      </div>
+      </SettingsCard>
 
       {/* Setup Guide */}
-      <div className="rounded-lg border border-border/50 p-4 transition-shadow hover:shadow-sm">
-        <h2 className="text-sm font-medium mb-2">
-          {t("feishu.setupGuide")}
-        </h2>
+      <SettingsCard title={t("feishu.setupGuide")}>
         <ol className="text-xs text-muted-foreground space-y-1.5 list-decimal pl-4">
           <li>{t("feishu.step1")}</li>
           <li>{t("feishu.step2")}</li>
@@ -358,7 +335,7 @@ export function FeishuBridgeSection() {
           <li>{t("feishu.step5")}</li>
           <li>{t("feishu.step6")}</li>
         </ol>
-      </div>
+      </SettingsCard>
     </div>
   );
 }

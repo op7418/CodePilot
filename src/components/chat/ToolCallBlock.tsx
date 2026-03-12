@@ -1,21 +1,10 @@
 'use client';
 
 import { useState, createElement } from 'react';
-import type { Icon } from "@phosphor-icons/react";
-import {
-  File,
-  NotePencil,
-  Terminal,
-  MagnifyingGlass,
-  Wrench,
-  CaretDown,
-  CaretRight,
-  SpinnerGap,
-  CheckCircle,
-  XCircle,
-} from "@phosphor-icons/react";
+import { type Icon, File, NotePencil, Terminal, MagnifyingGlass, Wrench, CaretDown, CaretRight, SpinnerGap, CheckCircle, XCircle } from "@/components/ui/icon";
 import { cn } from '@/lib/utils';
-import { CodeBlock } from './CodeBlock';
+import { Button } from '@/components/ui/button';
+import { CodeBlock } from '@/components/ai-elements/code-block';
 
 type ToolStatus = 'running' | 'success' | 'error';
 
@@ -104,9 +93,9 @@ function StatusIndicator({ status }: { status: ToolStatus }) {
         </span>
       );
     case 'success':
-      return <CheckCircle size={14} className="text-green-500" />;
+      return <CheckCircle size={14} className="text-status-success-foreground" />;
     case 'error':
-      return <XCircle size={14} className="text-red-500" />;
+      return <XCircle size={14} className="text-status-error-foreground" />;
   }
 }
 
@@ -127,13 +116,13 @@ function renderDiff(input: unknown): React.ReactNode | null {
     <div className="my-2 rounded-md border border-zinc-700/50 overflow-hidden text-xs font-mono">
       {oldLines.length > 0 && oldLines.map((line, i) => (
         <div key={`old-${i}`} className="flex bg-red-950/30 text-red-300">
-          <span className="select-none w-8 text-right pr-2 text-red-400/60 shrink-0">-</span>
+          <span className="select-none w-8 text-right pr-2 text-red-400/60 shrink-0">-</span>{/* lint-allow-raw-color */}
           <span className="px-2 whitespace-pre-wrap break-all">{line}</span>
         </div>
       ))}
       {newLines.length > 0 && newLines.map((line, i) => (
         <div key={`new-${i}`} className="flex bg-green-950/30 text-green-300">
-          <span className="select-none w-8 text-right pr-2 text-green-400/60 shrink-0">+</span>
+          <span className="select-none w-8 text-right pr-2 text-green-400/60 shrink-0">+</span>{/* lint-allow-raw-color */}
           <span className="px-2 whitespace-pre-wrap break-all">{line}</span>
         </div>
       ))}
@@ -212,7 +201,7 @@ export function ToolCallBlock({
           <div className="space-y-2">
             {command && (
               <div className="rounded-md bg-black p-3 font-mono text-xs text-zinc-100 overflow-x-auto">
-                <span className="text-green-400 select-none">$ </span>
+                <span className="text-green-400 select-none">$ </span>{/* lint-allow-raw-color */}
                 <span className="whitespace-pre-wrap break-all">{command}</span>
               </div>
             )}
@@ -282,22 +271,23 @@ export function ToolCallBlock({
 
   const statusBorderColor = {
     running: 'border-primary/70',
-    success: 'border-green-500/50',
-    error: 'border-red-500/60',
+    success: 'border-status-success-border',
+    error: 'border-status-error-border',
   }[status];
 
   const statusBgColor = {
     running: 'bg-primary/[0.03] dark:bg-primary/[0.05]',
     success: 'bg-transparent',
-    error: 'bg-red-500/[0.03] dark:bg-red-500/[0.05]',
+    error: 'bg-status-error-muted',
   }[status];
 
   return (
     <div className={cn("my-0.5 border-l-2 rounded-r-md overflow-hidden transition-colors duration-300", statusBorderColor, statusBgColor)}>
-      <button
+      <Button
+        variant="ghost"
         onClick={() => setExpanded(!expanded)}
         className={cn(
-          "flex w-full items-center gap-2 px-3 py-1 text-left text-sm hover:bg-muted/30 transition-colors",
+          "flex w-full items-center gap-2 px-3 py-1 text-left text-sm hover:bg-muted/30 h-auto rounded-none justify-start",
           expanded && "border-b border-border/30"
         )}
       >
@@ -309,8 +299,8 @@ export function ToolCallBlock({
         {createElement(toolIcon, { size: 14, className: cn(
           "shrink-0",
           category === 'read' && "text-primary",
-          category === 'write' && "text-amber-500",
-          category === 'bash' && "text-green-500",
+          category === 'write' && "text-status-warning-foreground",
+          category === 'bash' && "text-status-success-foreground",
           category === 'search' && "text-primary",
           category === 'other' && "text-muted-foreground",
         ) })}
@@ -321,7 +311,7 @@ export function ToolCallBlock({
           )}
           <StatusIndicator status={status} />
         </div>
-      </button>
+      </Button>
       <div className={cn(
         "grid transition-[grid-template-rows] duration-200 ease-in-out",
         expanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]"

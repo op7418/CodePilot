@@ -13,7 +13,7 @@ import {
   FolderOpen,
   SpinnerGap,
   Columns,
-} from "@phosphor-icons/react";
+} from "@/components/ui/icon";
 import {
   Tooltip,
   TooltipContent,
@@ -112,7 +112,7 @@ export function SkillEditor({ skill, onSave, onDelete }: SkillEditorProps) {
           <span className="text-sm font-semibold truncate">/{skill.name}</span>
           {isDirty && (
             <span
-              className="h-2 w-2 rounded-full bg-orange-400 shrink-0"
+              className="h-2 w-2 rounded-full bg-status-warning shrink-0"
               title="Unsaved changes"
             />
           )}
@@ -121,9 +121,9 @@ export function SkillEditor({ skill, onSave, onDelete }: SkillEditorProps) {
             className={cn(
               "text-[10px] px-1.5 py-0 shrink-0",
               skill.source === "global"
-                ? "border-green-500/40 text-green-600 dark:text-green-400"
+                ? "border-status-success-border text-status-success-foreground"
                 : skill.source === "installed"
-                  ? "border-orange-500/40 text-orange-600 dark:text-orange-400"
+                  ? "border-status-warning-border text-status-warning-foreground"
                   : skill.source === "plugin"
                     ? "border-primary/40 text-primary"
                     : "border-primary/40 text-primary"

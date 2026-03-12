@@ -14,8 +14,8 @@ export function BatchExecutionItem({ item }: BatchExecutionItemProps) {
   const statusColor = {
     pending: 'text-muted-foreground',
     processing: 'text-primary',
-    completed: 'text-green-500',
-    failed: 'text-red-500',
+    completed: 'text-status-success-foreground',
+    failed: 'text-status-error-foreground',
     cancelled: 'text-muted-foreground',
   }[item.status];
 
@@ -39,14 +39,14 @@ export function BatchExecutionItem({ item }: BatchExecutionItemProps) {
         {item.status === 'processing' ? (
           <div className="w-4 h-4 rounded-full border-2 border-primary border-t-transparent animate-spin" />
         ) : item.status === 'completed' ? (
-          <div className="w-4 h-4 rounded-full bg-green-500/20 flex items-center justify-center">
-            <svg className="w-2.5 h-2.5 text-green-500" viewBox="0 0 12 12" fill="none">
+          <div className="w-4 h-4 rounded-full bg-status-success-muted flex items-center justify-center">
+            <svg className="w-2.5 h-2.5 text-status-success-foreground" viewBox="0 0 12 12" fill="none">
               <path d="M2 6L5 9L10 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </div>
         ) : item.status === 'failed' ? (
-          <div className="w-4 h-4 rounded-full bg-red-500/20 flex items-center justify-center">
-            <svg className="w-2.5 h-2.5 text-red-500" viewBox="0 0 12 12" fill="none">
+          <div className="w-4 h-4 rounded-full bg-status-error-muted flex items-center justify-center">
+            <svg className="w-2.5 h-2.5 text-status-error-foreground" viewBox="0 0 12 12" fill="none">
               <path d="M3 3L9 9M9 3L3 9" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
             </svg>
           </div>
@@ -63,7 +63,7 @@ export function BatchExecutionItem({ item }: BatchExecutionItemProps) {
           <span className="text-[10px] text-muted-foreground">{item.image_size}</span>
           <span className={`text-[10px] font-medium ${statusColor}`}>{statusLabel}</span>
           {item.error && (
-            <span className="text-[10px] text-red-400 truncate">{item.error}</span>
+            <span className="text-[10px] text-status-error-foreground truncate">{item.error}</span>
           )}
         </div>
       </div>

@@ -3,6 +3,8 @@
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
 import type { PlannerItem } from '@/types';
+import { Button } from '@/components/ui/button';
+import { Textarea } from '@/components/ui/textarea';
 
 const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '3:2', '2:3', '4:3', '3:4', '4:5', '5:4', '21:9'];
 const RESOLUTIONS = ['1K', '2K', '4K'];
@@ -26,10 +28,10 @@ export function BatchPlanRow({ item, index, onUpdate, onRemove, disabled }: Batc
         </span>
         <div className="flex-1 min-w-0">
           {/* Prompt */}
-          <textarea
+          <Textarea
             value={item.prompt}
             onChange={e => onUpdate(index, { prompt: e.target.value })}
-            className="w-full rounded-md border border-border/40 bg-transparent px-2 py-1.5 text-sm resize-none focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+            className="border-border/40 bg-transparent px-2 py-1.5 text-sm resize-none"
             rows={2}
             disabled={disabled}
             placeholder={t('batchImageGen.prompt' as TranslationKey)}
@@ -37,11 +39,12 @@ export function BatchPlanRow({ item, index, onUpdate, onRemove, disabled }: Batc
 
           {/* Controls Row */}
           <div className="flex items-center gap-2 mt-1.5">
-            {/* Aspect Ratio */}
+            {/* Aspect Ratio — native select for compact inline use */}
+            {/* eslint-disable-next-line no-restricted-syntax */}
             <select
               value={item.aspectRatio}
               onChange={e => onUpdate(index, { aspectRatio: e.target.value })}
-              className="rounded-md border border-border/40 bg-transparent px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+              className="rounded-md border border-border/40 bg-transparent px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
               disabled={disabled}
             >
               {ASPECT_RATIOS.map(r => (
@@ -49,11 +52,12 @@ export function BatchPlanRow({ item, index, onUpdate, onRemove, disabled }: Batc
               ))}
             </select>
 
-            {/* Resolution */}
+            {/* Resolution — native select for compact inline use */}
+            {/* eslint-disable-next-line no-restricted-syntax */}
             <select
               value={item.resolution}
               onChange={e => onUpdate(index, { resolution: e.target.value })}
-              className="rounded-md border border-border/40 bg-transparent px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-purple-500/50"
+              className="rounded-md border border-border/40 bg-transparent px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-primary/50"
               disabled={disabled}
             >
               {RESOLUTIONS.map(r => (
@@ -75,14 +79,15 @@ export function BatchPlanRow({ item, index, onUpdate, onRemove, disabled }: Batc
             <div className="flex-1" />
 
             {/* Remove */}
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="xs"
               onClick={() => onRemove(index)}
               disabled={disabled}
-              className="text-[10px] text-muted-foreground hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity disabled:opacity-0"
+              className="text-[10px] text-muted-foreground hover:text-status-error-foreground opacity-0 group-hover:opacity-100 disabled:opacity-0 h-auto p-0"
             >
               {t('batchImageGen.removeItem' as TranslationKey)}
-            </button>
+            </Button>
           </div>
         </div>
       </div>

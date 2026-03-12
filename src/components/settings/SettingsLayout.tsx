@@ -1,9 +1,9 @@
 "use client";
 
 import { useState, useCallback, useSyncExternalStore } from "react";
-import type { Icon } from "@phosphor-icons/react";
-import { Gear, Code, UserCircle, Plug, ChartBar } from "@phosphor-icons/react";
+import { type Icon, Gear, Code, UserCircle, Plug, ChartBar } from "@/components/ui/icon";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { GeneralSection } from "./GeneralSection";
 import { ProviderManager } from "./ProviderManager";
 import { CliSettingsSection } from "./CliSettingsSection";
@@ -81,11 +81,12 @@ export function SettingsLayout() {
         {/* Sidebar */}
         <nav className="flex w-52 shrink-0 flex-col gap-1 border-r border-border/50 p-3">
           {sidebarItems.map((item) => (
-            <button
+            <Button
               key={item.id}
+              variant="ghost"
               onClick={() => handleSectionChange(item.id)}
               className={cn(
-                "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors text-left",
+                "justify-start gap-3 px-3 py-2 text-sm font-medium text-left w-full",
                 activeSection === item.id
                   ? "bg-accent text-accent-foreground"
                   : "text-muted-foreground hover:bg-accent/50 hover:text-foreground"
@@ -93,7 +94,7 @@ export function SettingsLayout() {
             >
               <item.icon size={16} className="shrink-0" />
               {t(settingsLabelKeys[item.label])}
-            </button>
+            </Button>
           ))}
         </nav>
 

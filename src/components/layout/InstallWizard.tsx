@@ -19,7 +19,7 @@ import {
   Circle,
   Copy,
   DownloadSimple,
-} from "@phosphor-icons/react";
+} from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
 
 interface InstallProgress {
@@ -67,11 +67,11 @@ function getInstallAPI() {
 function StepIcon({ status }: { status: string }) {
   switch (status) {
     case "success":
-      return <Check size={16} className="text-emerald-500" />;
+      return <Check size={16} className="text-status-success-foreground" />;
     case "running":
       return <SpinnerGap size={16} className="text-primary animate-spin" />;
     case "failed":
-      return <X size={16} className="text-red-500" />;
+      return <X size={16} className="text-status-error-foreground" />;
     case "skipped":
       return <Minus size={16} className="text-muted-foreground" />;
     default:
@@ -265,15 +265,15 @@ export function InstallWizard({
                     className={cn(
                       step.status === "pending" && "text-muted-foreground",
                       step.status === "running" && "text-foreground font-medium",
-                      step.status === "success" && "text-emerald-700 dark:text-emerald-400",
-                      step.status === "failed" && "text-red-700 dark:text-red-400",
+                      step.status === "success" && "text-status-success-foreground",
+                      step.status === "failed" && "text-status-error-foreground",
                       step.status === "skipped" && "text-muted-foreground"
                     )}
                   >
                     {step.label}
                   </span>
                   {step.error && (
-                    <span className="text-xs text-red-500 ml-auto truncate max-w-[200px]">
+                    <span className="text-xs text-status-error-foreground ml-auto truncate max-w-[200px]">
                       {step.error}
                     </span>
                   )}
@@ -293,8 +293,8 @@ export function InstallWizard({
           {/* Phase: confirm — ask user before installing */}
           {phase === "confirm" && prereqs && !prereqs.hasNode && !prereqs.hasHomebrew && prereqs.platform === "darwin" && (
             <div className="space-y-3">
-              <div className="rounded-lg bg-amber-500/10 px-4 py-3 text-sm space-y-1.5">
-                <p className="text-amber-700 dark:text-amber-400 font-medium">
+              <div className="rounded-lg bg-status-warning-muted px-4 py-3 text-sm space-y-1.5">
+                <p className="text-status-warning-foreground font-medium">
                   {t('install.homebrewRequired')}
                 </p>
                 <p className="text-muted-foreground text-xs">
@@ -334,18 +334,18 @@ export function InstallWizard({
           )}
           {phase === "confirm" && !(prereqs && !prereqs.hasNode && !prereqs.hasHomebrew && prereqs.platform === "darwin") && (
             <div className="space-y-3">
-              <div className="rounded-lg bg-amber-500/10 px-4 py-3 text-sm space-y-1.5">
+              <div className="rounded-lg bg-status-warning-muted px-4 py-3 text-sm space-y-1.5">
                 {prereqs && !prereqs.hasNode && (
-                  <p className="text-amber-700 dark:text-amber-400">
+                  <p className="text-status-warning-foreground">
                     Node.js — not found (will be installed via {prereqs.platform === "win32" ? "winget" : "Homebrew"})
                   </p>
                 )}
                 {prereqs?.hasNode && (
-                  <p className="text-emerald-700 dark:text-emerald-400">
+                  <p className="text-status-success-foreground">
                     Node.js {prereqs.nodeVersion} — found
                   </p>
                 )}
-                <p className="text-amber-700 dark:text-amber-400">
+                <p className="text-status-warning-foreground">
                   Claude Code CLI — not found
                 </p>
               </div>
@@ -358,10 +358,10 @@ export function InstallWizard({
 
           {/* Phase: already-installed */}
           {phase === "already-installed" && (
-            <div className="flex items-center gap-3 rounded-lg bg-emerald-500/10 px-4 py-3">
-              <Check size={20} className="text-emerald-500 shrink-0" />
+            <div className="flex items-center gap-3 rounded-lg bg-status-success-muted px-4 py-3">
+              <Check size={20} className="text-status-success-foreground shrink-0" />
               <div className="text-sm">
-                <p className="font-medium text-emerald-700 dark:text-emerald-400">
+                <p className="font-medium text-status-success-foreground">
                   Already installed
                 </p>
                 <p className="text-muted-foreground text-xs">
@@ -373,10 +373,10 @@ export function InstallWizard({
 
           {/* Phase: success */}
           {phase === "success" && (
-            <div className="flex items-center gap-3 rounded-lg bg-emerald-500/10 px-4 py-3">
-              <Check size={20} className="text-emerald-500 shrink-0" />
+            <div className="flex items-center gap-3 rounded-lg bg-status-success-muted px-4 py-3">
+              <Check size={20} className="text-status-success-foreground shrink-0" />
               <div className="text-sm">
-                <p className="font-medium text-emerald-700 dark:text-emerald-400">
+                <p className="font-medium text-status-success-foreground">
                   {t('install.complete')}
                 </p>
                 <p className="text-muted-foreground text-xs">

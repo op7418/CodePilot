@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import { cn } from "@/lib/utils";
+import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { TaskItem, TaskStatus } from "@/types";
 
@@ -79,9 +80,10 @@ export function TaskList({ sessionId }: TaskListProps) {
       {tasks.map((task) => {
         const isDone = task.status === "completed";
         return (
-          <button
+          <Button
             key={task.id}
-            className="flex items-center gap-2 rounded-md px-1 py-1 text-left hover:bg-accent/50 transition-colors"
+            variant="ghost"
+            className="flex items-center gap-2 justify-start px-1 py-1 text-left h-auto w-full"
             onClick={() => handleToggle(task)}
           >
             <span
@@ -106,7 +108,7 @@ export function TaskList({ sessionId }: TaskListProps) {
             >
               {task.title}
             </span>
-          </button>
+          </Button>
         );
       })}
     </div>

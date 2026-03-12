@@ -8,7 +8,7 @@ import {
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
 import { cn } from "@/lib/utils";
-import { BookIcon, ChevronDownIcon } from "lucide-react";
+import { Book, CaretDown } from "@phosphor-icons/react";
 
 export type SourcesProps = ComponentProps<"div">;
 
@@ -36,7 +36,7 @@ export const SourcesTrigger = ({
     {children ?? (
       <>
         <p className="font-medium">Used {count} sources</p>
-        <ChevronDownIcon className="h-4 w-4" />
+        <CaretDown className="h-4 w-4" />
       </>
     )}
   </CollapsibleTrigger>
@@ -70,7 +70,7 @@ export const Source = ({ href, title, children, ...props }: SourceProps) => (
   >
     {children ?? (
       <>
-        <BookIcon className="h-4 w-4" />
+        <Book className="h-4 w-4" />
         <span className="block font-medium">{title}</span>
       </>
     )}

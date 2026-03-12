@@ -2,7 +2,7 @@
 
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
-import { Lightning } from '@phosphor-icons/react';
+import { Lightning } from '@/components/ui/icon';
 import {
   Tooltip,
   TooltipContent,

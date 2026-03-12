@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PaintBrush, SortDescending, Funnel, SpinnerGap, Heart } from '@phosphor-icons/react';
+import { PaintBrush, SortDescending, Funnel, SpinnerGap, Heart } from '@/components/ui/icon';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
 import { GalleryGrid, type GalleryItem } from '@/components/gallery/GalleryGrid';
 import { GalleryDetail } from '@/components/gallery/GalleryDetail';
 import { useTranslation } from '@/hooks/useTranslation';
@@ -148,7 +149,7 @@ export default function GalleryPage() {
             >
               <Heart
                 size={14}
-                className={cn(favoritesOnly && 'text-red-500')}
+                className={cn(favoritesOnly && 'text-status-error-foreground')}
                 weight={favoritesOnly ? 'fill' : 'regular'}
               />
               {t('gallery.favoritesOnly' as TranslationKey)}
@@ -186,20 +187,20 @@ export default function GalleryPage() {
               <label className="text-xs text-muted-foreground">
                 {t('gallery.dateFrom' as TranslationKey)}
               </label>
-              <input
+              <Input
                 type="date"
                 value={dateFrom}
                 onChange={(e) => setDateFrom(e.target.value)}
-                className="h-7 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+                className="h-7 w-auto px-2 text-xs"
               />
               <label className="text-xs text-muted-foreground">
                 {t('gallery.dateTo' as TranslationKey)}
               </label>
-              <input
+              <Input
                 type="date"
                 value={dateTo}
                 onChange={(e) => setDateTo(e.target.value)}
-                className="h-7 rounded-md border border-input bg-transparent px-2 text-xs outline-none focus:ring-1 focus:ring-ring"
+                className="h-7 w-auto px-2 text-xs"
               />
               {(dateFrom || dateTo) && (
                 <Button

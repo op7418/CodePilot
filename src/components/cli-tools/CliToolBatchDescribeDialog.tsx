@@ -17,7 +17,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Button } from "@/components/ui/button";
-import { SpinnerGap, CheckCircle, XCircle, Sparkle } from "@phosphor-icons/react";
+import { SpinnerGap, CheckCircle, XCircle, Sparkle } from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { TranslationKey } from "@/i18n";
 
@@ -251,6 +251,7 @@ export function CliToolBatchDescribeDialog({
             {/* Skip existing toggle */}
             {existingCount > 0 && (
               <label className="flex items-center gap-2 text-sm cursor-pointer">
+                {/* eslint-disable-next-line no-restricted-syntax -- no Checkbox UI component available */}
                 <input
                   type="checkbox"
                   checked={skipExisting}
@@ -276,10 +277,10 @@ export function CliToolBatchDescribeDialog({
                   <span className="w-4 h-4 rounded-full border border-muted-foreground/30 shrink-0" />
                 )}
                 {r.status === 'loading' && (
-                  <SpinnerGap size={16} className="animate-spin text-blue-500 shrink-0" />
+                  <SpinnerGap size={16} className="animate-spin text-status-info-foreground shrink-0" />
                 )}
                 {r.status === 'success' && (
-                  <CheckCircle size={16} weight="fill" className="text-green-500 shrink-0" />
+                  <CheckCircle size={16} weight="fill" className="text-status-success-foreground shrink-0" />
                 )}
                 {r.status === 'error' && (
                   <XCircle size={16} weight="fill" className="text-destructive shrink-0" />
@@ -297,7 +298,7 @@ export function CliToolBatchDescribeDialog({
           <div className="flex flex-col gap-2 py-2">
             <div className="flex items-center gap-4 text-sm">
               {successCount > 0 && (
-                <span className="flex items-center gap-1 text-green-600">
+                <span className="flex items-center gap-1 text-status-success-foreground">
                   <CheckCircle size={16} weight="fill" />
                   {t('cliTools.batchSuccess', { count: String(successCount) })}
                 </span>

@@ -21,7 +21,7 @@ import {
   Clock,
   FileArrowDown,
   ChatCircleText,
-} from "@phosphor-icons/react";
+} from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
 import { cn, parseDBDate } from "@/lib/utils";
 
