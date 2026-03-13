@@ -172,5 +172,6 @@ export const PLATFORM_LIMITS: Record<string, number> = {
   discord: 2000,
   slack: 40000,
   feishu: 30000,
+  wecom: 20000,
   qq: 2000,
 };

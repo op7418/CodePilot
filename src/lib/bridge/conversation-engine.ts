@@ -90,6 +90,7 @@ export async function processMessage(
   abortSignal?: AbortSignal,
   files?: FileAttachment[],
   onPartialText?: OnPartialText,
+  userId?: string, // Add userId to support identity resolution
 ): Promise<ConversationResult> {
   const sessionId = binding.codepilotSessionId;
 
@@ -199,7 +200,7 @@ export async function processMessage(
       sessionId,
       sdkSessionId: binding.sdkSessionId || undefined,
       model: effectiveModel,
-      systemPrompt: session?.system_prompt || undefined,
+      systemPrompt: (userId ? `[User Identity Context]\nThe current user talking to you is: ${userId}\n\n` : '') + (session?.system_prompt || ''),
       workingDirectory: binding.workingDirectory || session?.working_directory || undefined,
       abortController,
       permissionMode,

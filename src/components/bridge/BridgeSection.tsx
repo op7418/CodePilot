@@ -25,6 +25,7 @@ interface BridgeSettings {
   remote_bridge_enabled: string;
   bridge_telegram_enabled: string;
   bridge_feishu_enabled: string;
+  bridge_wecom_enabled: string;
   bridge_discord_enabled: string;
   bridge_qq_enabled: string;
   bridge_auto_start: string;
@@ -37,6 +38,7 @@ const DEFAULT_SETTINGS: BridgeSettings = {
   remote_bridge_enabled: "",
   bridge_telegram_enabled: "",
   bridge_feishu_enabled: "",
+  bridge_wecom_enabled: "",
   bridge_discord_enabled: "",
   bridge_qq_enabled: "",
   bridge_auto_start: "",
@@ -125,6 +127,10 @@ export function BridgeSection() {
     saveSettings({ bridge_feishu_enabled: checked ? "true" : "" });
   };
 
+  const handleToggleWecom = (checked: boolean) => {
+    saveSettings({ bridge_wecom_enabled: checked ? "true" : "" });
+  };
+
   const handleToggleDiscord = (checked: boolean) => {
     saveSettings({ bridge_discord_enabled: checked ? "true" : "" });
   };
@@ -171,6 +177,7 @@ export function BridgeSection() {
   const isEnabled = settings.remote_bridge_enabled === "true";
   const isTelegramEnabled = settings.bridge_telegram_enabled === "true";
   const isFeishuEnabled = settings.bridge_feishu_enabled === "true";
+  const isWecomEnabled = settings.bridge_wecom_enabled === "true";
   const isDiscordEnabled = settings.bridge_discord_enabled === "true";
   const isQQEnabled = settings.bridge_qq_enabled === "true";
   const isAutoStart = settings.bridge_auto_start === "true";
@@ -213,11 +220,10 @@ export function BridgeSection() {
             </div>
             <div className="flex items-center gap-3">
               <div
-                className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs ${
-                  isRunning
-                    ? "bg-status-success-muted text-status-success-foreground"
-                    : "bg-muted text-muted-foreground"
-                }`}
+                className={`flex items-center gap-2 rounded-md px-3 py-1.5 text-xs ${isRunning
+                  ? "bg-status-success-muted text-status-success-foreground"
+                  : "bg-muted text-muted-foreground"
+                  }`}
               >
                 {isRunning ? <CheckCircle size={14} className="shrink-0" /> : <Warning size={14} className="shrink-0" />}
                 {isRunning
@@ -298,7 +304,27 @@ export function BridgeSection() {
 
             <div className="flex items-center justify-between border-t border-border/30 pt-3">
               <div className="flex items-center gap-3">
-                <GameController size={16} className="text-muted-foreground" />
+                <ChatsCircle size={16} className="text-muted-foreground" />
+                <div>
+                  <p className="text-sm">{t("bridge.wecomChannel")}</p>
+                  <p className="text-xs text-muted-foreground">
+                    {t("bridge.wecomChannelDesc")}
+                  </p>
+                </div>
+              </div>
+              <Switch
+                checked={isWecomEnabled}
+                onCheckedChange={handleToggleWecom}
+                disabled={saving}
+              />
+            </div>
+
+            <div className="flex items-center justify-between border-t border-border/30 pt-3">
+              <div className="flex items-center gap-3">
+                <GameController
+                  size={16}
+                  className="text-muted-foreground"
+                />
                 <div>
                   <p className="text-sm">{t("bridge.discordChannel")}</p>
                   <p className="text-xs text-muted-foreground">{t("bridge.discordChannelDesc")}</p>
@@ -358,11 +384,10 @@ export function BridgeSection() {
                     {adapter.channelType}
                   </span>
                   <div
-                    className={`rounded px-2 py-0.5 text-xs ${
-                      adapter.running
-                        ? "bg-status-success-muted text-status-success-foreground"
-                        : "bg-muted text-muted-foreground"
-                    }`}
+                    className={`rounded px-2 py-0.5 text-xs ${adapter.running
+                      ? "bg-status-success-muted text-status-success-foreground"
+                      : "bg-muted text-muted-foreground"
+                      }`}
                   >
                     {adapter.running
                       ? t("bridge.adapterRunning")
@@ -463,6 +488,10 @@ export function BridgeSection() {
           >
             {saving ? t("common.loading") : t("common.save")}
           </Button>
+
+          <div className="rounded-md bg-amber-500/10 px-3 py-2 text-xs text-amber-700 dark:text-amber-300">
+            {t("bridge.defaultsApplyHint")}
+          </div>
         </SettingsCard>
       )}
     </div>

@@ -565,18 +565,26 @@ async function handleMessage(
     // Use text or empty string for image-only messages (prompt is still required by streamClaude)
     const promptText = text || (hasAttachments ? 'Describe this image.' : '');
 
-    const result = await engine.processMessage(binding, promptText, async (perm) => {
-      await broker.forwardPermissionRequest(
-        adapter,
-        msg.address,
-        perm.permissionRequestId,
-        perm.toolName,
-        perm.toolInput,
-        binding.codepilotSessionId,
-        perm.suggestions,
-        msg.messageId,
-      );
-    }, taskAbort.signal, hasAttachments ? msg.attachments : undefined, onPartialText);
+    const result = await engine.processMessage(
+      binding,
+      promptText,
+      async (perm) => {
+        await broker.forwardPermissionRequest(
+          adapter,
+          msg.address,
+          perm.permissionRequestId,
+          perm.toolName,
+          perm.toolInput,
+          binding.codepilotSessionId,
+          perm.suggestions,
+          msg.messageId,
+        );
+      },
+      taskAbort.signal,
+      hasAttachments ? msg.attachments : undefined,
+      onPartialText,
+      msg.address.userId,
+    );
 
     // Send response text — render via channel-appropriate format
     if (result.responseText) {

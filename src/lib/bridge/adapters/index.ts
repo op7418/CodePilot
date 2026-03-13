@@ -11,5 +11,6 @@
 
 import './telegram-adapter';
 import './feishu-adapter';
+import './wecom-adapter';
 import './discord-adapter';
 import './qq-adapter';
