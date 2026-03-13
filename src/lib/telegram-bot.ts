@@ -57,6 +57,8 @@ export interface TelegramNotifyOptions {
 
 const TELEGRAM_API = 'https://api.telegram.org';
 const MAX_MESSAGE_LENGTH = 4000; // Telegram limit is 4096, leave buffer
+const NOTIFY_MAX_RETRIES = 2;
+const NOTIFY_BASE_DELAY_MS = 1000;
 
 // ── Bridge Mode Guard ─────────────────────────────────────────
 
@@ -116,8 +118,37 @@ function ensurePollingStarted(): void {
 // ── Core API ───────────────────────────────────────────────────
 
 /**
+ * Send a single API call with retry and exponential backoff.
+ */
+async function callWithRetry(
+  botToken: string,
+  method: string,
+  params: Record<string, unknown>,
+): Promise<{ ok: boolean; error?: string }> {
+  let lastError: string | undefined;
+  for (let attempt = 0; attempt <= NOTIFY_MAX_RETRIES; attempt++) {
+    const result = await callTelegramApi(botToken, method, params);
+    if (result.ok) return result;
+
+    lastError = result.error;
+    // Don't retry client errors (4xx except 429)
+    const status = (result as { httpStatus?: number }).httpStatus;
+    if (status && status >= 400 && status < 500 && status !== 429) {
+      return result;
+    }
+
+    if (attempt < NOTIFY_MAX_RETRIES) {
+      const delay = NOTIFY_BASE_DELAY_MS * Math.pow(2, attempt) + Math.random() * 500;
+      await new Promise(r => setTimeout(r, delay));
+    }
+  }
+  return { ok: false, error: lastError || 'Max retries exceeded' };
+}
+
+/**
  * Send a message to the configured Telegram chat.
  * Automatically splits messages that exceed the Telegram limit.
+ * Retries transient failures with exponential backoff.
  */
 async function sendMessage(text: string, parseMode: 'HTML' | 'Markdown' = 'HTML'): Promise<{ ok: boolean; error?: string }> {
   const config = getTelegramConfig();
@@ -130,7 +161,7 @@ async function sendMessage(text: string, parseMode: 'HTML' | 'Markdown' = 'HTML'
 
   const chunks = splitMessage(text, MAX_MESSAGE_LENGTH);
   for (const chunk of chunks) {
-    const result = await callTelegramApi(config.botToken, 'sendMessage', {
+    const result = await callWithRetry(config.botToken, 'sendMessage', {
       chat_id: config.chatId,
       text: chunk,
       parse_mode: parseMode,

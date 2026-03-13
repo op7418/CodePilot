@@ -103,6 +103,47 @@ export function updateBinding(
 }
 
 /**
+ * Create an ephemeral worker session that inherits configuration from a
+ * parent binding.  Used for parallel task processing — each concurrent
+ * message gets its own independent Claude session so they can run
+ * simultaneously without contending for the same session lock.
+ *
+ * The returned ChannelBinding has an empty `id`, indicating it is NOT
+ * persisted to the channel_bindings table.  This prevents worker sessions
+ * from polluting the binding lookup and allows them to be garbage-collected
+ * naturally.
+ */
+export function createWorkerBinding(parentBinding: ChannelBinding): ChannelBinding {
+  const session = createSession(
+    `Worker: ${parentBinding.chatId.slice(0, 16)}`,
+    parentBinding.model,
+    undefined,
+    parentBinding.workingDirectory,
+    parentBinding.mode,
+  );
+
+  // Copy provider from parent session if present
+  const parentSession = getSession(parentBinding.codepilotSessionId);
+  if (parentSession?.provider_id) {
+    updateSessionProviderId(session.id, parentSession.provider_id);
+  }
+
+  return {
+    id: '',  // empty = ephemeral, not persisted
+    channelType: parentBinding.channelType,
+    chatId: parentBinding.chatId,
+    codepilotSessionId: session.id,
+    sdkSessionId: '',
+    workingDirectory: parentBinding.workingDirectory,
+    model: parentBinding.model,
+    mode: parentBinding.mode,
+    active: true,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
  * List all bindings, optionally filtered by channel type.
  */
 export function listBindings(channelType?: ChannelType): ChannelBinding[] {

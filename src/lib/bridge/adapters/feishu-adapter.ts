@@ -25,7 +25,7 @@ import type {
 } from '../types';
 import type { FileAttachment } from '@/types';
 import { BaseChannelAdapter, registerAdapterFactory } from '../channel-adapter';
-import { insertAuditLog } from '../../db';
+import { insertAuditLog, getChannelOffset, setChannelOffset } from '../../db';
 import { getSetting } from '../../db';
 import {
   htmlToFeishuMarkdown,
@@ -35,11 +35,16 @@ import {
   buildPostContent,
 } from '../markdown/feishu';
 
-/** Max number of message_ids to keep for dedup. */
-const DEDUP_MAX = 1000;
+/** Max number of message_ids to keep for dedup (in-memory LRU). */
+const DEDUP_MAX = 5000;
 
 /** Max file download size (20 MB). */
 const MAX_FILE_SIZE = 20 * 1024 * 1024;
+
+/** Max retries for resource downloads. */
+const DOWNLOAD_MAX_RETRIES = 2;
+/** Base delay between download retries (ms). */
+const DOWNLOAD_RETRY_DELAY_MS = 1000;
 
 /** Feishu emoji type for typing indicator (same as Openclaw). */
 const TYPING_EMOJI = 'Typing';
@@ -832,6 +837,7 @@ export class FeishuAdapter extends BaseChannelAdapter {
 
   /**
    * Download a message resource (image/file/audio/video) via SDK.
+   * Retries transient failures with exponential backoff.
    * Returns null on failure (caller decides fallback behavior).
    */
   private async downloadResource(
@@ -841,98 +847,111 @@ export class FeishuAdapter extends BaseChannelAdapter {
   ): Promise<FileAttachment | null> {
     if (!this.restClient) return null;
 
-    try {
-      console.log(`[feishu-adapter] Downloading resource: type=${resourceType}, key=${fileKey}, msgId=${messageId}`);
-
-      const res = await this.restClient.im.messageResource.get({
-        path: {
-          message_id: messageId,
-          file_key: fileKey,
-        },
-        params: {
-          type: resourceType === 'image' ? 'image' : 'file',
-        },
-      });
-
-      if (!res) {
-        console.warn('[feishu-adapter] messageResource.get returned null/undefined');
-        return null;
-      }
-
-      // SDK returns { writeFile, getReadableStream, headers }
-      // Try stream approach first, fall back to writeFile + read if stream fails
-      let buffer: Buffer;
-
+    for (let attempt = 0; attempt <= DOWNLOAD_MAX_RETRIES; attempt++) {
       try {
-        const readable = res.getReadableStream();
-        const chunks: Buffer[] = [];
-        let totalSize = 0;
-
-        for await (const chunk of readable) {
-          const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
-          totalSize += buf.length;
-          if (totalSize > MAX_FILE_SIZE) {
-            console.warn(`[feishu-adapter] Resource too large (>${MAX_FILE_SIZE} bytes), key: ${fileKey}`);
-            return null;
-          }
-          chunks.push(buf);
+        if (attempt > 0) {
+          console.log(`[feishu-adapter] Download retry ${attempt}/${DOWNLOAD_MAX_RETRIES}: key=${fileKey}`);
+          await new Promise(r => setTimeout(r, DOWNLOAD_RETRY_DELAY_MS * Math.pow(2, attempt - 1)));
+        } else {
+          console.log(`[feishu-adapter] Downloading resource: type=${resourceType}, key=${fileKey}, msgId=${messageId}`);
         }
-        buffer = Buffer.concat(chunks);
-      } catch (streamErr) {
-        // Stream approach failed — fall back to writeFile + read
-        console.warn('[feishu-adapter] Stream read failed, falling back to writeFile:', streamErr instanceof Error ? streamErr.message : streamErr);
 
-        const fs = await import('fs');
-        const os = await import('os');
-        const path = await import('path');
-        const tmpPath = path.join(os.tmpdir(), `feishu-dl-${crypto.randomUUID()}`);
+        const res = await this.restClient.im.messageResource.get({
+          path: {
+            message_id: messageId,
+            file_key: fileKey,
+          },
+          params: {
+            type: resourceType === 'image' ? 'image' : 'file',
+          },
+        });
+
+        if (!res) {
+          console.warn('[feishu-adapter] messageResource.get returned null/undefined');
+          continue;
+        }
+
+        // SDK returns { writeFile, getReadableStream, headers }
+        // Try stream approach first, fall back to writeFile + read if stream fails
+        let buffer: Buffer;
+
         try {
-          await res.writeFile(tmpPath);
-          buffer = fs.readFileSync(tmpPath);
-          if (buffer.length > MAX_FILE_SIZE) {
-            console.warn(`[feishu-adapter] Resource too large (>${MAX_FILE_SIZE} bytes), key: ${fileKey}`);
-            return null;
+          const readable = res.getReadableStream();
+          const chunks: Buffer[] = [];
+          let totalSize = 0;
+
+          for await (const chunk of readable) {
+            const buf = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+            totalSize += buf.length;
+            if (totalSize > MAX_FILE_SIZE) {
+              console.warn(`[feishu-adapter] Resource too large (>${MAX_FILE_SIZE} bytes), key: ${fileKey}`);
+              return null; // Size limit — don't retry
+            }
+            chunks.push(buf);
           }
-        } finally {
-          try { fs.unlinkSync(tmpPath); } catch { /* ignore cleanup errors */ }
+          buffer = Buffer.concat(chunks);
+        } catch (streamErr) {
+          // Stream approach failed — fall back to writeFile + read
+          console.warn('[feishu-adapter] Stream read failed, falling back to writeFile:', streamErr instanceof Error ? streamErr.message : streamErr);
+
+          const fs = await import('fs');
+          const os = await import('os');
+          const path = await import('path');
+          const tmpPath = path.join(os.tmpdir(), `feishu-dl-${crypto.randomUUID()}`);
+          try {
+            await res.writeFile(tmpPath);
+            buffer = fs.readFileSync(tmpPath);
+            if (buffer.length > MAX_FILE_SIZE) {
+              console.warn(`[feishu-adapter] Resource too large (>${MAX_FILE_SIZE} bytes), key: ${fileKey}`);
+              return null; // Size limit — don't retry
+            }
+          } finally {
+            try { fs.unlinkSync(tmpPath); } catch { /* ignore cleanup errors */ }
+          }
         }
+
+        if (!buffer || buffer.length === 0) {
+          console.warn('[feishu-adapter] Downloaded resource is empty, key:', fileKey);
+          continue; // Empty result — retry
+        }
+
+        const base64 = buffer.toString('base64');
+        const id = crypto.randomUUID();
+        const mimeType = MIME_BY_TYPE[resourceType] || 'application/octet-stream';
+        const ext = resourceType === 'image' ? 'png'
+          : resourceType === 'audio' ? 'ogg'
+          : resourceType === 'video' ? 'mp4'
+          : 'bin';
+
+        console.log(`[feishu-adapter] Resource downloaded: ${buffer.length} bytes, key=${fileKey}`);
+
+        return {
+          id,
+          name: `${fileKey}.${ext}`,
+          type: mimeType,
+          size: buffer.length,
+          data: base64,
+        };
+      } catch (err) {
+        console.error(
+          `[feishu-adapter] Resource download failed (attempt ${attempt + 1}/${DOWNLOAD_MAX_RETRIES + 1}, type=${resourceType}, key=${fileKey}):`,
+          err instanceof Error ? err.stack || err.message : err,
+        );
+        // Continue to next retry attempt
       }
-
-      if (!buffer || buffer.length === 0) {
-        console.warn('[feishu-adapter] Downloaded resource is empty, key:', fileKey);
-        return null;
-      }
-
-      const base64 = buffer.toString('base64');
-      const id = crypto.randomUUID();
-      const mimeType = MIME_BY_TYPE[resourceType] || 'application/octet-stream';
-      const ext = resourceType === 'image' ? 'png'
-        : resourceType === 'audio' ? 'ogg'
-        : resourceType === 'video' ? 'mp4'
-        : 'bin';
-
-      console.log(`[feishu-adapter] Resource downloaded: ${buffer.length} bytes, key=${fileKey}`);
-
-      return {
-        id,
-        name: `${fileKey}.${ext}`,
-        type: mimeType,
-        size: buffer.length,
-        data: base64,
-      };
-    } catch (err) {
-      console.error(
-        `[feishu-adapter] Resource download failed (type=${resourceType}, key=${fileKey}):`,
-        err instanceof Error ? err.stack || err.message : err,
-      );
-      return null;
     }
+
+    console.error(`[feishu-adapter] Resource download exhausted retries: key=${fileKey}`);
+    return null;
   }
 
   // ── Utilities ───────────────────────────────────────────────
 
   private addToDedup(messageId: string): void {
     this.seenMessageIds.set(messageId, true);
+
+    // Persist latest processed message ID (survives restart)
+    try { setChannelOffset('feishu', messageId); } catch { /* best effort */ }
 
     // LRU eviction: remove oldest entries when exceeding limit
     if (this.seenMessageIds.size > DEDUP_MAX) {
