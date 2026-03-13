@@ -391,13 +391,34 @@ function runAdapterLoop(adapter: BaseChannelAdapter): void {
           await handleMessage(adapter, msg);
         } else {
           const binding = router.resolve(msg.address);
-          // Fire-and-forget into session lock — loop continues to accept
-          // messages for other sessions immediately.
-          processWithSessionLock(binding.codepilotSessionId, () =>
-            handleMessage(adapter, msg),
-          ).catch(err => {
-            console.error(`[bridge-manager] Session ${binding.codepilotSessionId.slice(0, 8)} error:`, err);
-          });
+          const parallelEnabled = getSetting('bridge_parallel_tasks') === 'true';
+          const sessionBusy = state.activeTasks.has(binding.codepilotSessionId)
+            || state.sessionLocks.has(binding.codepilotSessionId);
+
+          if (parallelEnabled && sessionBusy) {
+            // ── Parallel mode: spawn a worker session ────────────────
+            // The main session is busy, so create an ephemeral worker
+            // session that inherits config from the main binding.  This
+            // allows multiple messages to be processed concurrently with
+            // independent Claude streams.
+            const workerBinding = router.createWorkerBinding(binding);
+            console.log(
+              `[bridge-manager] Parallel dispatch: worker ${workerBinding.codepilotSessionId.slice(0, 8)} ` +
+              `spawned from busy session ${binding.codepilotSessionId.slice(0, 8)}`,
+            );
+            handleMessage(adapter, msg, workerBinding).catch(err => {
+              console.error(`[bridge-manager] Worker ${workerBinding.codepilotSessionId.slice(0, 8)} error:`, err);
+            });
+          } else {
+            // ── Standard mode: serialize within session ──────────────
+            // Fire-and-forget into session lock — loop continues to accept
+            // messages for other sessions immediately.
+            processWithSessionLock(binding.codepilotSessionId, () =>
+              handleMessage(adapter, msg),
+            ).catch(err => {
+              console.error(`[bridge-manager] Session ${binding.codepilotSessionId.slice(0, 8)} error:`, err);
+            });
+          }
         }
       } catch (err) {
         if (abort.signal.aborted) break;
@@ -424,10 +445,12 @@ function runAdapterLoop(adapter: BaseChannelAdapter): void {
 
 /**
  * Handle a single inbound message.
+ * @param overrideBinding  Optional pre-resolved binding (used for parallel worker sessions).
  */
 async function handleMessage(
   adapter: BaseChannelAdapter,
   msg: InboundMessage,
+  overrideBinding?: import('./types').ChannelBinding,
 ): Promise<void> {
   // Update lastMessageAt for this adapter
   const adapterState = getState();
@@ -488,7 +511,8 @@ async function handleMessage(
   if (!text && !hasAttachments) { ack(); return; }
 
   // Regular message — route to conversation engine
-  const binding = router.resolve(msg.address);
+  // Use override binding when provided (e.g., parallel worker session)
+  const binding = overrideBinding || router.resolve(msg.address);
 
   // Notify adapter that message processing is starting (e.g., typing indicator)
   adapter.onMessageStart?.(msg.address.chatId);

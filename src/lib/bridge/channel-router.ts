@@ -103,6 +103,44 @@ export function updateBinding(
 }
 
 /**
+ * Create an ephemeral worker binding for parallel message processing.
+ *
+ * Creates a new session that inherits config from the parent binding
+ * but does NOT touch channel_bindings — the parent's binding stays intact.
+ * The worker session is independent and will be garbage collected when idle.
+ */
+export function createWorkerBinding(parentBinding: ChannelBinding): ChannelBinding {
+  const session = createSession(
+    `Worker: ${parentBinding.chatId.slice(0, 16)}`,
+    parentBinding.model,
+    undefined,
+    parentBinding.workingDirectory,
+    parentBinding.mode,
+  );
+
+  // Inherit provider from parent session
+  const parentSession = getSession(parentBinding.codepilotSessionId);
+  if (parentSession?.provider_id) {
+    updateSessionProviderId(session.id, parentSession.provider_id);
+  }
+
+  // Return a synthetic binding — NOT persisted to channel_bindings table
+  return {
+    id: '',  // empty = ephemeral, not persisted
+    channelType: parentBinding.channelType,
+    chatId: parentBinding.chatId,
+    codepilotSessionId: session.id,
+    sdkSessionId: '',
+    workingDirectory: parentBinding.workingDirectory,
+    model: parentBinding.model,
+    mode: parentBinding.mode,
+    active: 1,
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+/**
  * List all bindings, optionally filtered by channel type.
  */
 export function listBindings(channelType?: ChannelType): ChannelBinding[] {
