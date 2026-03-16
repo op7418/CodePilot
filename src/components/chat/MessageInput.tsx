@@ -81,17 +81,19 @@ export function MessageInput({
 
   // --- Extracted hooks ---
   const popover = usePopoverState(modelName);
-  const { providerGroups, currentProviderIdValue, modelOptions, currentModelOption } = useProviderModels(providerId, modelName);
+  const { providerGroups, currentProviderIdValue, modelOptions, currentModelOption, loaded: modelsLoaded } = useProviderModels(providerId, modelName);
 
   // Auto-correct model when it doesn't exist in the current provider's model list.
   // This prevents sending an unsupported model name (e.g. 'opus' to MiniMax which only has 'sonnet').
+  // Gate on `modelsLoaded` to avoid premature correction before the provider models API responds.
   useEffect(() => {
+    if (!modelsLoaded) return;
     if (modelName && modelOptions.length > 0 && !modelOptions.some(m => m.value === modelName)) {
       const fallback = modelOptions[0].value;
       onModelChange?.(fallback);
       onProviderModelChange?.(currentProviderIdValue, fallback);
     }
-  }, [modelName, modelOptions, currentProviderIdValue, onModelChange, onProviderModelChange]);
+  }, [modelsLoaded, modelName, modelOptions, currentProviderIdValue, onModelChange, onProviderModelChange]);
 
   const { badge, setBadge, cliBadge, setCliBadge, removeBadge, removeCliBadge, hasBadge } = useCommandBadge(textareaRef);
 

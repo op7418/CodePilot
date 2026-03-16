@@ -122,6 +122,9 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
   const handleProviderModelChange = useCallback((newProviderId: string, model: string) => {
     setCurrentProviderId(newProviderId);
     setCurrentModel(model);
+    // Persist to localStorage so new chats inherit the latest selection
+    localStorage.setItem('codepilot:last-model', model);
+    localStorage.setItem('codepilot:last-provider-id', newProviderId);
     fetch(`/api/chat/sessions/${sessionId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },

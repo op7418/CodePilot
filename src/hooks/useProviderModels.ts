@@ -13,6 +13,8 @@ export interface UseProviderModelsReturn {
   currentProviderIdValue: string;
   modelOptions: typeof DEFAULT_MODEL_OPTIONS;
   currentModelOption: (typeof DEFAULT_MODEL_OPTIONS)[number];
+  /** True once the initial fetch has completed (success or error). */
+  loaded: boolean;
 }
 
 export function useProviderModels(
@@ -21,6 +23,7 @@ export function useProviderModels(
 ): UseProviderModelsReturn {
   const [providerGroups, setProviderGroups] = useState<ProviderModelGroup[]>([]);
   const [defaultProviderId, setDefaultProviderId] = useState<string>('');
+  const [loaded, setLoaded] = useState(false);
 
   const fetchProviderModels = useCallback(() => {
     fetch('/api/providers/models')
@@ -46,6 +49,9 @@ export function useProviderModels(
           models: DEFAULT_MODEL_OPTIONS,
         }]);
         setDefaultProviderId('');
+      })
+      .finally(() => {
+        setLoaded(true);
       });
   }, []);
 
@@ -73,5 +79,6 @@ export function useProviderModels(
     currentProviderIdValue,
     modelOptions,
     currentModelOption,
+    loaded,
   };
 }

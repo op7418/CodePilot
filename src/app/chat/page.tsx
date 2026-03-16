@@ -44,8 +44,12 @@ export default function NewChatPage() {
   const [recentProjects, setRecentProjects] = useState<string[]>([]);
   const [hasProvider, setHasProvider] = useState(true); // assume true until checked
   const [mode] = useState('code');
-  const [currentModel, setCurrentModel] = useState('sonnet');
-  const [currentProviderId, setCurrentProviderId] = useState('');
+  const [currentModel, setCurrentModel] = useState(() =>
+    (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-model') : null) || 'sonnet'
+  );
+  const [currentProviderId, setCurrentProviderId] = useState(() =>
+    (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-provider-id') : null) || ''
+  );
   const [pendingPermission, setPendingPermission] = useState<PermissionRequestEvent | null>(null);
   const [permissionResolved, setPermissionResolved] = useState<'allow' | 'deny' | null>(null);
   const [streamingToolOutput, setStreamingToolOutput] = useState('');
@@ -554,6 +558,8 @@ export default function NewChatPage() {
         onProviderModelChange={(pid, model) => {
           setCurrentProviderId(pid);
           setCurrentModel(model);
+          localStorage.setItem('codepilot:last-model', model);
+          localStorage.setItem('codepilot:last-provider-id', pid);
         }}
         workingDirectory={workingDir}
         effort={selectedEffort}
