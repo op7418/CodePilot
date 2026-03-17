@@ -6,7 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getSetting, getSession } from '@/lib/db';
-import { resolveProvider } from '@/lib/provider-resolver';
+import { resolveProvider, DEFAULT_MODEL_ID } from '@/lib/provider-resolver';
 import { loadState, saveState, writeDailyMemory } from '@/lib/assistant-workspace';
 import { getLocalDateString } from '@/lib/utils';
 import { generateTextFromProvider } from '@/lib/text-generator';
@@ -70,7 +70,7 @@ export async function processCheckin(
       sessionModel: session?.model || undefined,
     });
     const providerId = resolved.provider?.id || 'env';
-    const model = resolved.upstreamModel || resolved.model || getSetting('default_model') || 'claude-sonnet-4-20250514';
+    const model = resolved.upstreamModel || resolved.model || getSetting('default_model') || DEFAULT_MODEL_ID;
 
     const dailyMemoryPrompt = `You maintain daily memory entries for an AI assistant. Given the user's daily check-in answers, generate a daily memory entry for ${today}.
 

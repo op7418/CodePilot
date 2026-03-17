@@ -1,10 +1,10 @@
+import { CLAUDE_MODELS } from './model-ids';
+
 export const MODEL_CONTEXT_WINDOWS: Record<string, number> = {
-  'sonnet': 200000,
-  'opus': 200000,
-  'haiku': 200000,
-  'claude-sonnet-4-20250514': 200000,
-  'claude-opus-4-20250514': 200000,
-  'claude-haiku-4-5-20251001': 200000,
+  // Short aliases
+  ...Object.fromEntries(Object.entries(CLAUDE_MODELS).map(([alias, m]) => [alias, m.contextWindow])),
+  // Full model IDs
+  ...Object.fromEntries(Object.values(CLAUDE_MODELS).map(m => [m.id, m.contextWindow])),
 };
 
 export function getContextWindow(model: string): number | null {

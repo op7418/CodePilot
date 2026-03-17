@@ -25,6 +25,10 @@ import {
   getModelsForProvider,
 } from './db';
 
+// Canonical model definitions live in model-ids.ts (client-safe, no fs/db imports).
+import { CLAUDE_MODELS, DEFAULT_MODEL_ID } from './model-ids';
+export { CLAUDE_MODELS, DEFAULT_MODEL_ID };
+
 // ── Resolution result ───────────────────────────────────────────
 
 export interface ResolvedProvider {
@@ -289,7 +293,7 @@ export function toAiSdkConfig(
     const catalogEntry = resolved.availableModels.find(m => m.modelId === modelOverride);
     modelId = catalogEntry?.upstreamModelId || modelOverride;
   } else {
-    modelId = resolved.upstreamModel || resolved.model || 'claude-sonnet-4-20250514';
+    modelId = resolved.upstreamModel || resolved.model || DEFAULT_MODEL_ID;
   }
   const provider = resolved.provider;
   const protocol = resolved.protocol;
@@ -465,11 +469,11 @@ function buildResolution(
 
     // Env mode uses short aliases (sonnet/opus/haiku) in the UI.
     // Map them to full Anthropic model IDs so toAiSdkConfig can resolve correctly.
-    const envModels: CatalogModel[] = [
-      { modelId: 'sonnet', upstreamModelId: 'claude-sonnet-4-20250514', displayName: 'Sonnet 4.6' },
-      { modelId: 'opus', upstreamModelId: 'claude-opus-4-20250514', displayName: 'Opus 4.6' },
-      { modelId: 'haiku', upstreamModelId: 'claude-haiku-4-5-20251001', displayName: 'Haiku 4.5' },
-    ];
+    const envModels: CatalogModel[] = Object.entries(CLAUDE_MODELS).map(([alias, m]) => ({
+      modelId: alias,
+      upstreamModelId: m.id,
+      displayName: m.displayName,
+    }));
 
     // Resolve upstream model from the alias table
     const catalogEntry = model ? envModels.find(m => m.modelId === model) : undefined;
