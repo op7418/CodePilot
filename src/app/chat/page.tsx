@@ -473,7 +473,7 @@ export default function NewChatPage() {
                   try {
                     const statusData = JSON.parse(event.data);
                     if (statusData.session_id) {
-                      setStatusText(`Connected (${statusData.model || 'claude'})`);
+                      setStatusText(`Connected (${statusData.requested_model || statusData.model || 'claude'})`);
                       setTimeout(() => setStatusText(undefined), 2000);
                     } else if (statusData.notification) {
                       setStatusText(statusData.message || statusData.title || undefined);
