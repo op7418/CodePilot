@@ -44,6 +44,7 @@ const zh: Record<TranslationKey, string> = {
   'messageInput.memoryDesc': '编辑项目记忆文件',
   'messageInput.modeCode': '代码',
   'messageInput.modePlan': '计划',
+  'messageInput.modeLabel': '模式',
   'messageInput.aiSuggested': 'AI 推荐',
 
   // ── Streaming message ───────────────────────────────────────
