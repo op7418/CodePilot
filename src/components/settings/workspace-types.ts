@@ -8,6 +8,7 @@ export interface WorkspaceState {
   onboardingComplete: boolean;
   lastCheckInDate: string | null;
   schemaVersion: number;
+  dailyCheckInEnabled?: boolean;
 }
 
 export interface TaxonomyCategoryInfo {

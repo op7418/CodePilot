@@ -1,7 +1,8 @@
 {
   "name": "codepilot",
-  "version": "0.37.0",
+  "version": "0.38.2",
   "private": true,
+  "license": "BUSL-1.1",
   "workspaces": [
     "apps/*",
     "packages/*"

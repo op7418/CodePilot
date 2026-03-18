@@ -10,6 +10,7 @@ const ALLOWED_KEYS = [
   'anthropic_auth_token',
   'anthropic_base_url',
   'dangerously_skip_permissions',
+  'generative_ui_enabled',
   'locale',
   'thinking_mode',
 ];

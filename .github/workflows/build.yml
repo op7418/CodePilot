@@ -68,12 +68,23 @@ jobs:
       - name: Package for Windows
         run: npx electron-builder --win --config electron-builder.yml --publish never
 
+      - name: Generate checksums
+        shell: pwsh
+        run: |
+          cd release
+          Get-ChildItem *.exe | ForEach-Object {
+            $hash = (Get-FileHash $_.FullName -Algorithm SHA256).Hash.ToLower()
+            "$hash  $($_.Name)" | Out-File -Append checksums-windows.sha256 -Encoding utf8
+          }
+          Get-Content checksums-windows.sha256
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
           name: build-windows
           path: |
             release/*.exe
+            release/checksums-windows.sha256
           retention-days: 3
 
   build-macos:
@@ -150,6 +161,11 @@ jobs:
             exit 1
           fi
 
+      - name: Generate checksums
+        run: |
+          cd release
+          shasum -a 256 *.dmg *.zip 2>/dev/null | tee checksums-macos.sha256
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
@@ -157,15 +173,13 @@ jobs:
           path: |
             release/*.dmg
             release/*.zip
+            release/checksums-macos.sha256
           retention-days: 3
 
-  build-linux:
+  build-linux-x64:
     needs: [lint-test]
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'linux' }}
     runs-on: ubuntu-latest
-    strategy:
-      matrix:
-        arch: [x64, arm64]
     steps:
       - uses: actions/checkout@v4
 
@@ -180,22 +194,161 @@ jobs:
       - name: Build Electron app
         run: npm run electron:build
 
-      - name: Package for Linux (${{ matrix.arch }})
-        run: npx electron-builder --linux --${{ matrix.arch }} --config electron-builder.yml --publish never
+      - name: Package for Linux (x64)
+        run: npx electron-builder --linux --x64 --config electron-builder.yml --publish never
+
+      - name: Verify Linux x64 artifacts
+        run: |
+          echo "=== Artifact list ==="
+          find release -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \) | sort
+
+          COUNT=$(find release -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \) | wc -l)
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::No Linux x64 artifacts produced"
+            exit 1
+          fi
+
+          # Verify AppImage ELF architecture
+          for f in release/*.AppImage; do
+            [ -f "$f" ] || continue
+            FILE_INFO=$(file "$f")
+            echo "$FILE_INFO"
+            if ! echo "$FILE_INFO" | grep -qi "x86-64\|x86_64"; then
+              echo "::error::AppImage $f is not x64"
+              exit 1
+            fi
+          done
+
+          # Verify deb architecture
+          for f in release/*.deb; do
+            [ -f "$f" ] || continue
+            DEB_ARCH=$(dpkg-deb --info "$f" 2>/dev/null | grep '^ Architecture:' | awk '{print $2}')
+            echo "deb $f arch=$DEB_ARCH"
+            if [ "$DEB_ARCH" != "amd64" ]; then
+              echo "::error::deb $f has wrong architecture: $DEB_ARCH (expected amd64)"
+              exit 1
+            fi
+          done
+
+          # Verify rpm architecture
+          for f in release/*.rpm; do
+            [ -f "$f" ] || continue
+            RPM_ARCH=$(rpm -qp --qf '%{ARCH}' "$f" 2>/dev/null || echo "unknown")
+            echo "rpm $f arch=$RPM_ARCH"
+            if [ "$RPM_ARCH" != "x86_64" ]; then
+              echo "::error::rpm $f has wrong architecture: $RPM_ARCH (expected x86_64)"
+              exit 1
+            fi
+          done
+
+          echo "✓ All Linux x64 artifacts verified"
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum *.AppImage *.deb *.rpm 2>/dev/null | tee checksums-linux-x64.sha256
 
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: build-linux-${{ matrix.arch }}
+          name: build-linux-x64
           path: |
             release/*.AppImage
             release/*.deb
             release/*.rpm
+            release/checksums-linux-x64.sha256
+          retention-days: 3
+
+  build-linux-arm64:
+    needs: [lint-test]
+    if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'linux' }}
+    # Use a native arm64 runner — avoids fragile cross-compilation toolchain
+    # setup that breaks across Ubuntu versions (sources.list vs deb822).
+    # Falls back gracefully: if the runner label isn't available, the job
+    # stays queued and doesn't block the x64 build or other platforms.
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build Electron app
+        run: npm run electron:build
+
+      - name: Package for Linux (arm64)
+        run: npx electron-builder --linux --arm64 --config electron-builder.yml --publish never
+
+      - name: Verify Linux arm64 artifacts
+        run: |
+          echo "=== Artifact list ==="
+          find release -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \) | sort
+
+          COUNT=$(find release -type f \( -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \) | wc -l)
+          if [ "$COUNT" -eq 0 ]; then
+            echo "::error::No Linux arm64 artifacts produced"
+            exit 1
+          fi
+
+          # Verify AppImage ELF architecture
+          for f in release/*.AppImage; do
+            [ -f "$f" ] || continue
+            FILE_INFO=$(file "$f")
+            echo "$FILE_INFO"
+            if ! echo "$FILE_INFO" | grep -qi "aarch64\|ARM aarch64"; then
+              echo "::error::AppImage $f is not arm64"
+              exit 1
+            fi
+          done
+
+          # Verify deb architecture
+          for f in release/*.deb; do
+            [ -f "$f" ] || continue
+            DEB_ARCH=$(dpkg-deb --info "$f" 2>/dev/null | grep '^ Architecture:' | awk '{print $2}')
+            echo "deb $f arch=$DEB_ARCH"
+            if [ "$DEB_ARCH" != "arm64" ]; then
+              echo "::error::deb $f has wrong architecture: $DEB_ARCH (expected arm64)"
+              exit 1
+            fi
+          done
+
+          # Verify rpm architecture
+          for f in release/*.rpm; do
+            [ -f "$f" ] || continue
+            RPM_ARCH=$(rpm -qp --qf '%{ARCH}' "$f" 2>/dev/null || echo "unknown")
+            echo "rpm $f arch=$RPM_ARCH"
+            if [ "$RPM_ARCH" != "aarch64" ]; then
+              echo "::error::rpm $f has wrong architecture: $RPM_ARCH (expected aarch64)"
+              exit 1
+            fi
+          done
+
+          echo "✓ All Linux arm64 artifacts verified"
+
+      - name: Generate checksums
+        run: |
+          cd release
+          sha256sum *.AppImage *.deb *.rpm 2>/dev/null | tee checksums-linux-arm64.sha256
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-linux-arm64
+          path: |
+            release/*.AppImage
+            release/*.deb
+            release/*.rpm
+            release/checksums-linux-arm64.sha256
           retention-days: 3
 
   release:
     if: ${{ always() && github.event_name == 'push' && startsWith(github.ref, 'refs/tags/v') && !contains(needs.*.result, 'cancelled') }}
-    needs: [build-windows, build-macos, build-linux]
+    needs: [build-windows, build-macos, build-linux-x64, build-linux-arm64]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -285,11 +438,22 @@ jobs:
           CHANGELOG_INLINE_EOF
           fi
 
-          # Collect release files: installers only (no blockmap / update metadata)
+          # Merge per-platform checksums into a single file
+          echo "## SHA-256 Checksums" > artifacts/SHA256SUMS.txt
+          echo "" >> artifacts/SHA256SUMS.txt
+          for cs in artifacts/checksums-*.sha256; do
+            [ -f "$cs" ] || continue
+            cat "$cs" >> artifacts/SHA256SUMS.txt
+          done
+          echo "=== Combined checksums ==="
+          cat artifacts/SHA256SUMS.txt
+
+          # Collect release files: installers + checksum file (no blockmap / update metadata)
           FILES=()
           while IFS= read -r f; do
             FILES+=("$f")
           done < <(find artifacts -type f \( -name "*.dmg" -o -name "*.zip" -o -name "*.exe" -o -name "*.AppImage" -o -name "*.deb" -o -name "*.rpm" \) | sort)
+          FILES+=("artifacts/SHA256SUMS.txt")
 
           gh release create "${GITHUB_REF_NAME}" \
             --title "CodePilot v${VERSION}" \

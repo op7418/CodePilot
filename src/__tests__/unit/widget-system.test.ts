@@ -27,7 +27,7 @@ import {
 } from '../../components/chat/MessageItem';
 
 import { WIDGET_CSS_BRIDGE } from '../../lib/widget-css-bridge';
-import { WIDGET_SYSTEM_PROMPT } from '../../lib/widget-guidelines';
+import { WIDGET_SYSTEM_PROMPT, getGuidelines, createWidgetMcpServer } from '../../lib/widget-guidelines';
 
 // ── Sanitization ────────────────────────────────────────────────────────
 
@@ -308,9 +308,65 @@ describe('WIDGET_SYSTEM_PROMPT', () => {
     assert.ok(WIDGET_SYSTEM_PROMPT.includes('widget_code'));
   });
 
-  it('is non-empty and reasonably sized', () => {
-    assert.ok(WIDGET_SYSTEM_PROMPT.length > 200, 'should not be trivially short');
-    assert.ok(WIDGET_SYSTEM_PROMPT.length < 50000, 'should not be excessively large');
+  it('references the codepilot_load_widget_guidelines tool', () => {
+    assert.ok(WIDGET_SYSTEM_PROMPT.includes('codepilot_load_widget_guidelines'));
+  });
+
+  it('is smaller than the original full prompt but includes core rules', () => {
+    assert.ok(WIDGET_SYSTEM_PROMPT.length > 500, 'should include core hard constraints');
+    assert.ok(WIDGET_SYSTEM_PROMPT.length < 1500, 'should be smaller than original ~2500 char full prompt');
+  });
+
+  it('includes critical hard constraints for valid widget output', () => {
+    // JSON escaping rule
+    assert.ok(WIDGET_SYSTEM_PROMPT.includes('JSON string'), 'must mention JSON string escaping');
+    // Streaming order
+    assert.ok(WIDGET_SYSTEM_PROMPT.includes('<defs>'), 'must mention SVG defs-first order');
+    assert.ok(WIDGET_SYSTEM_PROMPT.includes('<script>'), 'must mention script-last order');
+    // Size limit
+    assert.ok(WIDGET_SYSTEM_PROMPT.includes('3000'), 'must mention size limit');
+    // CDN script loading pattern
+    assert.ok(WIDGET_SYSTEM_PROMPT.includes('onload'), 'must mention CDN script load pattern');
+  });
+});
+
+// ── Widget MCP server ───────────────────────────────────────────────────
+
+describe('createWidgetMcpServer', () => {
+  it('returns a valid SDK MCP server config', () => {
+    const server = createWidgetMcpServer();
+    assert.strictEqual(server.type, 'sdk');
+    assert.strictEqual(server.name, 'codepilot-widget-guidelines');
+    assert.ok(server.instance, 'should have an McpServer instance');
+  });
+});
+
+// ── getGuidelines ───────────────────────────────────────────────────────
+
+describe('getGuidelines', () => {
+  it('returns diagram guidelines with SVG setup and diagram types', () => {
+    const result = getGuidelines(['diagram']);
+    assert.ok(result.includes('SVG setup'), 'should include SVG setup section');
+    assert.ok(result.includes('Diagram type catalog'), 'should include diagram types');
+    assert.ok(result.includes('Flowchart'), 'should include flowchart type');
+    assert.ok(result.includes('Timeline'), 'should include timeline type');
+  });
+
+  it('returns chart guidelines with Chart.js section', () => {
+    const result = getGuidelines(['chart']);
+    assert.ok(result.includes('Chart.js'), 'should include Chart.js section');
+    assert.ok(result.includes('chart.update()'), 'should include update pattern');
+  });
+
+  it('deduplicates shared sections across multiple modules', () => {
+    const combined = getGuidelines(['interactive', 'chart']);
+    const coreCount = (combined.match(/Core Design System/g) || []).length;
+    assert.strictEqual(coreCount, 1, 'Core Design System should appear exactly once');
+  });
+
+  it('ignores unknown module names gracefully', () => {
+    const result = getGuidelines(['unknown', 'diagram']);
+    assert.ok(result.includes('SVG setup'), 'should still include valid module content');
   });
 });
 

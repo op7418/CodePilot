@@ -13,8 +13,9 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
-import { SpinnerGap, PencilSimple } from "@/components/ui/icon";
+import { SpinnerGap, PencilSimple, Stethoscope } from "@/components/ui/icon";
 import { ProviderForm } from "./ProviderForm";
+import { ProviderDoctorDialog } from "./ProviderDoctorDialog";
 import type { ProviderFormData } from "./ProviderForm";
 import { PresetConnectDialog } from "./PresetConnectDialog";
 import {
@@ -54,6 +55,9 @@ export function ProviderManager() {
   // Delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState<ApiProvider | null>(null);
   const [deleting, setDeleting] = useState(false);
+
+  // Doctor dialog state
+  const [doctorOpen, setDoctorOpen] = useState(false);
 
   const fetchProviders = useCallback(async () => {
     try {
@@ -117,7 +121,30 @@ export function ProviderManager() {
       throw new Error(errData.error || "Failed to create provider");
     }
     const result = await res.json();
-    setProviders((prev) => [...prev, result.provider]);
+    const newProvider: ApiProvider = result.provider;
+    setProviders((prev) => [...prev, newProvider]);
+
+    // Auto-set as default if this is the first provider
+    // Otherwise ask the user if they want to switch
+    if (newProvider.id) {
+      const isFirst = providers.length === 0;
+      const shouldSwitch = isFirst || window.confirm(
+        isZh
+          ? `已添加「${newProvider.name}」。是否将其设为默认服务商？\n（当前新对话将使用此服务商）`
+          : `Added "${newProvider.name}". Set as default provider?\n(New conversations will use this provider)`
+      );
+      if (shouldSwitch) {
+        try {
+          await fetch('/api/providers/set-default', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ provider_id: newProvider.id }),
+          });
+          localStorage.setItem('codepilot:last-provider-id', newProvider.id);
+        } catch { /* best effort */ }
+      }
+    }
+
     window.dispatchEvent(new Event("provider-changed"));
   };
 
@@ -177,6 +204,29 @@ export function ProviderManager() {
           <p className="text-sm text-destructive">{error}</p>
         </div>
       )}
+
+      {/* ─── Section 0: Troubleshooting ─── */}
+      <div className="rounded-lg border border-border/50 p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h3 className="text-sm font-medium">{isZh ? '连接诊断' : 'Connection Diagnostics'}</h3>
+            <p className="text-xs text-muted-foreground mt-0.5">
+              {isZh
+                ? '检查 CLI、认证、模型兼容性和网络连接是否正常'
+                : 'Check CLI, auth, model compatibility, and network connectivity'}
+            </p>
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            className="gap-1.5 shrink-0"
+            onClick={() => setDoctorOpen(true)}
+          >
+            <Stethoscope size={14} />
+            {isZh ? '运行诊断' : 'Run Diagnostics'}
+          </Button>
+        </div>
+      </div>
 
       {/* Loading */}
       {loading && (
@@ -386,6 +436,9 @@ export function ProviderManager() {
         onSave={presetEditProvider ? handleEditSave : handlePresetAdd}
         editProvider={presetEditProvider}
       />
+
+      {/* Provider Doctor dialog */}
+      <ProviderDoctorDialog open={doctorOpen} onOpenChange={setDoctorOpen} />
 
       {/* Disconnect confirmation */}
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => !open && setDeleteTarget(null)}>

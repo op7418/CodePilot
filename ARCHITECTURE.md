@@ -35,6 +35,9 @@ src/
 │   ├── files.ts            # 文件系统浏览和预览
 │   ├── claude-session-parser.ts   # 解析 Claude CLI .jsonl 会话
 │   ├── platform.ts         # 平台检测 (macOS/Windows/Linux)
+│   ├── error-classifier.ts # 错误分类（16 类结构化错误）
+│   ├── provider-doctor.ts  # Provider 诊断引擎（5 探针 + 修复动作）
+│   ├── runtime-log.ts      # console 环形缓冲（200 条，自动脱敏）
 │   └── bridge/             # IM Bridge 子系统（见下方）
 ├── hooks/          # React Hooks (useSSEStream, useImageGen, useTranslation …)
 ├── types/          # TypeScript 类型
@@ -161,6 +164,7 @@ Schema 定义在 `src/lib/db.ts`，12 张表：
 | 上下文存储迁移（调研） | `docs/research/context-storage-migration-plan.md` | 数据库迁移详细方案 |
 | 上下文存储迁移（执行） | `docs/exec-plans/active/context-storage-migration.md` | 分阶段进度 + 决策日志 |
 | 技术债务 | `docs/exec-plans/tech-debt-tracker.md` | 已知技术债务清单 |
+| Provider/Error/Doctor | `docs/handover/provider-error-doctor.md` | 错误分类、Provider 生效、Auth 自动、诊断中心 |
 
 ## 技术栈
 

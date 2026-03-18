@@ -587,6 +587,8 @@ export interface AssistantWorkspaceState {
   hookTriggeredSessionId?: string;
   /** ISO timestamp when hookTriggeredSessionId was set — used for staleness detection */
   hookTriggeredAt?: string;
+  /** When false, daily check-in auto-trigger is disabled (default: true) */
+  dailyCheckInEnabled?: boolean;
 }
 
 export interface AssistantWorkspaceFiles {
@@ -745,6 +747,12 @@ export function formatFileSize(bytes: number): string {
   if (bytes < 1024 * 1024) return (bytes / 1024).toFixed(1) + ' KB';
   return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
 }
+
+// ==========================================
+// Classified Error Types (from error-classifier)
+// ==========================================
+
+export type { ClaudeErrorCategory, ClassifiedError } from '@/lib/error-classifier';
 
 // ==========================================
 // Claude Client Types
@@ -971,6 +979,8 @@ export interface ClaudeStreamOptions {
   autoTrigger?: boolean;
   /** Enable 1M context window (beta header: context-1m-2025-08-07) */
   context1m?: boolean;
+  /** Enable generative UI widget guidelines MCP server (default: true) */
+  generativeUI?: boolean;
 }
 
 // ==========================================

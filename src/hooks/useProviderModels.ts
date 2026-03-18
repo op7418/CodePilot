@@ -66,7 +66,9 @@ export function useProviderModels(
   // Derive flat model list for current provider
   const currentProviderIdValue = providerId || defaultProviderId || (providerGroups[0]?.provider_id ?? '');
   const currentGroup = providerGroups.find(g => g.provider_id === currentProviderIdValue) || providerGroups[0];
-  const modelOptions = currentGroup?.models || DEFAULT_MODEL_OPTIONS;
+  const modelOptions = (currentGroup?.models && currentGroup.models.length > 0)
+    ? currentGroup.models
+    : DEFAULT_MODEL_OPTIONS;
 
   const currentModelValue = modelName || 'sonnet';
   const currentModelOption = useMemo(

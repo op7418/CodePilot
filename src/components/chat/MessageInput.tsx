@@ -313,9 +313,9 @@ export function MessageInput({
     [popover, slashCommands, cliToolsFetch, badge, cliBadge, inputValue, removeBadge, removeCliBadge]
   );
 
-  // Effort selector state
-  const currentModelMeta = currentModelOption as typeof currentModelOption & { supportsEffort?: boolean; supportedEffortLevels?: string[] };
-  const showEffortSelector = currentModelMeta.supportsEffort === true;
+  // Effort selector state — guard against undefined when model not found in current provider's list
+  const currentModelMeta = currentModelOption as (typeof currentModelOption & { supportsEffort?: boolean; supportedEffortLevels?: string[] }) | undefined;
+  const showEffortSelector = currentModelMeta?.supportsEffort === true;
   const [localEffort, setLocalEffort] = useState<string>('high');
   const selectedEffort = effortProp ?? localEffort;
   const setSelectedEffort = useCallback((v: string) => {
@@ -434,7 +434,7 @@ export function MessageInput({
                   <EffortSelectorDropdown
                     selectedEffort={selectedEffort}
                     onEffortChange={setSelectedEffort}
-                    supportedEffortLevels={currentModelMeta.supportedEffortLevels}
+                    supportedEffortLevels={currentModelMeta?.supportedEffortLevels}
                   />
                 )}
 

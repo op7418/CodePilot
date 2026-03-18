@@ -4,62 +4,40 @@
  * Based on Anthropic's actual generative UI guidelines extracted from claude.ai,
  * adapted for CodePilot's code-fence trigger mechanism and CSS variable bridge.
  *
- * The WIDGET_SYSTEM_PROMPT is always injected.
- * Full module guidelines are assembled on demand by getGuidelines().
+ * The WIDGET_SYSTEM_PROMPT is a minimal capability declaration (~150 tokens),
+ * always injected into the system prompt. Full module guidelines are loaded
+ * on demand via the `codepilot_load_widget_guidelines` in-process MCP tool.
  */
 
-// ── System prompt (always injected) ─────────────────────────────────────────
+import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk';
+import { z } from 'zod';
+
+// ── System prompt (always injected — minimal version) ───────────────────────
 
 export const WIDGET_SYSTEM_PROMPT = `<widget-capability>
-You can create interactive visualizations inline in the conversation using the \`show-widget\` code fence.
+You can create interactive visualizations using the \`show-widget\` code fence.
 
 ## Format
 \`\`\`show-widget
-{"title":"snake_case_id","widget_code":"<svg>...</svg> OR <style>...</style><div>...</div><script>...</script>"}
+{"title":"snake_case_id","widget_code":"<raw HTML/SVG string>"}
 \`\`\`
 
-## When to use
-| User intent | Format |
-|-------------|--------|
-| Process / how X works | SVG flowchart |
-| Structure / what is X | SVG hierarchy or layers |
-| History / sequence | SVG timeline |
-| Cycle / feedback loop | SVG cycle diagram |
-| Compare A vs B | SVG side-by-side |
-| Data / trends | Chart.js (canvas + CDN) |
-| Calculation / formula | HTML with sliders/inputs |
-| Ranking / proportions | HTML bar display |
+## Design specs
+Call \`codepilot_load_widget_guidelines\` before your first widget to load detailed design specs.
+Available modules: interactive, chart, mockup, art, diagram.
 
-Don't default to flowcharts — pick the type that fits.
-
-## Multi-widget narration (IMPORTANT)
-
-For complex topics, **interleave multiple small widgets with text explanations**:
-
-1. Text introduction
-2. \`\`\`show-widget (overview diagram — e.g. hierarchy)
-3. Text explaining one aspect
-4. \`\`\`show-widget (detail — e.g. cycle diagram, timeline, or chart)
-5. Text explaining another aspect
-6. \`\`\`show-widget (interactive — e.g. Chart.js with controls)
-7. Summary text
-
-Each widget is a **separate** code fence. Use DIFFERENT visualization types across widgets. Keep each widget focused on ONE concept — don't cram everything into a single giant widget.
-
-## Rules
-1. widget_code is raw HTML/SVG — no DOCTYPE/html/head/body
+## Required rules (always apply)
+1. widget_code is a JSON string — escape quotes, newlines. No DOCTYPE/html/head/body
 2. Transparent background — host provides bg
-3. Warm minimal — no gradients/shadows/blur. Solid fills, rx=12 corners
-4. Escape JSON — widget_code is a JSON string value
-5. Each widget ≤ 3000 chars. Always close JSON + fence
-6. CDN allowlist: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh. No Tailwind CDN
-7. Script load: \`onload="initFn()"\` on CDN script + \`if(window.Lib) initFn();\` fallback
-8. Text explanations go OUTSIDE the code fence
-9. SVG: \`<svg width="100%" viewBox="0 0 680 H">\`, include arrow marker in \`<defs>\`
-10. SVG colors (hex, light+dark safe): Indigo #EEF2FF/#C7D2FE/#3730A3, Emerald #ECFDF5/#A7F3D0/#065F46, Amber #FFFBEB/#FDE68A/#92400E, Slate #F8FAFC/#E2E8F0/#334155
-11. HTML widgets: utility classes pre-loaded (flex, grid, gap-N, p-N, rounded-lg, bg-surface-secondary, text-content-secondary, etc). Use inline style for anything not available
-12. Clickable drill-down: \`onclick="window.__widgetSendMessage('Explain [topic]')"\`
-13. Interactive controls MUST update visuals — call \`chart.update()\` after data changes
+3. Each widget ≤ 3000 chars. Always close JSON + fence
+4. Streaming order: SVG → \`<defs>\` first; HTML → \`<style>\` → content → \`<script>\` last
+5. CDN allowlist: cdnjs.cloudflare.com, cdn.jsdelivr.net, unpkg.com, esm.sh
+6. CDN scripts: \`onload="initFn()"\` + \`if(window.Lib) initFn();\` fallback
+7. Text explanations go OUTSIDE the code fence
+8. Multi-widget: interleave text, each widget in a SEPARATE fence
+9. SVG: \`<svg width="100%" viewBox="0 0 680 H">\`, arrow marker in \`<defs>\`
+10. Interactive controls MUST update visuals — call \`chart.update()\` after data changes
+11. Clickable drill-down: \`onclick="window.__widgetSendMessage('...')"\`
 </widget-capability>`;
 
 // ── Full module guidelines (injected on demand) ────────────────────────────
@@ -257,4 +235,29 @@ export function getGuidelines(moduleNames: string[]): string {
     }
   }
   return parts.join('\n\n\n');
+}
+
+// ── In-process MCP server for on-demand guideline loading ───────────────────
+
+/**
+ * Creates an in-process MCP server that exposes `codepilot_load_widget_guidelines`.
+ * The model calls this tool before generating its first widget to load detailed
+ * design specs for the requested module(s), saving ~75% system prompt tokens
+ * on conversations that don't involve widgets.
+ */
+export function createWidgetMcpServer() {
+  return createSdkMcpServer({
+    name: 'codepilot-widget-guidelines',
+    version: '1.0.0',
+    tools: [
+      tool(
+        'codepilot_load_widget_guidelines',
+        'Load detailed design guidelines for generating visual widgets. Call this before generating your first widget. Available modules: interactive (HTML controls), chart (Chart.js), mockup (UI mockups), art (SVG illustrations), diagram (flowcharts/timelines/hierarchies).',
+        { modules: z.array(z.enum(['interactive', 'chart', 'mockup', 'art', 'diagram'])) },
+        async ({ modules }) => ({
+          content: [{ type: 'text' as const, text: getGuidelines(modules) }],
+        }),
+      ),
+    ],
+  });
 }

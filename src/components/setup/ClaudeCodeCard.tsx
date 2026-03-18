@@ -31,6 +31,7 @@ interface ClaudeStatus {
   installType?: string | null;
   otherInstalls?: Array<{ path: string; version: string | null; type: string }>;
   missingGit?: boolean;
+  warnings?: string[];
 }
 
 interface ClaudeCodeCardProps {

@@ -44,12 +44,25 @@ export default function NewChatPage() {
   const [recentProjects, setRecentProjects] = useState<string[]>([]);
   const [hasProvider, setHasProvider] = useState(true); // assume true until checked
   const [mode] = useState('code');
-  const [currentModel, setCurrentModel] = useState(() =>
-    (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-model') : null) || 'sonnet'
-  );
-  const [currentProviderId, setCurrentProviderId] = useState(() =>
-    (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-provider-id') : null) || ''
-  );
+  const [currentModel, setCurrentModel] = useState(() => {
+    if (typeof window === 'undefined') return 'sonnet';
+    // One-time migration: clear stale model/provider from pre-0.38 installs
+    if (!localStorage.getItem('codepilot:migration-038')) {
+      localStorage.removeItem('codepilot:last-model');
+      localStorage.removeItem('codepilot:last-provider-id');
+      localStorage.setItem('codepilot:migration-038', '1');
+      return 'sonnet';
+    }
+    return localStorage.getItem('codepilot:last-model') || 'sonnet';
+  });
+  const [currentProviderId, setCurrentProviderId] = useState(() => {
+    if (typeof window === 'undefined') return '';
+    // Migration already ran above (or was already done), just read
+    if (!localStorage.getItem('codepilot:migration-038')) {
+      return '';
+    }
+    return localStorage.getItem('codepilot:last-provider-id') || '';
+  });
   const [pendingPermission, setPendingPermission] = useState<PermissionRequestEvent | null>(null);
   const [permissionResolved, setPermissionResolved] = useState<'allow' | 'deny' | null>(null);
   const [streamingToolOutput, setStreamingToolOutput] = useState('');
@@ -77,6 +90,38 @@ export default function NewChatPage() {
       .catch(() => {});
     return () => controller.abort();
   }, [currentProviderId]);
+
+  // Validate restored model/provider against actual available providers/models
+  useEffect(() => {
+    let cancelled = false;
+    fetch('/api/providers/models')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !data?.groups || data.groups.length === 0) return;
+        const groups = data.groups as Array<{ provider_id: string; models: Array<{ value: string }> }>;
+
+        // Validate provider
+        const validProvider = groups.find(g => g.provider_id === currentProviderId);
+        if (currentProviderId && !validProvider) {
+          setCurrentProviderId('');
+          localStorage.removeItem('codepilot:last-provider-id');
+        }
+
+        // Validate model against the resolved provider's model list
+        const resolvedGroup = validProvider || groups[0];
+        if (resolvedGroup?.models && resolvedGroup.models.length > 0) {
+          const validModel = resolvedGroup.models.find(m => m.value === currentModel);
+          if (!validModel) {
+            const fallback = resolvedGroup.models[0].value;
+            setCurrentModel(fallback);
+            localStorage.setItem('codepilot:last-model', fallback);
+          }
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []); // Run once on mount to validate initial values
 
   // Initialize workingDir from localStorage (or setup default), validating the path exists
   useEffect(() => {
@@ -151,6 +196,47 @@ export default function NewChatPage() {
           }
         })
         .catch(() => {});
+      // Sync provider/model from localStorage, validating against available providers
+      const savedProviderId = localStorage.getItem('codepilot:last-provider-id');
+      const savedModel = localStorage.getItem('codepilot:last-model');
+      fetch('/api/providers/models')
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!data?.groups || data.groups.length === 0) return;
+          const groups = data.groups as Array<{ provider_id: string; models: Array<{ value: string }> }>;
+
+          // Validate and apply provider
+          if (savedProviderId !== null) {
+            const validProvider = groups.find(g => g.provider_id === savedProviderId);
+            if (validProvider) {
+              setCurrentProviderId(savedProviderId);
+            } else {
+              setCurrentProviderId('');
+              localStorage.removeItem('codepilot:last-provider-id');
+            }
+          }
+
+          // Validate and apply model
+          const resolvedPid = savedProviderId && groups.find(g => g.provider_id === savedProviderId)
+            ? savedProviderId
+            : groups[0]?.provider_id || '';
+          const resolvedGroup = groups.find(g => g.provider_id === resolvedPid) || groups[0];
+          if (savedModel && resolvedGroup?.models?.length > 0) {
+            const validModel = resolvedGroup.models.find((m: { value: string }) => m.value === savedModel);
+            if (validModel) {
+              setCurrentModel(savedModel);
+            } else {
+              const fallback = resolvedGroup.models[0].value;
+              setCurrentModel(fallback);
+              localStorage.setItem('codepilot:last-model', fallback);
+            }
+          }
+        })
+        .catch(() => {
+          // On fetch failure, still apply localStorage values as-is (best effort)
+          if (savedProviderId !== null) setCurrentProviderId(savedProviderId);
+          if (savedModel) setCurrentModel(savedModel);
+        });
     };
     checkProvider();
 
@@ -419,7 +505,31 @@ export default function NewChatPage() {
                   break;
                 }
                 case 'error': {
-                  accumulated += '\n\n**Error:** ' + event.data;
+                  // Try to parse structured error JSON from classifier
+                  let errorDisplay: string;
+                  try {
+                    const parsed = JSON.parse(event.data);
+                    if (parsed.category && parsed.userMessage) {
+                      errorDisplay = parsed.userMessage;
+                      if (parsed.actionHint) errorDisplay += `\n\n**What to do:** ${parsed.actionHint}`;
+                      if (parsed.details) errorDisplay += `\n\nDetails: ${parsed.details}`;
+                      // Add diagnostic guidance for provider/auth related errors
+                      const diagCategories = new Set([
+                        'AUTH_REJECTED', 'AUTH_FORBIDDEN', 'AUTH_STYLE_MISMATCH',
+                        'NO_CREDENTIALS', 'PROVIDER_NOT_APPLIED', 'MODEL_NOT_AVAILABLE',
+                        'NETWORK_UNREACHABLE', 'ENDPOINT_NOT_FOUND', 'PROCESS_CRASH',
+                        'CLI_NOT_FOUND', 'UNSUPPORTED_FEATURE',
+                      ]);
+                      if (diagCategories.has(parsed.category)) {
+                        errorDisplay += '\n\n💡 [Run Provider Diagnostics](/settings#providers) to troubleshoot, or check the [Provider Setup Guide](https://www.codepilot.sh/docs/providers).';
+                      }
+                    } else {
+                      errorDisplay = event.data;
+                    }
+                  } catch {
+                    errorDisplay = event.data;
+                  }
+                  accumulated += '\n\n**Error:** ' + errorDisplay;
                   setStreamingContent(accumulated);
                   break;
                 }
@@ -558,8 +668,8 @@ export default function NewChatPage() {
         onProviderModelChange={(pid, model) => {
           setCurrentProviderId(pid);
           setCurrentModel(model);
-          localStorage.setItem('codepilot:last-model', model);
           localStorage.setItem('codepilot:last-provider-id', pid);
+          localStorage.setItem('codepilot:last-model', model);
         }}
         workingDirectory={workingDir}
         effort={selectedEffort}

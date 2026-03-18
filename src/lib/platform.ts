@@ -146,10 +146,12 @@ export function findAllClaudeBinaries(): ClaudeInstallInfo[] {
       // On Windows, installers create multiple variants in the same directory:
       // native: claude.exe + claude (shell script), npm: claude.cmd + claude, etc.
       // Deduplicate by dir + base name stripped of all executable extensions.
+      // Only record the dirKey AFTER --version succeeds, so a broken .cmd
+      // wrapper doesn't hide a working .exe in the same directory.
+      let winDirKey: string | undefined;
       if (isWindows) {
-        const dirKey = path.join(path.dirname(realPath), path.basename(realPath).replace(/\.(exe|cmd|bat)$/i, '')).toLowerCase();
-        if (seenReal.has(dirKey)) return;
-        seenReal.add(dirKey);
+        winDirKey = path.join(path.dirname(realPath), path.basename(realPath).replace(/\.(exe|cmd|bat)$/i, '')).toLowerCase();
+        if (seenReal.has(winDirKey)) return;
       }
 
       const out = execFileSync(p, ['--version'], {
@@ -159,6 +161,7 @@ export function findAllClaudeBinaries(): ClaudeInstallInfo[] {
         encoding: 'utf-8',
       });
       seenReal.add(realPath);
+      if (winDirKey) seenReal.add(winDirKey);
       results.push({ path: p, version: out.trim() || null, type: classifyClaudePath(p) });
     } catch {
       // not found at this path

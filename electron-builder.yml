@@ -83,10 +83,10 @@ linux:
       Comment: A native desktop GUI for Claude Code
       Categories: Development;IDE;
       StartupWMClass: codepilot
+  # arch is NOT specified here — controlled by CI via --x64 / --arm64 CLI flags.
+  # Listing both arches here causes electron-builder to build both on every job,
+  # which fails when cross-compiling native modules (zlib-sync -m64 on arm64).
   target:
-    - target: AppImage
-      arch: [x64, arm64]
-    - target: deb
-      arch: [x64, arm64]
-    - target: rpm
-      arch: [x64, arm64]
+    - AppImage
+    - deb
+    - rpm

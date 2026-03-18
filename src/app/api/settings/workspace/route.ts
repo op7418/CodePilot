@@ -182,3 +182,27 @@ export async function PUT(request: NextRequest) {
     return NextResponse.json({ error: 'Failed to save workspace settings' }, { status: 500 });
   }
 }
+
+/** PATCH — update individual state fields (e.g. dailyCheckInEnabled toggle) */
+export async function PATCH(request: NextRequest) {
+  try {
+    const body = await request.json();
+    const workspacePath = getSetting('assistant_workspace_path');
+    if (!workspacePath) {
+      return NextResponse.json({ error: 'No workspace configured' }, { status: 400 });
+    }
+
+    const state = loadState(workspacePath);
+
+    // Apply supported state patches
+    if ('dailyCheckInEnabled' in body && typeof body.dailyCheckInEnabled === 'boolean') {
+      state.dailyCheckInEnabled = body.dailyCheckInEnabled;
+    }
+
+    saveState(workspacePath, state);
+    return NextResponse.json({ success: true, state });
+  } catch (e) {
+    console.error('[settings/workspace] PATCH failed:', e);
+    return NextResponse.json({ error: 'Failed to update workspace state' }, { status: 500 });
+  }
+}

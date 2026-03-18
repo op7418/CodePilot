@@ -1,6 +1,7 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
+import { Switch } from "@/components/ui/switch";
 import { SpinnerGap } from "@/components/ui/icon";
 import { useTranslation } from "@/hooks/useTranslation";
 
@@ -52,14 +53,17 @@ interface CheckInCardProps {
   lastCheckInDate: string | null;
   checkInDoneToday: boolean;
   creatingSession: boolean;
+  autoTriggerEnabled: boolean;
   onStartCheckIn: () => void;
+  onAutoTriggerChange: (enabled: boolean) => void;
 }
 
-export function CheckInCard({ lastCheckInDate, checkInDoneToday, creatingSession, onStartCheckIn }: CheckInCardProps) {
+export function CheckInCard({ lastCheckInDate, checkInDoneToday, creatingSession, autoTriggerEnabled, onStartCheckIn, onAutoTriggerChange }: CheckInCardProps) {
   const { t } = useTranslation();
+  const isZh = t('nav.chats') === '对话';
 
   return (
-    <div className="rounded-lg border border-border/50 p-4">
+    <div className="rounded-lg border border-border/50 p-4 space-y-3">
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-sm font-medium">{t('assistant.checkInTitle')}</h2>
@@ -89,6 +93,15 @@ export function CheckInCard({ lastCheckInDate, checkInDoneToday, creatingSession
             t('assistant.startCheckIn')
           )}
         </Button>
+      </div>
+      <div className="flex items-center justify-between border-t border-border/30 pt-2">
+        <div>
+          <p className="text-xs font-medium">{isZh ? '自动每日询问' : 'Auto daily check-in'}</p>
+          <p className="text-[11px] text-muted-foreground">
+            {isZh ? '打开助理项目对话时自动触发每日询问' : 'Automatically trigger daily check-in when opening assistant project'}
+          </p>
+        </div>
+        <Switch checked={autoTriggerEnabled} onCheckedChange={onAutoTriggerChange} />
       </div>
     </div>
   );

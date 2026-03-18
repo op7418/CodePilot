@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProvider, updateProvider, deleteProvider } from '@/lib/db';
+import { getProvider, updateProvider, deleteProvider, getDefaultProviderId, setDefaultProviderId, getAllProviders } from '@/lib/db';
 import type { ProviderResponse, ErrorResponse, UpdateProviderRequest, ApiProvider } from '@/types';
 
 interface RouteContext {
@@ -81,6 +81,18 @@ export async function DELETE(_request: NextRequest, context: RouteContext) {
         { error: 'Provider not found' },
         { status: 404 }
       );
+    }
+
+    // If the deleted provider was the default, clear the stale reference
+    // and auto-switch to the first remaining provider (if any).
+    const currentDefault = getDefaultProviderId();
+    if (currentDefault === id) {
+      const remaining = getAllProviders();
+      if (remaining.length > 0) {
+        setDefaultProviderId(remaining[0].id);
+      } else {
+        setDefaultProviderId('');
+      }
     }
 
     return NextResponse.json({ success: true });

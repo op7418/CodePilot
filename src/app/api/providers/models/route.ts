@@ -1,5 +1,5 @@
 import { NextResponse } from 'next/server';
-import { getAllProviders, getDefaultProviderId, getModelsForProvider, getSetting } from '@/lib/db';
+import { getAllProviders, getDefaultProviderId, setDefaultProviderId, getProvider, getModelsForProvider, getSetting } from '@/lib/db';
 import { getContextWindow } from '@/lib/model-context';
 import { getDefaultModelsForProvider, inferProtocolFromLegacy, findPresetForLegacy } from '@/lib/provider-catalog';
 import type { Protocol } from '@/lib/provider-catalog';
@@ -138,12 +138,23 @@ export async function GET() {
         rawModels = [...catalogRaw];
       }
 
-      // Inject role_models_json.default into the list if not already present
+      // Inject models from role_models_json into the list if not already present
       // (e.g. user configured "ark-code-latest" for a Volcengine or anthropic-thirdparty provider)
       try {
         const rm = JSON.parse(provider.role_models_json || '{}');
-        if (rm.default && !rawModels.some(m => m.value === rm.default)) {
-          rawModels.unshift({ value: rm.default, label: rm.default });
+        // Collect unique model IDs from all role fields (default, reasoning, small, haiku, sonnet, opus)
+        const roleEntries: { id: string; role: string }[] = [];
+        for (const role of ['default', 'reasoning', 'small', 'haiku', 'sonnet', 'opus'] as const) {
+          if (rm[role] && !roleEntries.some(e => e.id === rm[role])) {
+            roleEntries.push({ id: rm[role], role });
+          }
+        }
+        // Add each role model to the list (default role first, so it appears at the top)
+        for (const entry of roleEntries) {
+          if (!rawModels.some(m => m.value === entry.id)) {
+            const label = entry.role === 'default' ? entry.id : `${entry.id} (${entry.role})`;
+            rawModels.unshift({ value: entry.id, label });
+          }
         }
       } catch { /* ignore */ }
 
@@ -177,8 +188,15 @@ export async function GET() {
       });
     }
 
-    // Determine default provider
-    const defaultProviderId = getDefaultProviderId() || groups[0].provider_id;
+    // Determine default provider — auto-heal stale references on read
+    let defaultProviderId = getDefaultProviderId();
+    if (defaultProviderId && !getProvider(defaultProviderId)) {
+      // Stale default (provider was deleted). Fix it now.
+      const firstValid = groups.find(g => g.provider_id !== 'env');
+      defaultProviderId = firstValid?.provider_id || '';
+      setDefaultProviderId(defaultProviderId);
+    }
+    defaultProviderId = defaultProviderId || groups[0]?.provider_id || '';
 
     return NextResponse.json({
       groups,

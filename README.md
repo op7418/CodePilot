@@ -5,7 +5,7 @@
 
 [![GitHub release](https://img.shields.io/github/v/release/op7418/CodePilot)](https://github.com/op7418/CodePilot/releases)
 [![Platform](https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey)](https://github.com/op7418/CodePilot/releases)
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-BSL--1.1-orange)](LICENSE)
 
 [中文文档](./README_CN.md) | [日本語](./README_JA.md)
 
@@ -250,4 +250,8 @@ npm run electron:pack:linux    # Linux AppImage, deb, rpm
 
 ## License
 
-MIT
+[Business Source License 1.1 (BSL-1.1)](LICENSE)
+
+- **Personal / academic / non-profit use**: free and unrestricted
+- **Commercial use**: requires a separate license — contact 7418@openclaw.ai
+- **Change date**: 2029-03-16 — after which the code converts to Apache 2.0

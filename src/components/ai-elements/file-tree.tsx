@@ -142,18 +142,21 @@ export const FileTreeFolder = ({
         <div
           className={cn("", className)}
           role="treeitem"
-          tabIndex={0}
           {...props}
         >
-          <div
-            className="flex w-full items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50"
-          >
-            <CollapsibleTrigger asChild>
-              <button
-                type="button"
-                className="shrink-0 rounded p-0.5 hover:bg-muted"
-                onClick={(e) => e.stopPropagation()}
-              >
+          <CollapsibleTrigger asChild>
+            <div
+              className="flex w-full cursor-pointer items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50"
+              role="button"
+              tabIndex={0}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault();
+                  handleToggle();
+                }
+              }}
+            >
+              <span className="shrink-0 rounded p-0.5">
                 <CaretRight
                   size={16}
                   className={cn(
@@ -161,17 +164,17 @@ export const FileTreeFolder = ({
                     isExpanded && "rotate-90"
                   )}
                 />
-              </button>
-            </CollapsibleTrigger>
-            <FileTreeIcon>
-              {isExpanded ? (
-                <FolderOpen size={16} className="text-muted-foreground" />
-              ) : (
-                <Folder size={16} className="text-muted-foreground" />
-              )}
-            </FileTreeIcon>
-            <FileTreeName>{name}</FileTreeName>
-          </div>
+              </span>
+              <FileTreeIcon>
+                {isExpanded ? (
+                  <FolderOpen size={16} className="text-muted-foreground" />
+                ) : (
+                  <Folder size={16} className="text-muted-foreground" />
+                )}
+              </FileTreeIcon>
+              <FileTreeName>{name}</FileTreeName>
+            </div>
+          </CollapsibleTrigger>
           <CollapsibleContent>
             <div className="ml-4 border-l pl-2">{children}</div>
           </CollapsibleContent>

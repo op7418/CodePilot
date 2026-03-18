@@ -29,6 +29,7 @@ interface ClaudeStatus {
   installType?: string | null;
   otherInstalls?: ClaudeInstallInfo[];
   missingGit?: boolean;
+  warnings?: string[];
 }
 
 const BASE_INTERVAL = 30_000; // 30s
@@ -155,6 +156,7 @@ export function ConnectionStatus() {
   const connected = status?.connected ?? false;
   const hasConflicts = (status?.otherInstalls?.length ?? 0) > 0;
   const missingGit = status?.missingGit ?? false;
+  const hasWarnings = hasConflicts || missingGit;
 
   return (
     <>
@@ -167,7 +169,7 @@ export function ConnectionStatus() {
           status === null
             ? "bg-muted text-muted-foreground"
             : connected
-              ? hasConflicts
+              ? hasWarnings
                 ? "bg-status-warning-muted text-status-warning-foreground"
                 : "bg-status-success-muted text-status-success-foreground"
               : "bg-status-error-muted text-status-error-foreground"
@@ -179,7 +181,7 @@ export function ConnectionStatus() {
             status === null
               ? "bg-muted-foreground/40"
               : connected
-                ? hasConflicts
+                ? hasWarnings
                   ? "bg-status-warning"
                   : "bg-status-success"
                 : "bg-status-error"
@@ -188,12 +190,12 @@ export function ConnectionStatus() {
         {status === null
           ? t('connection.checking')
           : connected
-            ? hasConflicts
-              ? t('connection.conflict')
-              : t('connection.connected')
-            : missingGit
+            ? missingGit
               ? t('connection.missingGit')
-              : t('connection.disconnected')}
+              : hasConflicts
+                ? t('connection.conflict')
+                : t('connection.connected')
+            : t('connection.disconnected')}
       </Button>
 
       <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
@@ -201,17 +203,17 @@ export function ConnectionStatus() {
           <DialogHeader>
             <DialogTitle>
               {connected
-                ? t('connection.installed')
-                : missingGit
+                ? missingGit
                   ? t('connection.missingGitTitle')
-                  : t('connection.notInstalled')}
+                  : t('connection.installed')
+                : t('connection.notInstalled')}
             </DialogTitle>
             <DialogDescription>
               {connected
-                ? `Claude Code CLI v${status?.version} is running and ready.`
-                : missingGit
+                ? missingGit
                   ? t('connection.missingGitDesc')
-                  : "Claude Code CLI is required to use this application."}
+                  : `Claude Code CLI v${status?.version} is running and ready.`
+                : "Claude Code CLI is required to use this application."}
             </DialogDescription>
           </DialogHeader>
 
@@ -258,25 +260,25 @@ export function ConnectionStatus() {
                   </div>
                 </div>
               )}
-            </div>
-          ) : missingGit ? (
-            <div className="space-y-4 text-sm">
-              <div className="flex items-center gap-3 rounded-lg bg-status-warning-muted px-4 py-3">
-                <Warning size={16} className="text-status-warning-foreground shrink-0" />
-                <div>
-                  <p className="font-medium text-status-warning-foreground">{t('connection.missingGitTitle')}</p>
-                  {status?.version && (
-                    <p className="text-xs text-muted-foreground">Claude Code v{status.version} is installed but cannot run without Git.</p>
-                  )}
+
+              {/* Git Bash missing warning (Windows only) */}
+              {missingGit && (
+                <div className="rounded-lg bg-status-warning-muted px-4 py-3 space-y-2">
+                  <div className="flex items-center gap-2">
+                    <Warning size={16} className="text-status-warning-foreground shrink-0" />
+                    <p className="font-medium text-status-warning-foreground text-xs">
+                      {t('connection.missingGitTitle')}
+                    </p>
+                  </div>
+                  <div className="text-xs text-muted-foreground space-y-1">
+                    <ol className="list-decimal list-inside space-y-0.5">
+                      <li>{t('install.gitStep1')}</li>
+                      <li>{t('install.gitStep2')}</li>
+                      <li>{t('install.gitStep3')}</li>
+                    </ol>
+                  </div>
                 </div>
-              </div>
-              <div className="text-sm text-muted-foreground space-y-1">
-                <ol className="list-decimal list-inside space-y-0.5">
-                  <li>{t('install.gitStep1')}</li>
-                  <li>{t('install.gitStep2')}</li>
-                  <li>{t('install.gitStep3')}</li>
-                </ol>
-              </div>
+              )}
             </div>
           ) : (
             <div className="space-y-4 text-sm">

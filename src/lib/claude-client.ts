@@ -22,6 +22,7 @@ import { getSetting, updateSdkSessionId, createPermissionRequest } from './db';
 import { resolveForClaudeCode, toClaudeCodeEnv } from './provider-resolver';
 import { findClaudeBinary, findGitBash, getExpandedPath, invalidateClaudePathCache } from './platform';
 import { notifyPermissionRequest, notifyGeneric } from './telegram-bot';
+import { classifyError, formatClassifiedError } from './error-classifier';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -393,6 +394,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
     enableFileCheckpointing,
     autoTrigger,
     context1m,
+    generativeUI,
   } = options;
 
   return new ReadableStream<string>({
@@ -442,6 +444,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         if (!resolved.hasCredentials && !sdkEnv.ANTHROPIC_API_KEY && !sdkEnv.ANTHROPIC_AUTH_TOKEN) {
           console.warn('[claude-client] No API key found: no active provider, no legacy settings, and no ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN in environment');
         }
+
 
         // Check if dangerously_skip_permissions is enabled globally or per-session
         const globalSkip = getSetting('dangerously_skip_permissions') === 'true';
@@ -507,6 +510,34 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           queryOptions.mcpServers = toSdkMcpConfig(mcpServers);
         }
 
+        // Widget guidelines: progressive loading strategy.
+        // The system prompt always includes WIDGET_SYSTEM_PROMPT with format rules.
+        // The MCP server (detailed design specs) is only registered when the
+        // conversation likely involves widget generation — detected by keywords in
+        // the user's prompt or existing show-widget output in conversation history.
+        // This avoids SDK tool discovery overhead (~1s) on plain text conversations.
+        if (generativeUI !== false) {
+          const needsWidgetSpecs = (() => {
+            const widgetKeywords = /可视化|图表|流程图|时间线|架构图|对比|visualiz|diagram|chart|flowchart|timeline|infographic|interactive|widget|show-widget|hierarchy|dashboard/i;
+            // Check current prompt
+            if (widgetKeywords.test(prompt)) return true;
+            // Check if conversation already has widgets (resume context)
+            if (conversationHistory?.some(m => m.content.includes('show-widget'))) return true;
+            // Check system prompt for image/widget agent mode
+            if (systemPrompt && widgetKeywords.test(systemPrompt)) return true;
+            return false;
+          })();
+
+          if (needsWidgetSpecs) {
+            const { createWidgetMcpServer } = await import('@/lib/widget-guidelines');
+            const widgetServer = createWidgetMcpServer();
+            queryOptions.mcpServers = {
+              ...(queryOptions.mcpServers || {}),
+              'codepilot-widget': widgetServer,
+            };
+          }
+        }
+
         // Pass through SDK-specific options from ClaudeStreamOptions
         if (thinking) {
           queryOptions.thinking = thinking;
@@ -552,7 +583,8 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           controller.enqueue(formatSSE({
             type: 'status',
             data: JSON.stringify({
-              notification: true,
+              _internal: true,
+              resumeFallback: true,
               title: 'Session fallback',
               message: 'Original working directory no longer exists. Starting fresh conversation.',
             }),
@@ -765,7 +797,8 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             controller.enqueue(formatSSE({
               type: 'status',
               data: JSON.stringify({
-                notification: true,
+                _internal: true,
+                resumeFallback: true,
                 title: 'Session fallback',
                 message: 'Previous session could not be resumed. Starting fresh conversation.',
               }),
@@ -791,7 +824,6 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         let tokenUsage: TokenUsage | null = null;
         // Track pending TodoWrite tool_use_ids so we can sync after successful execution
         const pendingTodoWrites = new Map<string, Array<{ content: string; status: string; activeForm?: string }>>();
-
         for await (const message of conversation) {
           if (abortController?.signal.aborted) {
             break;
@@ -844,8 +876,8 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                       ? block.content
                       : Array.isArray(block.content)
                         ? block.content
-                            .filter((c: any) => c.type === 'text')
-                            .map((c: any) => c.text)
+                            .filter((c: { type: string }) => c.type === 'text')
+                            .map((c: { text?: string }) => c.text)
                             .join('\n')
                         : String(block.content ?? '');
                     controller.enqueue(formatSSE({
@@ -1032,49 +1064,44 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
       } catch (error) {
         const rawMessage = error instanceof Error ? error.message : 'Unknown error';
         // Log full error details for debugging (visible in terminal / dev tools)
+        const stderrContent = error instanceof Error ? (error as { stderr?: string }).stderr : undefined;
         console.error('[claude-client] Stream error:', {
           message: rawMessage,
           stack: error instanceof Error ? error.stack : undefined,
           cause: error instanceof Error ? (error as { cause?: unknown }).cause : undefined,
-          stderr: error instanceof Error ? (error as { stderr?: string }).stderr : undefined,
+          stderr: stderrContent,
           code: error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined,
         });
 
-        // Try to extract stderr or cause for more useful error messages
-        const stderr = error instanceof Error ? (error as { stderr?: string }).stderr : undefined;
-        const cause = error instanceof Error ? (error as { cause?: unknown }).cause : undefined;
-        const extraDetail = stderr || (cause instanceof Error ? cause.message : cause ? String(cause) : '');
+        // Classify the error using structured pattern matching
+        const classified = classifyError({
+          error,
+          stderr: stderrContent,
+          providerName: resolved.provider?.name,
+          baseUrl: resolved.provider?.base_url,
+          hasImages: files && files.some(f => isImageFile(f.type)),
+          thinkingEnabled: !!thinking,
+          context1mEnabled: !!context1m,
+          effortSet: !!effort,
+        });
 
-        let errorMessage = rawMessage;
-
-        // Provide more specific error messages based on error type
-        if (error instanceof Error) {
-          const code = (error as NodeJS.ErrnoException).code;
-          if (code === 'ENOENT' || rawMessage.includes('ENOENT') || rawMessage.includes('spawn')) {
-            errorMessage = `Claude Code CLI not found. Please ensure Claude Code is installed and available in your PATH.\n\nOriginal error: ${rawMessage}`;
-          } else if (rawMessage.includes('exited with code 1') || rawMessage.includes('exit code 1')) {
-            const providerHint = resolved.provider?.name ? ` (Provider: ${resolved.provider?.name})` : '';
-            const detailHint = extraDetail ? `\n\nDetails: ${extraDetail}` : '';
-            const hasImages = files && files.some(f => isImageFile(f.type));
-            const imageHint = hasImages ? '\n• Provider may not support image/vision input' : '';
-            errorMessage = `Claude Code process exited with an error${providerHint}. This is often caused by:\n• Invalid or missing API Key\n• Incorrect Base URL configuration\n• Network connectivity issues${imageHint}${detailHint}\n\nOriginal error: ${rawMessage}`;
-          } else if (rawMessage.includes('exited with code')) {
-            const providerHint = resolved.provider?.name ? ` (Provider: ${resolved.provider?.name})` : '';
-            errorMessage = `Claude Code process crashed unexpectedly${providerHint}.\n\nOriginal error: ${rawMessage}`;
-          } else if (code === 'ECONNREFUSED' || rawMessage.includes('ECONNREFUSED') || rawMessage.includes('fetch failed')) {
-            const baseUrl = resolved.provider?.base_url || 'default';
-            errorMessage = `Cannot connect to API endpoint (${baseUrl}). Please check your network connection and Base URL configuration.\n\nOriginal error: ${rawMessage}`;
-          } else if (rawMessage.includes('401') || rawMessage.includes('Unauthorized') || rawMessage.includes('authentication')) {
-            const providerHint = resolved.provider?.name ? ` for provider "${resolved.provider?.name}"` : '';
-            errorMessage = `Authentication failed${providerHint}. Please verify your API Key is correct and has not expired.\n\nOriginal error: ${rawMessage}`;
-          } else if (rawMessage.includes('403') || rawMessage.includes('Forbidden')) {
-            errorMessage = `Access denied. Your API Key may not have permission for this operation.\n\nOriginal error: ${rawMessage}`;
-          } else if (rawMessage.includes('429') || rawMessage.includes('rate limit') || rawMessage.includes('Rate limit')) {
-            errorMessage = `Rate limit exceeded. Please wait a moment before retrying.\n\nOriginal error: ${rawMessage}`;
-          }
-        }
-
-        controller.enqueue(formatSSE({ type: 'error', data: errorMessage }));
+        // Send structured error JSON so frontend can parse category + hints
+        // Falls back gracefully for older frontends that only read raw text
+        const errorMessage = formatClassifiedError(classified);
+        controller.enqueue(formatSSE({
+          type: 'error',
+          data: JSON.stringify({
+            category: classified.category,
+            userMessage: classified.userMessage,
+            actionHint: classified.actionHint,
+            retryable: classified.retryable,
+            providerName: classified.providerName,
+            details: classified.details,
+            rawMessage: classified.rawMessage,
+            // Include formatted text for backward compatibility
+            _formattedMessage: errorMessage,
+          }),
+        }));
         controller.enqueue(formatSSE({ type: 'done', data: '' }));
 
         // Always clear sdk_session_id on crash so the next message starts fresh.

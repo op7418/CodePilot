@@ -534,6 +534,7 @@ export function saveState(dir: string, state: AssistantWorkspaceState): void {
 
 export function needsDailyCheckIn(state: AssistantWorkspaceState, now?: Date): boolean {
   if (!state.onboardingComplete) return false;
+  if (state.dailyCheckInEnabled === false) return false;
   const d = now ?? new Date();
   const localToday = getLocalDateString(d);
   if (state.lastCheckInDate === localToday) return false;

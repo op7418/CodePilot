@@ -23,9 +23,29 @@ import {
 import { SpinnerGap, CaretDown, CaretUp } from "@/components/ui/icon";
 import type { ProviderFormData } from "./ProviderForm";
 import type { QuickPreset } from "./provider-presets";
+import { QUICK_PRESETS } from "./provider-presets";
 import type { ApiProvider } from "@/types";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { TranslationKey } from "@/i18n";
+
+/** Infer auth style from base URL by fuzzy-matching VENDOR_PRESETS hostnames */
+function inferAuthStyleFromUrl(url: string): "api_key" | "auth_token" | null {
+  if (!url) return null;
+  const urlLower = url.toLowerCase();
+  for (const p of QUICK_PRESETS) {
+    if (!p.base_url) continue;
+    try {
+      const presetHost = new URL(p.base_url).hostname;
+      if (urlLower.includes(presetHost)) {
+        // Map preset's known auth style
+        const env = JSON.parse(p.extra_env || '{}');
+        if ('ANTHROPIC_AUTH_TOKEN' in env) return 'auth_token';
+        return 'api_key';
+      }
+    } catch { /* skip invalid URLs */ }
+  }
+  return null;
+}
 
 interface PresetConnectDialogProps {
   preset: QuickPreset | null;
@@ -133,8 +153,11 @@ export function PresetConnectDialog({
       setName(preset.name);
       setExtraEnv(preset.extra_env);
       setModelName("");
-      setAuthStyle("api_key");
-      setInitialAuthStyle("api_key");
+      // Auto-detect auth style from preset's extra_env
+      const presetEnv = (() => { try { return JSON.parse(preset.extra_env || '{}'); } catch { return {}; } })();
+      const detectedStyle = 'ANTHROPIC_AUTH_TOKEN' in presetEnv ? 'auth_token' as const : 'api_key' as const;
+      setAuthStyle(detectedStyle);
+      setInitialAuthStyle(detectedStyle);
       setMapSonnet("");
       setMapOpus("");
       setMapHaiku("");
@@ -318,10 +341,8 @@ export function PresetConnectDialog({
                       setAuthStyle(newStyle);
                       if (isEdit && editProvider?.api_key) {
                         if (newStyle !== initialAuthStyle) {
-                          // Switching away — clear masked key to force re-entry
                           setApiKey("");
                         } else {
-                          // Switching back to original — restore masked key
                           setApiKey(editProvider.api_key);
                         }
                       }
@@ -345,6 +366,31 @@ export function PresetConnectDialog({
                   autoFocus
                 />
               </div>
+              {/* Show auth style badge for non-thirdparty presets (auto-determined) */}
+              {preset.key !== "anthropic-thirdparty" && (
+                <p className="text-[11px] text-muted-foreground">
+                  Auth: <span className="font-mono">{authStyle === "auth_token" ? "Authorization: Bearer ..." : "X-Api-Key: ..."}</span>
+                </p>
+              )}
+              {/* Smart recommend for thirdparty based on URL */}
+              {preset.key === "anthropic-thirdparty" && baseUrl && (() => {
+                const inferred = inferAuthStyleFromUrl(baseUrl);
+                return inferred && inferred !== authStyle ? (
+                  <p className="text-[11px] text-amber-500">
+                    {isZh
+                      ? `检测到此 URL 通常使用 ${inferred === 'auth_token' ? 'Auth Token' : 'API Key'} 认证方式`
+                      : `This URL typically uses ${inferred === 'auth_token' ? 'Auth Token' : 'API Key'} authentication`}
+                    {' '}
+                    <Button
+                      variant="link"
+                      className="h-auto p-0 text-[11px] text-amber-500 underline hover:no-underline"
+                      onClick={() => setAuthStyle(inferred)}
+                    >
+                      {isZh ? '切换' : 'Switch'}
+                    </Button>
+                  </p>
+                ) : null;
+              })()}
             </div>
           )}
 

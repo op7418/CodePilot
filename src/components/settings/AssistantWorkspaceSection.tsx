@@ -436,7 +436,22 @@ export function AssistantWorkspaceSection() {
           lastCheckInDate={workspace.state?.lastCheckInDate ?? null}
           checkInDoneToday={checkInDoneToday}
           creatingSession={creatingSession}
+          autoTriggerEnabled={workspace.state?.dailyCheckInEnabled !== false}
           onStartCheckIn={handleStartCheckIn}
+          onAutoTriggerChange={async (enabled) => {
+            try {
+              const res = await fetch('/api/settings/workspace', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ dailyCheckInEnabled: enabled }),
+              });
+              if (!res.ok) return; // don't flip UI on failure
+              setWorkspace((prev) => prev && prev.state ? {
+                ...prev,
+                state: { ...prev.state, dailyCheckInEnabled: enabled },
+              } : prev);
+            } catch { /* network error — leave UI unchanged */ }
+          }}
         />
       )}
 

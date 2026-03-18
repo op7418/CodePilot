@@ -97,6 +97,10 @@ function handleSSEEvent(
     case 'status': {
       try {
         const statusData = JSON.parse(event.data);
+        // Skip internal-only status events (e.g. resume fallback notifications)
+        if (statusData._internal) {
+          return accumulated;
+        }
         if (statusData.session_id) {
           callbacks.onStatus(`Connected (${statusData.requested_model || statusData.model || 'claude'})`);
           callbacks.onInitMeta?.({
@@ -182,7 +186,37 @@ function handleSSEEvent(
     }
 
     case 'error': {
-      const next = accumulated + '\n\n**Error:** ' + event.data;
+      // Try to parse structured error JSON from error-classifier
+      let errorDisplay: string;
+      try {
+        const parsed = JSON.parse(event.data);
+        if (parsed.category && parsed.userMessage) {
+          // Structured error from classifier
+          errorDisplay = parsed.userMessage;
+          if (parsed.actionHint) {
+            errorDisplay += `\n\n**What to do:** ${parsed.actionHint}`;
+          }
+          if (parsed.details) {
+            errorDisplay += `\n\nDetails: ${parsed.details}`;
+          }
+          // Add diagnostic guidance for provider/auth related errors
+          const diagCategories = new Set([
+            'AUTH_REJECTED', 'AUTH_FORBIDDEN', 'AUTH_STYLE_MISMATCH',
+            'NO_CREDENTIALS', 'PROVIDER_NOT_APPLIED', 'MODEL_NOT_AVAILABLE',
+            'NETWORK_UNREACHABLE', 'ENDPOINT_NOT_FOUND', 'PROCESS_CRASH',
+            'CLI_NOT_FOUND', 'UNSUPPORTED_FEATURE',
+          ]);
+          if (diagCategories.has(parsed.category)) {
+            errorDisplay += '\n\n💡 [Run Provider Diagnostics](/settings#providers) to troubleshoot, or check the [Provider Setup Guide](https://www.codepilot.sh/docs/providers).';
+          }
+        } else {
+          errorDisplay = event.data;
+        }
+      } catch {
+        // Plain text error (backward compatible)
+        errorDisplay = event.data;
+      }
+      const next = accumulated + '\n\n**Error:** ' + errorDisplay;
       callbacks.onError(next);
       return next;
     }

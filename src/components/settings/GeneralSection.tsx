@@ -126,6 +126,8 @@ export function GeneralSection() {
   const [skipPermissions, setSkipPermissions] = useState(false);
   const [showSkipPermWarning, setShowSkipPermWarning] = useState(false);
   const [skipPermSaving, setSkipPermSaving] = useState(false);
+  const [generativeUI, setGenerativeUI] = useState(true);
+  const [generativeUISaving, setGenerativeUISaving] = useState(false);
   const { accountInfo } = useAccountInfo();
   const { t, locale, setLocale } = useTranslation();
 
@@ -136,6 +138,8 @@ export function GeneralSection() {
         const data = await res.json();
         const appSettings = data.settings || {};
         setSkipPermissions(appSettings.dangerously_skip_permissions === "true");
+        // generative_ui_enabled defaults to true when not set
+        setGenerativeUI(appSettings.generative_ui_enabled !== "false");
       }
     } catch {
       // ignore
@@ -175,6 +179,26 @@ export function GeneralSection() {
     }
   };
 
+  const handleGenerativeUIToggle = async (checked: boolean) => {
+    setGenerativeUISaving(true);
+    try {
+      const res = await fetch("/api/settings/app", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: { generative_ui_enabled: checked ? "" : "false" },
+        }),
+      });
+      if (res.ok) {
+        setGenerativeUI(checked);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setGenerativeUISaving(false);
+    }
+  };
+
   return (
     <div className="max-w-3xl space-y-6">
       <UpdateCard />
@@ -198,6 +222,19 @@ export function GeneralSection() {
             {t('settings.autoApproveWarning')}
           </StatusBanner>
         )}
+
+        {/* Generative UI toggle */}
+        <FieldRow
+          label={t('settings.generativeUITitle')}
+          description={t('settings.generativeUIDesc')}
+          separator
+        >
+          <Switch
+            checked={generativeUI}
+            onCheckedChange={handleGenerativeUIToggle}
+            disabled={generativeUISaving}
+          />
+        </FieldRow>
 
         {/* Language picker */}
         <FieldRow
