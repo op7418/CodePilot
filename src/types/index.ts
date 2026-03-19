@@ -193,6 +193,8 @@ export interface ProviderModelGroup {
   provider_type: string;
   /** True if this provider only supports Claude Code SDK wire protocol, not standard Messages API */
   sdkProxyOnly?: boolean;
+  /** Where this model list came from: fallback static defaults, live SDK capabilities, or configured provider metadata */
+  modelsSource?: 'fallback' | 'sdk' | 'configured';
   models: Array<{
     value: string;           // internal/UI model ID
     label: string;           // display name

@@ -57,6 +57,7 @@ export async function GET() {
       provider_id: 'env',
       provider_name: 'Claude Code',
       provider_type: 'anthropic',
+      modelsSource: 'fallback',
       ...(!envHasDirectCredentials ? { sdkProxyOnly: true } : {}),
       models: DEFAULT_MODELS.map(m => {
         const cw = getContextWindow(m.value);
@@ -69,6 +70,7 @@ export async function GET() {
       const { getCachedModels } = await import('@/lib/agent-sdk-capabilities');
       const sdkModels = getCachedModels('env');
       if (sdkModels.length > 0) {
+        groups[0].modelsSource = 'sdk';
         groups[0].models = sdkModels.map(m => {
           const cw = getContextWindow(m.value);
           return {
@@ -185,6 +187,7 @@ export async function GET() {
         provider_id: provider.id,
         provider_name: provider.name,
         provider_type: provider.provider_type,
+        modelsSource: 'configured',
         ...(sdkProxyOnly ? { sdkProxyOnly: true } : {}),
         models,
       });

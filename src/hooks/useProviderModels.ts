@@ -13,6 +13,7 @@ export interface UseProviderModelsReturn {
   currentProviderIdValue: string;
   modelOptions: typeof DEFAULT_MODEL_OPTIONS;
   currentModelOption: (typeof DEFAULT_MODEL_OPTIONS)[number];
+  currentModelsSource?: ProviderModelGroup['modelsSource'];
 }
 
 export function useProviderModels(
@@ -54,7 +55,11 @@ export function useProviderModels(
     fetchProviderModels();
     const handler = () => fetchProviderModels();
     window.addEventListener('provider-changed', handler);
-    return () => window.removeEventListener('provider-changed', handler);
+    window.addEventListener('provider-models-updated', handler);
+    return () => {
+      window.removeEventListener('provider-changed', handler);
+      window.removeEventListener('provider-models-updated', handler);
+    };
   }, [fetchProviderModels]);
 
   // Derive flat model list for current provider
@@ -75,5 +80,6 @@ export function useProviderModels(
     currentProviderIdValue,
     modelOptions,
     currentModelOption,
+    currentModelsSource: currentGroup?.modelsSource,
   };
 }
