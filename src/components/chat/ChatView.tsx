@@ -99,6 +99,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
   const pendingImageNoticesRef = useRef<string[]>([]);
   const sendMessageRef = useRef<(content: string, files?: FileAttachment[]) => Promise<void>>(undefined);
   const initMetaRef = useRef<{ tools?: unknown; slash_commands?: unknown; skills?: unknown } | null>(null);
+  const warmupKeyRef = useRef<string>('');
 
   const handleModeChange = useCallback((newMode: string) => {
     setMode(newMode);
@@ -170,6 +171,39 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
     sendMessageRef,
     initMetaRef,
   });
+
+  // Warm SDK capability cache when restoring an existing session after app launch.
+  // This repopulates dynamic model entries like "Default (recommended)" without
+  // mutating the session's persisted model choice.
+  useEffect(() => {
+    const providerKey = currentProviderId || 'env';
+    const cwdKey = workingDirectory || '';
+    if (!cwdKey) return;
+
+    const warmupKey = `${sessionId}:${providerKey}:${cwdKey}`;
+    if (warmupKeyRef.current === warmupKey) return;
+    warmupKeyRef.current = warmupKey;
+
+    let cancelled = false;
+    fetch('/api/sdk/warm', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: providerKey,
+        workingDirectory: cwdKey,
+      }),
+    })
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (cancelled || !data?.ok) return;
+        window.dispatchEvent(new Event('provider-models-updated'));
+      })
+      .catch(() => {});
+
+    return () => {
+      cancelled = true;
+    };
+  }, [sessionId, currentProviderId, workingDirectory]);
 
   // Detect workspace mismatch
   useEffect(() => {

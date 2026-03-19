@@ -369,6 +369,81 @@ export async function generateTextViaSdk(params: {
   return resultText;
 }
 
+/**
+ * Warm SDK capability cache (supported models, account info, MCP status)
+ * without mutating any session state or model selection. Used when restoring
+ * old sessions after app restart so the model picker can repopulate dynamic
+ * entries like "Default (recommended)".
+ */
+export async function warmCapabilitiesViaSdk(params: {
+  providerId?: string;
+  workingDirectory?: string;
+  abortSignal?: AbortSignal;
+}): Promise<{ providerId: string; warmed: boolean }> {
+  const resolved = resolveForClaudeCode(undefined, {
+    providerId: params.providerId,
+    sessionProviderId: params.providerId === 'env' ? 'env' : undefined,
+  });
+
+  const sdkEnv: Record<string, string> = { ...process.env as Record<string, string> };
+  if (!sdkEnv.HOME) sdkEnv.HOME = os.homedir();
+  if (!sdkEnv.USERPROFILE) sdkEnv.USERPROFILE = os.homedir();
+  sdkEnv.PATH = getExpandedPath();
+  delete sdkEnv.CLAUDECODE;
+
+  if (process.platform === 'win32' && !process.env.CLAUDE_CODE_GIT_BASH_PATH) {
+    const gitBashPath = findGitBash();
+    if (gitBashPath) sdkEnv.CLAUDE_CODE_GIT_BASH_PATH = gitBashPath;
+  }
+
+  const resolvedEnv = toClaudeCodeEnv(sdkEnv, resolved);
+  Object.assign(sdkEnv, resolvedEnv);
+
+  const abortController = new AbortController();
+  if (params.abortSignal) {
+    params.abortSignal.addEventListener('abort', () => abortController.abort(), { once: true });
+  }
+
+  const timeoutId = setTimeout(() => abortController.abort(), 20_000);
+
+  const queryOptions: Options = {
+    cwd: params.workingDirectory || os.homedir(),
+    abortController,
+    permissionMode: 'bypassPermissions',
+    allowDangerouslySkipPermissions: true,
+    env: sanitizeEnv(sdkEnv),
+    settingSources: resolved.settingSources as Options['settingSources'],
+    maxTurns: 1,
+  };
+
+  const claudePath = findClaudePath();
+  if (claudePath) {
+    const ext = path.extname(claudePath).toLowerCase();
+    if (ext === '.cmd' || ext === '.bat') {
+      const scriptPath = resolveScriptFromCmd(claudePath);
+      if (scriptPath) queryOptions.pathToClaudeCodeExecutable = scriptPath;
+    } else {
+      queryOptions.pathToClaudeCodeExecutable = claudePath;
+    }
+  }
+
+  const capProviderId = params.providerId && params.providerId !== 'env'
+    ? params.providerId
+    : (resolved.provider?.id || 'env');
+  const conversation = query({
+    prompt: 'Warm capability metadata only. Do not execute tools.',
+    options: queryOptions,
+  });
+
+  try {
+    await captureCapabilities(`warm-${Date.now()}`, conversation, capProviderId);
+    return { providerId: capProviderId, warmed: true };
+  } finally {
+    clearTimeout(timeoutId);
+    abortController.abort();
+  }
+}
+
 export function streamClaude(options: ClaudeStreamOptions): ReadableStream<string> {
   const {
     prompt,
