@@ -1,6 +1,6 @@
 import { execFile } from 'child_process';
 import path from 'path';
-import type { GitStatus, GitChangedFile, GitBranch, GitLogEntry, GitCommitDetail, GitWorktree } from '@/types';
+import type { GitStatus, GitChangedFile, GitBranch, GitLogEntry, GitCommitDetail, GitWorktree, GitRemote } from '@/types';
 
 function runGit(args: string[], opts: { cwd: string; timeoutMs?: number }): Promise<string> {
   if (!path.isAbsolute(opts.cwd)) {
@@ -382,4 +382,29 @@ export async function deriveWorktree(cwd: string, branch: string, targetPath: st
   await runGit(['worktree', 'add', '-b', branch, targetPath], { cwd, timeoutMs: 30000 });
 
   return targetPath;
+}
+
+export async function getRemotes(cwd: string): Promise<GitRemote[]> {
+  const output = await runGit(['remote', '-v'], { cwd });
+  const remotes: GitRemote[] = [];
+  const seen = new Set<string>();
+
+  for (const line of output.split('\n')) {
+    if (!line.trim()) continue;
+    // Format: "origin  git@github.com:user/repo.git (fetch)" or "origin  https://github.com/user/repo.git (push)"
+    const match = line.match(/^(\S+)\s+(\S+)\s+\((fetch|push)\)$/);
+    if (match && !seen.has(match[1])) {
+      seen.add(match[1]);
+      remotes.push({
+        name: match[1],
+        url: match[2],
+      });
+    }
+  }
+
+  return remotes;
+}
+
+export async function fetchRemotes(cwd: string): Promise<void> {
+  await runGit(['fetch', '--all'], { cwd, timeoutMs: 60000 });
 }

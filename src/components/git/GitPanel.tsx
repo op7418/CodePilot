@@ -9,6 +9,7 @@ import { GitStatusSection } from "./GitStatusSection";
 import { GitBranchSelector } from "./GitBranchSelector";
 import { GitHistorySection } from "./GitHistorySection";
 import { GitWorktreeSection } from "./GitWorktreeSection";
+import { GitRemoteSection } from "./GitRemoteSection";
 import { GitCommitDetailDialog } from "./GitCommitDetailDialog";
 import { DeriveWorktreeDialog } from "./DeriveWorktreeDialog";
 
@@ -19,6 +20,7 @@ export function GitPanel() {
 
   // Collapsible sections
   const [statusOpen, setStatusOpen] = useState(true);
+  const [remoteOpen, setRemoteOpen] = useState(false);
   const [branchOpen, setBranchOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [worktreeOpen, setWorktreeOpen] = useState(false);
@@ -59,6 +61,15 @@ export function GitPanel() {
         onToggle={() => setStatusOpen(!statusOpen)}
       >
         <GitStatusSection status={status} />
+      </CollapsibleSection>
+
+      {/* Remote section */}
+      <CollapsibleSection
+        title={t('git.remoteSection')}
+        open={remoteOpen}
+        onToggle={() => setRemoteOpen(!remoteOpen)}
+      >
+        <GitRemoteSection cwd={workingDirectory} />
       </CollapsibleSection>
 
       {/* Branch section */}

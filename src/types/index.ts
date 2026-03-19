@@ -1080,3 +1080,8 @@ export interface GitWorktree {
   bare: boolean;
   dirty: boolean;
 }
+
+export interface GitRemote {
+  name: string;
+  url: string;
+}
