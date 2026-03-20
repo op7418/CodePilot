@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
 import os from "os";
+import { getClaudeConfigDir, getClaudePluginsDir, getClaudeSkillsDir as getClaudeGlobalSkillsDir } from "@/lib/cli-config";
 import crypto from "crypto";
 import type { SkillKind } from "@/types";
 
@@ -19,7 +20,7 @@ type InstalledSource = "agents" | "claude";
 type InstalledSkill = SkillFile & { installedSource: InstalledSource; contentHash: string };
 
 function getGlobalCommandsDir(): string {
-  return path.join(os.homedir(), ".claude", "commands");
+  return path.join(getClaudeConfigDir(), "commands");
 }
 
 function getProjectCommandsDir(cwd?: string): string {
@@ -32,7 +33,7 @@ function getProjectSkillsDir(cwd?: string): string {
 
 function getPluginCommandsDirs(): string[] {
   const dirs: string[] = [];
-  const pluginsRoot = path.join(os.homedir(), ".claude", "plugins");
+  const pluginsRoot = getClaudePluginsDir();
 
   // Scan marketplaces: ~/.claude/plugins/marketplaces/{mkt}/plugins/*/commands
   const marketplacesDir = path.join(pluginsRoot, "marketplaces");
@@ -79,7 +80,7 @@ function getInstalledSkillsDir(): string {
 }
 
 function getClaudeSkillsDir(): string {
-  return path.join(os.homedir(), ".claude", "skills");
+  return getClaudeGlobalSkillsDir();
 }
 
 /**
@@ -310,7 +311,7 @@ export async function GET(request: NextRequest) {
 
     console.log(`[skills] Scanning global: ${globalDir} (exists: ${fs.existsSync(globalDir)})`);
     console.log(`[skills] Scanning project: ${projectDir} (exists: ${fs.existsSync(projectDir)})`);
-    console.log(`[skills] HOME=${process.env.HOME}, homedir=${os.homedir()}`);
+    console.log(`[skills] HOME=${process.env.HOME}, configDir=${getClaudeConfigDir()}`);
 
     const globalSkills = scanDirectory(globalDir, "global");
     const projectSkills = scanDirectory(projectDir, "project");

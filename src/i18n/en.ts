@@ -925,6 +925,15 @@ const en = {
   'settings.thinkingEnabled': 'Enabled',
   'settings.thinkingDisabled': 'Disabled',
 
+  // CLI path settings
+  'settings.cliPathTitle': 'Claude CLI Path',
+  'settings.cliPathDesc': 'Custom path to the Claude CLI binary. Leave empty to use the default.',
+  'settings.configDirTitle': 'Claude Config Directory',
+  'settings.configDirDesc': 'Custom path to the Claude config directory (default: ~/.claude).',
+  'settings.pathValid': 'Path is valid',
+  'settings.pathInvalid': 'Path not found',
+  'settings.pathChecking': 'Checking...',
+
   // ── SDK Capabilities: Account ─────────────────────────────
   'settings.accountInfo': 'Account Information',
   'settings.email': 'Email',

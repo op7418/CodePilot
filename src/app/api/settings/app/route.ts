@@ -1,5 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSetting, setSetting } from '@/lib/db';
+import { expandTilde } from '@/lib/cli-config';
+import { clearClaudePathCache } from '@/lib/claude-client';
+import fs from 'fs';
 
 /**
  * CodePilot app-level settings (stored in SQLite, separate from ~/.claude/settings.json).
@@ -9,6 +12,8 @@ import { getSetting, setSetting } from '@/lib/db';
 const ALLOWED_KEYS = [
   'anthropic_auth_token',
   'anthropic_base_url',
+  'claude_cli_path',
+  'claude_config_dir',
   'dangerously_skip_permissions',
   'generative_ui_enabled',
   'locale',
@@ -53,11 +58,35 @@ export async function PUT(request: NextRequest) {
         if (key === 'anthropic_auth_token' && strValue.startsWith('***')) {
           continue;
         }
+        // Validate path settings
+        if (key === 'claude_cli_path') {
+          const expanded = expandTilde(strValue);
+          if (!fs.existsSync(expanded)) {
+            return NextResponse.json(
+              { error: `CLI path not found: ${expanded}` },
+              { status: 400 }
+            );
+          }
+        }
+        if (key === 'claude_config_dir') {
+          const expanded = expandTilde(strValue);
+          if (!fs.existsSync(expanded) || !fs.statSync(expanded).isDirectory()) {
+            return NextResponse.json(
+              { error: `Config directory not found: ${expanded}` },
+              { status: 400 }
+            );
+          }
+        }
         setSetting(key, strValue);
       } else {
         // Empty value = remove the setting
         setSetting(key, '');
       }
+    }
+
+    // Clear cached CLI path when path-related settings change
+    if ('claude_cli_path' in settings || 'claude_config_dir' in settings) {
+      clearClaudePathCache();
     }
 
     return NextResponse.json({ success: true });

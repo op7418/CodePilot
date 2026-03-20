@@ -14,7 +14,7 @@
 
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import * as cliConfig from './cli-config';
 import type { MessageContentBlock } from '@/types';
 
 // ==========================================
@@ -136,7 +136,7 @@ interface ContentBlock {
  * Get the Claude Code projects directory.
  */
 export function getClaudeProjectsDir(): string {
-  return path.join(os.homedir(), '.claude', 'projects');
+  return cliConfig.getClaudeProjectsDir();
 }
 
 /**

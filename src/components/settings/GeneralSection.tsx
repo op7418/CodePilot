@@ -1,7 +1,8 @@
 "use client";
 
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
@@ -128,6 +129,19 @@ export function GeneralSection() {
   const [skipPermSaving, setSkipPermSaving] = useState(false);
   const [generativeUI, setGenerativeUI] = useState(true);
   const [generativeUISaving, setGenerativeUISaving] = useState(false);
+  const [cliPath, setCliPath] = useState("");
+  const [configDir, setConfigDir] = useState("");
+  const [cliPathValidation, setCliPathValidation] = useState<{
+    valid: boolean;
+    resolved?: string;
+  } | null>(null);
+  const [configDirValidation, setConfigDirValidation] = useState<{
+    valid: boolean;
+    resolved?: string;
+  } | null>(null);
+  const [pathSaving, setPathSaving] = useState(false);
+  const cliPathTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const configDirTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const { accountInfo } = useAccountInfo();
   const { t, locale, setLocale } = useTranslation();
 
@@ -140,6 +154,8 @@ export function GeneralSection() {
         setSkipPermissions(appSettings.dangerously_skip_permissions === "true");
         // generative_ui_enabled defaults to true when not set
         setGenerativeUI(appSettings.generative_ui_enabled !== "false");
+        if (appSettings.claude_cli_path) setCliPath(appSettings.claude_cli_path);
+        if (appSettings.claude_config_dir) setConfigDir(appSettings.claude_config_dir);
       }
     } catch {
       // ignore
@@ -149,6 +165,49 @@ export function GeneralSection() {
   useEffect(() => {
     fetchAppSettings();
   }, [fetchAppSettings]);
+
+  const savePathSetting = async (key: string, value: string) => {
+    setPathSaving(true);
+    try {
+      const res = await fetch("/api/settings/app", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ settings: { [key]: value } }),
+      });
+      const data = await res.json();
+      if (res.ok) {
+        if (key === 'claude_cli_path') {
+          setCliPathValidation(value ? { valid: true } : null);
+        } else {
+          setConfigDirValidation(value ? { valid: true } : null);
+        }
+      } else {
+        if (key === 'claude_cli_path') {
+          setCliPathValidation({ valid: false, resolved: data.error });
+        } else {
+          setConfigDirValidation({ valid: false, resolved: data.error });
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setPathSaving(false);
+    }
+  };
+
+  const handleCliPathChange = (value: string) => {
+    setCliPath(value);
+    setCliPathValidation(null);
+    if (cliPathTimer.current) clearTimeout(cliPathTimer.current);
+    cliPathTimer.current = setTimeout(() => savePathSetting('claude_cli_path', value), 800);
+  };
+
+  const handleConfigDirChange = (value: string) => {
+    setConfigDir(value);
+    setConfigDirValidation(null);
+    if (configDirTimer.current) clearTimeout(configDirTimer.current);
+    configDirTimer.current = setTimeout(() => savePathSetting('claude_config_dir', value), 800);
+  };
 
   const handleSkipPermToggle = (checked: boolean) => {
     if (checked) {
@@ -270,6 +329,49 @@ export function GeneralSection() {
           </Button>
         </FieldRow>
 
+        {/* Custom CLI path */}
+        <FieldRow
+          label={t('settings.cliPathTitle' as TranslationKey)}
+          description={t('settings.cliPathDesc' as TranslationKey)}
+          separator
+        >
+          <div className="w-full space-y-1">
+            <Input
+              value={cliPath}
+              onChange={(e) => handleCliPathChange(e.target.value)}
+              placeholder="e.g. ~/.claude-internal/local/claude"
+              className="text-sm"
+              disabled={pathSaving}
+            />
+            {cliPathValidation && (
+              <p className={`text-xs ${cliPathValidation.valid ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {cliPathValidation.valid ? t('settings.pathValid' as TranslationKey) : cliPathValidation.resolved}
+              </p>
+            )}
+          </div>
+        </FieldRow>
+
+        {/* Custom config directory */}
+        <FieldRow
+          label={t('settings.configDirTitle' as TranslationKey)}
+          description={t('settings.configDirDesc' as TranslationKey)}
+          separator
+        >
+          <div className="w-full space-y-1">
+            <Input
+              value={configDir}
+              onChange={(e) => handleConfigDirChange(e.target.value)}
+              placeholder="e.g. ~/.claude-internal"
+              className="text-sm"
+              disabled={pathSaving}
+            />
+            {configDirValidation && (
+              <p className={`text-xs ${configDirValidation.valid ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
+                {configDirValidation.valid ? t('settings.pathValid' as TranslationKey) : configDirValidation.resolved}
+              </p>
+            )}
+          </div>
+        </FieldRow>
       </SettingsCard>
 
       {/* Appearance */}

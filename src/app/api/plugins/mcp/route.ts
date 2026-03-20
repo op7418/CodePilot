@@ -1,22 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import { getClaudeSettingsPath, getClaudeUserConfigPath } from '@/lib/cli-config';
 import type {
   MCPServerConfig,
   MCPConfigResponse,
   ErrorResponse,
   SuccessResponse,
 } from '@/types';
-
-function getSettingsPath(): string {
-  return path.join(os.homedir(), '.claude', 'settings.json');
-}
-
-// ~/.claude.json — Claude CLI stores user-scoped MCP servers here
-function getUserConfigPath(): string {
-  return path.join(os.homedir(), '.claude.json');
-}
 
 function readJsonFile(filePath: string): Record<string, unknown> {
   if (!fs.existsSync(filePath)) return {};
@@ -28,11 +19,11 @@ function readJsonFile(filePath: string): Record<string, unknown> {
 }
 
 function readSettings(): Record<string, unknown> {
-  return readJsonFile(getSettingsPath());
+  return readJsonFile(getClaudeSettingsPath());
 }
 
 function writeSettings(settings: Record<string, unknown>): void {
-  const settingsPath = getSettingsPath();
+  const settingsPath = getClaudeSettingsPath();
   const dir = path.dirname(settingsPath);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
@@ -43,7 +34,7 @@ function writeSettings(settings: Record<string, unknown>): void {
 export async function GET(): Promise<NextResponse<MCPConfigResponse | ErrorResponse>> {
   try {
     const settings = readSettings();
-    const userConfig = readJsonFile(getUserConfigPath());
+    const userConfig = readJsonFile(getClaudeUserConfigPath());
     const settingsServers = (settings.mcpServers || {}) as Record<string, MCPServerConfig>;
     const userConfigServers = (userConfig.mcpServers || {}) as Record<string, MCPServerConfig>;
 
@@ -93,9 +84,9 @@ export async function PUT(
     writeSettings(settings);
 
     // Write ~/.claude.json (only the mcpServers key, preserve other fields)
-    const userConfig = readJsonFile(getUserConfigPath());
+    const userConfigPath = getClaudeUserConfigPath();
+    const userConfig = readJsonFile(userConfigPath);
     userConfig.mcpServers = forUserConfig;
-    const userConfigPath = getUserConfigPath();
     const dir = path.dirname(userConfigPath);
     if (!fs.existsSync(dir)) {
       fs.mkdirSync(dir, { recursive: true });
@@ -129,7 +120,7 @@ export async function POST(
 
     // Check both config files for name collision (merged namespace)
     const settings = readSettings();
-    const userConfig = readJsonFile(getUserConfigPath());
+    const userConfig = readJsonFile(getClaudeUserConfigPath());
     if (!settings.mcpServers) {
       settings.mcpServers = {};
     }

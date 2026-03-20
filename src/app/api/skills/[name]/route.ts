@@ -1,12 +1,12 @@
 import { NextResponse } from "next/server";
 import fs from "fs";
 import path from "path";
-import os from "os";
+import { getClaudeConfigDir, getClaudeSkillsDir as getClaudeGlobalSkillsDir } from "@/lib/cli-config";
 import crypto from "crypto";
 import type { SkillKind } from "@/types";
 
 function getGlobalCommandsDir(): string {
-  return path.join(os.homedir(), ".claude", "commands");
+  return path.join(getClaudeConfigDir(), "commands");
 }
 
 function getProjectCommandsDir(cwd?: string): string {
@@ -18,11 +18,11 @@ function getProjectSkillsDir(cwd?: string): string {
 }
 
 function getInstalledSkillsDir(): string {
-  return path.join(os.homedir(), ".agents", "skills");
+  return path.join(getClaudeConfigDir(), "..", ".agents", "skills");
 }
 
 function getClaudeSkillsDir(): string {
-  return path.join(os.homedir(), ".claude", "skills");
+  return getClaudeGlobalSkillsDir();
 }
 
 type InstalledSource = "agents" | "claude";

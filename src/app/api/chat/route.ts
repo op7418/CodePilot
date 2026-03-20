@@ -10,6 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import type { MCPServerConfig } from '@/types';
+import { getClaudeUserConfigPath, getClaudeSettingsPath } from '@/lib/cli-config';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -21,8 +22,8 @@ function loadMcpServers(): Record<string, MCPServerConfig> | undefined {
       if (!fs.existsSync(p)) return {};
       try { return JSON.parse(fs.readFileSync(p, 'utf-8')); } catch { return {}; }
     };
-    const userConfig = readJson(path.join(os.homedir(), '.claude.json'));
-    const settings = readJson(path.join(os.homedir(), '.claude', 'settings.json'));
+    const userConfig = readJson(getClaudeUserConfigPath());
+    const settings = readJson(getClaudeSettingsPath());
     // Also read project-level .mcp.json
     const projectMcp = readJson(path.join(process.cwd(), '.mcp.json'));
     const merged = {

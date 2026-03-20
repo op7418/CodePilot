@@ -922,6 +922,15 @@ const zh: Record<TranslationKey, string> = {
   'settings.thinkingEnabled': '启用',
   'settings.thinkingDisabled': '禁用',
 
+  // CLI path settings
+  'settings.cliPathTitle': 'Claude CLI 路径',
+  'settings.cliPathDesc': '自定义 Claude CLI 二进制文件路径，留空使用默认值。',
+  'settings.configDirTitle': 'Claude 配置目录',
+  'settings.configDirDesc': '自定义 Claude 配置目录路径（默认：~/.claude）。',
+  'settings.pathValid': '路径有效',
+  'settings.pathInvalid': '路径未找到',
+  'settings.pathChecking': '检查中...',
+
   // ── SDK Capabilities: Account ─────────────────────────────
   'settings.accountInfo': '账户信息',
   'settings.email': '邮箱',

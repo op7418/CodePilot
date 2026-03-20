@@ -1,17 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
-import os from 'os';
+import { getClaudeSettingsPath, getClaudeUserConfigPath } from '@/lib/cli-config';
 import type { MCPServerConfig, ErrorResponse, SuccessResponse } from '@/types';
-
-function getSettingsPath(): string {
-  return path.join(os.homedir(), '.claude', 'settings.json');
-}
-
-// ~/.claude.json — Claude CLI stores user-scoped MCP servers here
-function getUserConfigPath(): string {
-  return path.join(os.homedir(), '.claude.json');
-}
 
 function readJsonFile(filePath: string): Record<string, unknown> {
   if (!fs.existsSync(filePath)) return {};
@@ -41,22 +32,24 @@ export async function DELETE(
     let deleted = false;
 
     // Try deleting from ~/.claude/settings.json
-    const settings = readJsonFile(getSettingsPath());
+    const settingsPath = getClaudeSettingsPath();
+    const settings = readJsonFile(settingsPath);
     const settingsServers = (settings.mcpServers || {}) as Record<string, MCPServerConfig>;
     if (settingsServers[serverName]) {
       delete settingsServers[serverName];
       settings.mcpServers = settingsServers;
-      writeJsonFile(getSettingsPath(), settings);
+      writeJsonFile(settingsPath, settings);
       deleted = true;
     }
 
     // Also try deleting from ~/.claude.json
-    const userConfig = readJsonFile(getUserConfigPath());
+    const userConfigPath = getClaudeUserConfigPath();
+    const userConfig = readJsonFile(userConfigPath);
     const userServers = (userConfig.mcpServers || {}) as Record<string, MCPServerConfig>;
     if (userServers[serverName]) {
       delete userServers[serverName];
       userConfig.mcpServers = userServers;
-      writeJsonFile(getUserConfigPath(), userConfig);
+      writeJsonFile(userConfigPath, userConfig);
       deleted = true;
     }
 

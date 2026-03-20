@@ -21,6 +21,7 @@ import { captureCapabilities, setCachedPlugins } from './agent-sdk-capabilities'
 import { getSetting, updateSdkSessionId, createPermissionRequest } from './db';
 import { resolveForClaudeCode, toClaudeCodeEnv } from './provider-resolver';
 import { findClaudeBinary, findGitBash, getExpandedPath, invalidateClaudePathCache } from './platform';
+import { getCustomCliPath } from './cli-config';
 import { notifyPermissionRequest, notifyGeneric } from './telegram-bot';
 import { classifyError, formatClassifiedError } from './error-classifier';
 import os from 'os';
@@ -91,9 +92,21 @@ let cachedClaudePath: string | null | undefined;
 
 function findClaudePath(): string | undefined {
   if (cachedClaudePath !== undefined) return cachedClaudePath || undefined;
+  // Prefer custom CLI path from app settings
+  const customPath = getCustomCliPath();
+  if (customPath) {
+    cachedClaudePath = customPath;
+    return customPath;
+  }
   const found = findClaudeBinary();
   cachedClaudePath = found ?? null;
   return found;
+}
+
+/** Clear the cached CLI path so the next call to findClaudePath() re-evaluates. */
+export function clearClaudePathCache(): void {
+  cachedClaudePath = undefined;
+  invalidateClaudePathCache();
 }
 
 /**
