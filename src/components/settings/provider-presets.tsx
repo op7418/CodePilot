@@ -278,6 +278,19 @@ export const QUICK_PRESETS: QuickPreset[] = [
     fields: ["api_key"],
     category: "media",
   },
+  {
+    key: "gemini-image-thirdparty",
+    name: "Google Gemini (Third-party API)",
+    description: "Gemini image API via a third-party compatible endpoint",
+    descriptionZh: "通过第三方兼容端点接入 Gemini 图片 API",
+    icon: <Google size={18} />,
+    provider_type: "gemini-image",
+    protocol: "gemini-image",
+    base_url: "",
+    extra_env: '{"GEMINI_API_KEY":""}',
+    fields: ["api_key", "base_url"],
+    category: "media",
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -315,6 +328,12 @@ export function findMatchingPreset(provider: ApiProvider): QuickPreset | undefin
   if (provider.provider_type === "bedrock") return QUICK_PRESETS.find(p => p.key === "bedrock");
   if (provider.provider_type === "vertex") return QUICK_PRESETS.find(p => p.key === "vertex");
   if (provider.provider_type === "openrouter") return QUICK_PRESETS.find(p => p.key === "openrouter");
+  if (provider.provider_type === "gemini-image" && provider.base_url === "https://generativelanguage.googleapis.com/v1beta") {
+    return QUICK_PRESETS.find(p => p.key === "gemini-image");
+  }
+  if (provider.provider_type === "gemini-image" && provider.base_url) {
+    return QUICK_PRESETS.find(p => p.key === "gemini-image-thirdparty");
+  }
   if (provider.provider_type === "gemini-image") return QUICK_PRESETS.find(p => p.key === "gemini-image");
   if (provider.provider_type === "anthropic" && provider.base_url === "https://api.anthropic.com") {
     return QUICK_PRESETS.find(p => p.key === "anthropic-official");

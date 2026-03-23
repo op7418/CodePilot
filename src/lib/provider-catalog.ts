@@ -438,6 +438,26 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     iconKey: 'google',
   },
 
+  // ── Google Gemini (Third-party API) ──
+  {
+    key: 'gemini-image-thirdparty',
+    name: 'Google Gemini (Third-party API)',
+    description: 'Gemini image API via a third-party compatible endpoint',
+    descriptionZh: '通过第三方兼容端点接入 Gemini 图片 API',
+    protocol: 'gemini-image',
+    authStyle: 'api_key',
+    baseUrl: '',
+    defaultEnvOverrides: { GEMINI_API_KEY: '' },
+    defaultModels: [
+      { modelId: 'gemini-3.1-flash-image-preview', displayName: 'Nano Banana 2' },
+      { modelId: 'gemini-3-pro-image-preview', displayName: 'Nano Banana Pro' },
+      { modelId: 'gemini-2.5-flash-image', displayName: 'Nano Banana' },
+    ],
+    fields: ['api_key', 'base_url'],
+    category: 'media',
+    iconKey: 'google',
+  },
+
   // ── Custom API (OpenAI-compatible) ──
   {
     key: 'custom-openai',
@@ -556,7 +576,11 @@ export function findPresetForLegacy(baseUrl: string, providerType: string, proto
   if (providerType === 'bedrock') return VENDOR_PRESETS.find(p => p.key === 'bedrock');
   if (providerType === 'vertex') return VENDOR_PRESETS.find(p => p.key === 'vertex');
   if (providerType === 'openrouter') return VENDOR_PRESETS.find(p => p.key === 'openrouter');
-  if (providerType === 'gemini-image') return VENDOR_PRESETS.find(p => p.key === 'gemini-image');
+  if (providerType === 'gemini-image') {
+    return VENDOR_PRESETS.find(
+      p => p.key === (baseUrl === 'https://generativelanguage.googleapis.com/v1beta' ? 'gemini-image' : 'gemini-image-thirdparty'),
+    );
+  }
   if (providerType === 'anthropic' && baseUrl === 'https://api.anthropic.com') {
     return VENDOR_PRESETS.find(p => p.key === 'anthropic-official');
   }
