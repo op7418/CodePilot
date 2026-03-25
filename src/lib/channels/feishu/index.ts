@@ -11,6 +11,7 @@ import type { FeishuConfig } from './types';
 import { loadFeishuConfig, validateFeishuConfig } from './config';
 import { FeishuGateway } from './gateway';
 import { parseInboundMessage } from './inbound';
+import { getBotInfo } from './identity';
 import { sendMessage, addReaction, removeReaction } from './outbound';
 import { isUserAuthorized } from './policy';
 import { createCardStreamController } from './card-controller';
@@ -23,6 +24,7 @@ export class FeishuChannelPlugin implements ChannelPlugin<FeishuConfig> {
 
   private config: FeishuConfig | null = null;
   private gateway: FeishuGateway | null = null;
+  private botOpenId: string = '';
   private messageQueue: InboundMessage[] = [];
   private waitResolve: ((msg: InboundMessage | null) => void) | null = null;
   /** Track last received messageId per chatId for reaction acknowledgment. */
@@ -64,9 +66,11 @@ export class FeishuChannelPlugin implements ChannelPlugin<FeishuConfig> {
 
     this.gateway = new FeishuGateway(this.config);
 
-    // Register message handler — pushes to internal queue
+    // Register message handler — pushes to internal queue.
+    // Reads this.botOpenId at call time, so mention checks activate
+    // once resolveBotIdentity() completes after gateway.start().
     this.gateway.registerMessageHandler((data: unknown) => {
-      const msg = parseInboundMessage(data, this.config!);
+      const msg = parseInboundMessage(data, this.config!, this.botOpenId);
       if (!msg) return;
       this.enqueueMessage(msg);
     });
@@ -148,6 +152,29 @@ export class FeishuChannelPlugin implements ChannelPlugin<FeishuConfig> {
     });
 
     await this.gateway.start();
+
+    // Resolve bot identity so mention checks work.
+    // Handler reads this.botOpenId dynamically — once resolved, all
+    // subsequent messages get proper mention filtering.
+    await this.resolveBotIdentity();
+  }
+
+  /** Fetch bot open_id with retry so mention features degrade gracefully. */
+  private async resolveBotIdentity(maxRetries = 3): Promise<void> {
+    const client = this.gateway?.getRestClient();
+    if (!client) return;
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      const info = await getBotInfo(client);
+      if (info?.openId) {
+        this.botOpenId = info.openId;
+        return;
+      }
+      console.warn('[feishu/plugin]', `Bot identity attempt ${attempt}/${maxRetries} failed`);
+      if (attempt < maxRetries) {
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+      }
+    }
+    console.error('[feishu/plugin]', 'Could not resolve bot identity — mention features disabled');
   }
 
   async stop(): Promise<void> {
