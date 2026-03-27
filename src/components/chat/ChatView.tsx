@@ -436,6 +436,8 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         effort={selectedEffort}
         onEffortChange={setSelectedEffort}
         sdkInitMeta={initMetaRef.current}
+        mode={mode}
+        onModeChange={handleModeChange}
       />
       <ChatComposerActionBar
         left={<><ModeIndicator mode={mode} onModeChange={handleModeChange} disabled={isStreaming} /><ImageGenToggle /></>}

@@ -18,6 +18,7 @@ import { SlashCommandPopover } from './SlashCommandPopover';
 import { CliToolsPopover } from './CliToolsPopover';
 import { ModelSelectorDropdown } from './ModelSelectorDropdown';
 import { EffortSelectorDropdown } from './EffortSelectorDropdown';
+import { ModeSelectorDropdown } from './ModeSelectorDropdown';
 import { FileAwareSubmitButton, AttachFileButton, FileTreeAttachmentBridge, FileAttachmentsCapsules, CommandBadge, CliBadge } from './MessageInputParts';
 import {
   Tooltip,
@@ -53,6 +54,9 @@ interface MessageInputProps {
   onEffortChange?: (effort: string | undefined) => void;
   /** SDK init metadata — when available, used to validate command/skill availability */
   sdkInitMeta?: { tools?: unknown; slash_commands?: unknown; skills?: unknown } | null;
+  /** Current chat mode (code / plan) */
+  mode?: string;
+  onModeChange?: (mode: string) => void;
 }
 
 export function MessageInput({
@@ -71,6 +75,8 @@ export function MessageInput({
   effort: effortProp,
   onEffortChange,
   sdkInitMeta,
+  mode,
+  onModeChange,
 }: MessageInputProps) {
   const { t, locale } = useTranslation();
   const imageGen = useImageGen();
@@ -421,6 +427,14 @@ export function MessageInput({
                     {t('cliTools.selectTool' as TranslationKey)}
                   </TooltipContent>
                 </Tooltip>
+
+                {/* Mode selector (Code / Plan) */}
+                {mode && onModeChange && (
+                  <ModeSelectorDropdown
+                    currentMode={mode}
+                    onModeChange={onModeChange}
+                  />
+                )}
 
                 {/* Model selector */}
                 <ModelSelectorDropdown
