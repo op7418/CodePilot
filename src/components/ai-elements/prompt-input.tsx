@@ -678,7 +678,7 @@ export const PromptInput = ({
         }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- cleanup only on unmount; filesRef always current
+     
     [usingProvider]
   );
 
@@ -920,7 +920,12 @@ export const PromptInputTextarea = ({
     [attachments]
   );
 
-  const handleCompositionEnd = useCallback(() => setIsComposing(false), []);
+  const handleCompositionEnd = useCallback(() => {
+    // Delay resetting isComposing so that the Enter keydown fired
+    // right after compositionend (macOS Chinese IME confirming
+    // English text) is still suppressed.
+    setTimeout(() => setIsComposing(false), 0);
+  }, []);
   const handleCompositionStart = useCallback(() => setIsComposing(true), []);
 
   const controlledProps = controller
