@@ -176,7 +176,14 @@ const ERROR_PATTERNS: ErrorPattern[] = [
   // ── CLI version too old ──
   {
     category: 'CLI_VERSION_TOO_OLD',
-    patterns: ['version', 'upgrade required', 'minimum version'],
+    patterns: [
+      'upgrade required',
+      'minimum supported version',
+      'minimum claude code version',
+      'requires a newer claude code cli',
+      /claude code cli .*too old/i,
+      /minimum version .*claude/i,
+    ],
     userMessage: () => 'Your Claude Code CLI version is too old.',
     actionHint: () => 'Update to the latest version: npm update -g @anthropic-ai/claude-code',
     retryable: false,
