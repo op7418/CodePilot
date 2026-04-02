@@ -36,6 +36,9 @@ import { useSlashCommands } from '@/hooks/useSlashCommands';
 import { resolveKeyAction, cycleIndex, resolveDirectSlash, dispatchBadge, buildCliAppend } from '@/lib/message-input-logic';
 import { QuickActions } from './QuickActions';
 
+/** Module-level cache: stores unsent draft text per sessionId so it survives component remounts. */
+const draftCache = new Map<string, string>();
+
 interface MessageInputProps {
   onSend: (content: string, files?: FileAttachment[], systemPromptAppend?: string, displayOverride?: string) => void;
   onCommand?: (command: string) => void;
@@ -87,9 +90,21 @@ export function MessageInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const cliSearchRef = useRef<HTMLInputElement>(null);
-  // key={initialValue} on the parent would be the canonical React way to reset,
-  // but since this component remounts on navigation, useState(initialValue) is sufficient.
-  const [inputValue, setInputValue] = useState(initialValue || '');
+  // Restore cached draft for this session (survives session switching).
+  const [inputValue, setInputValue] = useState(
+    () => (sessionId && draftCache.get(sessionId)) || initialValue || '',
+  );
+
+  // Sync draft text to module-level cache so it persists across session switches.
+  useEffect(() => {
+    if (sessionId) {
+      if (inputValue) {
+        draftCache.set(sessionId, inputValue);
+      } else {
+        draftCache.delete(sessionId);
+      }
+    }
+  }, [sessionId, inputValue]);
 
   // --- Extracted hooks ---
   const popover = usePopoverState(modelName);
