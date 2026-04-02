@@ -68,6 +68,7 @@ const en = {
   'streaming.allowForSession': 'Allow for Session',
   'streaming.allowed': 'Allowed',
   'streaming.denied': 'Denied',
+  'streaming.connectionDrop': 'Connection lost — the server stream ended unexpectedly. Claude may still be running in the background. Please try sending your message again.',
 
   // ── Chat view / session page ────────────────────────────────
   'chat.newConversation': 'New Conversation',

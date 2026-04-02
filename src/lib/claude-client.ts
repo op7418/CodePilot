@@ -398,6 +398,8 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
     generativeUI,
   } = options;
 
+  let heartbeatTimer: ReturnType<typeof setInterval> | null = null;
+
   return new ReadableStream<string>({
     async start(controller) {
       // Resolve provider via the unified resolver. The caller may pass an explicit
@@ -968,6 +970,22 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
         let tokenUsage: TokenUsage | null = null;
         // Track pending TodoWrite tool_use_ids so we can sync after successful execution
         const pendingTodoWrites = new Map<string, Array<{ content: string; status: string; activeForm?: string }>>();
+
+        // Server-side heartbeat: send keep_alive every 30s to prevent
+        // transport-level idle connection drops (Electron, OS TCP, proxies).
+        // This is independent of the SDK's own keep_alive messages.
+        heartbeatTimer = setInterval(() => {
+          try {
+            controller.enqueue(formatSSE({ type: 'keep_alive', data: '' }));
+          } catch {
+            // Controller may be closed — stop heartbeat
+            if (heartbeatTimer) {
+              clearInterval(heartbeatTimer);
+              heartbeatTimer = null;
+            }
+          }
+        }, 30_000);
+
         for await (const message of conversation) {
           if (abortController?.signal.aborted) {
             break;
@@ -1260,9 +1278,11 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           }
         }
 
+        if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
         controller.enqueue(formatSSE({ type: 'done', data: '' }));
         controller.close();
       } catch (error) {
+        if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
         const rawMessage = error instanceof Error ? error.message : 'Unknown error';
         // Log full error details for debugging (visible in terminal / dev tools)
         const stderrContent = error instanceof Error ? (error as { stderr?: string }).stderr : undefined;
@@ -1325,6 +1345,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
     },
 
     cancel() {
+      if (heartbeatTimer) { clearInterval(heartbeatTimer); heartbeatTimer = null; }
       abortController?.abort();
     },
   });

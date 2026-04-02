@@ -65,6 +65,7 @@ const zh: Record<TranslationKey, string> = {
   'streaming.allowForSession': '本次会话允许',
   'streaming.allowed': '已允许',
   'streaming.denied': '已拒绝',
+  'streaming.connectionDrop': '连接中断 — 服务器流意外结束。Claude 可能仍在后台运行，请尝试重新发送消息。',
 
   // ── Chat view / session page ────────────────────────────────
   'chat.newConversation': '新对话',
