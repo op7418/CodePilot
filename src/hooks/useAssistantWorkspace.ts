@@ -11,7 +11,10 @@ interface FileStatus {
 
 interface WorkspaceState {
   onboardingComplete: boolean;
-  lastCheckInDate: string | null;
+  lastHeartbeatDate: string | null;
+  /** @deprecated Use lastHeartbeatDate instead */
+  lastCheckInDate?: string | null;
+  heartbeatEnabled: boolean;
   schemaVersion: number;
 }
 
@@ -78,7 +81,7 @@ export function useAssistantWorkspace() {
   const today = getLocalDateString();
   const needsCheckIn = workspace?.path != null
     && workspace.state != null
-    && workspace.state.lastCheckInDate !== today;
+    && workspace.state.lastHeartbeatDate !== today;
 
   return {
     workspacePath: workspace?.path ?? null,

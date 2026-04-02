@@ -28,7 +28,7 @@ interface ProviderModelGroup {
   models: Array<{ value: string; label: string }>;
 }
 
-type AutoDescCache = Record<string, { zh: string; en: string }>;
+type AutoDescCache = Record<string, { zh: string; en: string; structured?: unknown }>;
 
 interface CliToolBatchDescribeDialogProps {
   open: boolean;

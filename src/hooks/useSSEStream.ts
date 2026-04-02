@@ -1,5 +1,5 @@
 import { useRef, useCallback } from 'react';
-import type { SSEEvent, TokenUsage, PermissionRequestEvent } from '@/types';
+import type { SSEEvent, TokenUsage, PermissionRequestEvent, MediaBlock } from '@/types';
 
 interface ToolUseInfo {
   id: string;
@@ -10,6 +10,7 @@ interface ToolUseInfo {
 interface ToolResultInfo {
   tool_use_id: string;
   content: string;
+  media?: MediaBlock[];
 }
 
 export interface SSECallbacks {
@@ -73,6 +74,9 @@ function handleSSEEvent(
         callbacks.onToolResult({
           tool_use_id: resultData.tool_use_id,
           content: resultData.content,
+          ...(Array.isArray(resultData.media) && resultData.media.length > 0
+            ? { media: resultData.media }
+            : {}),
         });
       } catch {
         // skip malformed tool_result data

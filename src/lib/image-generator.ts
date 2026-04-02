@@ -18,11 +18,15 @@ export interface GenerateSingleImageParams {
   referenceImagePaths?: string[];
   sessionId?: string;
   abortSignal?: AbortSignal;
+  /** When true, skip disk write / project copy / DB insert — caller (MCP pipeline) handles persistence */
+  skipSave?: boolean;
+  /** Working directory for resolving relative referenceImagePaths */
+  cwd?: string;
 }
 
 export interface GenerateSingleImageResult {
   mediaGenerationId: string;
-  images: Array<{ mimeType: string; localPath: string }>;
+  images: Array<{ mimeType: string; localPath: string; rawData?: Buffer }>;
   elapsedMs: number;
 }
 
@@ -81,9 +85,11 @@ export async function generateSingleImage(params: GenerateSingleImageParams): Pr
   // Combine both base64 data and file paths — both can be provided simultaneously
   const refImageData: string[] = [];
   if (params.referenceImagePaths && params.referenceImagePaths.length > 0) {
-    for (const filePath of params.referenceImagePaths) {
-      if (fs.existsSync(filePath)) {
-        const buf = fs.readFileSync(filePath);
+    for (const fp of params.referenceImagePaths) {
+      // Resolve relative paths against session working directory
+      const resolved = path.isAbsolute(fp) ? fp : path.resolve(params.cwd || process.cwd(), fp);
+      if (fs.existsSync(resolved)) {
+        const buf = fs.readFileSync(resolved);
         refImageData.push(buf.toString('base64'));
       }
     }
@@ -109,6 +115,17 @@ export async function generateSingleImage(params: GenerateSingleImageParams): Pr
 
   const elapsed = Date.now() - startTime;
   console.log(`[image-generator] ${requestedModel} ${imageSize} completed in ${elapsed}ms`);
+
+  // skipSave mode: return raw image data without writing to disk or DB.
+  // The MCP media pipeline (collectStreamResponse → saveMediaToLibrary) handles persistence.
+  if (params.skipSave) {
+    const rawImages = images.map(img => ({
+      mimeType: img.mediaType,
+      localPath: '',
+      rawData: Buffer.from(img.uint8Array),
+    }));
+    return { mediaGenerationId: '', images: rawImages, elapsedMs: elapsed };
+  }
 
   // Ensure media directory exists
   if (!fs.existsSync(MEDIA_DIR)) {

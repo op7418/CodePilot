@@ -13,7 +13,7 @@ import type {
   McpHttpServerConfig,
   McpServerConfig,
 } from '@anthropic-ai/claude-agent-sdk';
-import type { ClaudeStreamOptions, SSEEvent, TokenUsage, MCPServerConfig, PermissionRequestEvent, FileAttachment } from '@/types';
+import type { ClaudeStreamOptions, SSEEvent, TokenUsage, MCPServerConfig, PermissionRequestEvent, FileAttachment, MediaBlock } from '@/types';
 import { isImageFile } from '@/types';
 import { registerPendingPermission } from './permission-registry';
 import { registerConversation, unregisterConversation } from './conversation-registry';
@@ -521,6 +521,35 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
           queryOptions.mcpServers = toSdkMcpConfig(mcpServers);
         }
 
+        // Memory MCP: always registered in assistant mode for memory search/retrieval.
+        // Unlike other MCPs which are keyword-gated, memory search is a core assistant capability.
+        {
+          const assistantWorkspacePath = getSetting('assistant_workspace_path');
+          if (assistantWorkspacePath && resolvedWorkingDirectory.path === assistantWorkspacePath) {
+            const { createMemorySearchMcpServer, MEMORY_SEARCH_SYSTEM_PROMPT } = await import('@/lib/memory-search-mcp');
+            queryOptions.mcpServers = {
+              ...(queryOptions.mcpServers || {}),
+              'codepilot-memory': createMemorySearchMcpServer(assistantWorkspacePath),
+            };
+            if (queryOptions.systemPrompt && typeof queryOptions.systemPrompt === 'object' && 'append' in queryOptions.systemPrompt) {
+              queryOptions.systemPrompt.append = (queryOptions.systemPrompt.append || '') + '\n\n' + MEMORY_SEARCH_SYSTEM_PROMPT;
+            }
+          }
+        }
+
+        // Notification + Schedule MCP: globally available in all contexts
+        {
+          const { createNotificationMcpServer, NOTIFICATION_MCP_SYSTEM_PROMPT } =
+            await import('@/lib/notification-mcp');
+          queryOptions.mcpServers = {
+            ...(queryOptions.mcpServers || {}),
+            'codepilot-notify': createNotificationMcpServer(),
+          };
+          if (queryOptions.systemPrompt && typeof queryOptions.systemPrompt === 'object' && 'append' in queryOptions.systemPrompt) {
+            queryOptions.systemPrompt.append = (queryOptions.systemPrompt.append || '') + '\n\n' + NOTIFICATION_MCP_SYSTEM_PROMPT;
+          }
+        }
+
         // Widget guidelines: progressive loading strategy.
         // The system prompt always includes WIDGET_SYSTEM_PROMPT with format rules.
         // The MCP server (detailed design specs) is only registered when the
@@ -546,6 +575,74 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
               ...(queryOptions.mcpServers || {}),
               'codepilot-widget': widgetServer,
             };
+          }
+        }
+
+        // Media MCP: import + generation tools (keyword-gated).
+        // Registered when the conversation involves media/image generation tasks
+        // in CODE mode. Design Agent mode uses the old image-gen-request flow
+        // and does NOT need these MCP tools.
+        const needsMediaMcp = (() => {
+          if (imageAgentMode) return false; // Design Agent uses its own flow
+          const mediaKeywords = /生成图片|画一|图像|图片|素材|保存.*素材|import.*library|save.*library|codepilot_import_media|codepilot_generate_image/i;
+          if (mediaKeywords.test(prompt)) return true;
+          if (conversationHistory?.some(m =>
+            mediaKeywords.test(m.content)
+          )) return true;
+          return false;
+        })();
+
+        if (needsMediaMcp) {
+          const { createMediaImportMcpServer, MEDIA_MCP_SYSTEM_PROMPT } = await import('@/lib/media-import-mcp');
+          const { createImageGenMcpServer } = await import('@/lib/image-gen-mcp');
+          queryOptions.mcpServers = {
+            ...(queryOptions.mcpServers || {}),
+            'codepilot-media': createMediaImportMcpServer(sessionId, resolvedWorkingDirectory.path),
+            'codepilot-image-gen': createImageGenMcpServer(sessionId, resolvedWorkingDirectory.path),
+          };
+          // Inject media capability hint into system prompt
+          if (queryOptions.systemPrompt && typeof queryOptions.systemPrompt === 'object' && 'append' in queryOptions.systemPrompt) {
+            queryOptions.systemPrompt.append = (queryOptions.systemPrompt.append || '') + '\n\n' + MEDIA_MCP_SYSTEM_PROMPT;
+          }
+        }
+
+        // CLI tools MCP: tool management capabilities (keyword-gated).
+        // Wide regex to cover natural phrasing like "帮我装 jq", "install uv",
+        // "brew install", "pip install", "npm install -g", etc.
+        const needsCliToolsMcp = (() => {
+          const cliKeywords = /CLI\s*工具|cli.tool|安装.*工具|卸载.*工具|添加.*工具|更新.*工具|升级.*工具|入库.*工具|工具.*入库|加入.*工具库|添加到.*库|工具库|tool\s*library|codepilot_cli_tools|帮我装|帮我安装|帮我更新|帮我升级|\binstall\s+[@\w./-]+|\buninstall\s+[@\w./-]+|\bupdate\s+[@\w./-]+|\bupgrade\s+[@\w./-]+|brew\s+install|brew\s+upgrade|pip\s+install|pipx\s+install|npm\s+install\s+-g|npm\s+update\s+-g|cargo\s+install|apt\s+install|apt-get\s+install/i;
+          if (cliKeywords.test(prompt)) return true;
+          if (conversationHistory?.some(m => cliKeywords.test(m.content))) return true;
+          return false;
+        })();
+
+        if (needsCliToolsMcp) {
+          const { createCliToolsMcpServer, CLI_TOOLS_MCP_SYSTEM_PROMPT } = await import('@/lib/cli-tools-mcp');
+          queryOptions.mcpServers = {
+            ...(queryOptions.mcpServers || {}),
+            'codepilot-cli-tools': createCliToolsMcpServer(),
+          };
+          if (queryOptions.systemPrompt && typeof queryOptions.systemPrompt === 'object' && 'append' in queryOptions.systemPrompt) {
+            queryOptions.systemPrompt.append = (queryOptions.systemPrompt.append || '') + '\n\n' + CLI_TOOLS_MCP_SYSTEM_PROMPT;
+          }
+        }
+
+        // Dashboard MCP: widget management capabilities (keyword-gated).
+        const needsDashboardMcp = (() => {
+          const dashboardKeywords = /dashboard|仪表盘|看板|pin.*widget|pinned.*widget|refresh.*widget|固定.*组件|刷新.*组件|codepilot_dashboard/i;
+          if (dashboardKeywords.test(prompt)) return true;
+          if (conversationHistory?.some(m => dashboardKeywords.test(m.content))) return true;
+          return false;
+        })();
+
+        if (needsDashboardMcp) {
+          const { createDashboardMcpServer, DASHBOARD_MCP_SYSTEM_PROMPT } = await import('@/lib/dashboard-mcp');
+          queryOptions.mcpServers = {
+            ...(queryOptions.mcpServers || {}),
+            'codepilot-dashboard': createDashboardMcpServer(sessionId, resolvedWorkingDirectory.path),
+          };
+          if (queryOptions.systemPrompt && typeof queryOptions.systemPrompt === 'object' && 'append' in queryOptions.systemPrompt) {
+            queryOptions.systemPrompt.append = (queryOptions.systemPrompt.append || '') + '\n\n' + DASHBOARD_MCP_SYSTEM_PROMPT;
           }
         }
 
@@ -619,6 +716,30 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
 
         // Permission handler: sends SSE event and waits for user response
         queryOptions.canUseTool = async (toolName, input, opts) => {
+          // Auto-approve CodePilot's own in-process MCP tools — they are internal
+          // and the user has already opted in by enabling the relevant mode.
+          // Auto-approve CodePilot's own in-process MCP tools — they are internal
+          // and the user has already opted in by enabling the relevant mode.
+          // Note: SDK prefixes MCP tool names with mcp__<server>__, so we check
+          // both bare and prefixed names.
+          const autoApprovedTools = [
+            'codepilot_generate_image',
+            'codepilot_import_media',
+            'codepilot_load_widget_guidelines',
+            'codepilot_cli_tools_list',
+            'codepilot_cli_tools_add',
+            'codepilot_cli_tools_remove',
+            'codepilot_cli_tools_check_updates',
+            'codepilot_dashboard_pin',
+            'codepilot_dashboard_list',
+            'codepilot_dashboard_refresh',
+            'codepilot_dashboard_update',
+            'codepilot_dashboard_remove',
+          ];
+          if (autoApprovedTools.some(t => toolName === t || toolName.endsWith(`__${t}`))) {
+            return { behavior: 'allow' as const, updatedInput: input };
+          }
+
           const permissionRequestId = `perm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
           const permEvent: PermissionRequestEvent = {
@@ -654,8 +775,10 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
             data: JSON.stringify(permEvent),
           }));
 
-          // Notify via Telegram (fire-and-forget)
-          notifyPermissionRequest(toolName, input as Record<string, unknown>, telegramOpts).catch(() => {});
+          // Notify via Telegram (fire-and-forget) — skip for auto-trigger turns
+          if (!autoTrigger) {
+            notifyPermissionRequest(toolName, input as Record<string, unknown>, telegramOpts).catch(() => {});
+          }
 
           // Notify runtime status change
           onRuntimeStatusChange?.('waiting_permission');
@@ -900,7 +1023,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
               if (Array.isArray(content)) {
                 for (const block of content) {
                   if (block.type === 'tool_result') {
-                    const resultContent = typeof block.content === 'string'
+                    let resultContent = typeof block.content === 'string'
                       ? block.content
                       : Array.isArray(block.content)
                         ? block.content
@@ -908,13 +1031,58 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                             .map((c: { text?: string }) => c.text)
                             .join('\n')
                         : String(block.content ?? '');
+
+                    // Extract media blocks (image/audio) from MCP tool results.
+                    // Two sources:
+                    // 1. SDK content array: image/audio blocks with base64 data (external MCP servers)
+                    // 2. MEDIA_RESULT_MARKER in text: localPath-based media from in-process MCP tools
+                    //    (SDK strips image blocks from in-process tool results, so we use a text marker)
+                    const mediaBlocks: MediaBlock[] = [];
+                    if (Array.isArray(block.content)) {
+                      for (const c of block.content) {
+                        const cb = c as { type: string; data?: string; mimeType?: string; media_type?: string };
+                        if ((cb.type === 'image' || cb.type === 'audio') && cb.data) {
+                          mediaBlocks.push({
+                            type: cb.type === 'audio' ? 'audio' : 'image',
+                            data: cb.data,
+                            mimeType: cb.mimeType || cb.media_type || (cb.type === 'image' ? 'image/png' : 'audio/wav'),
+                          });
+                        }
+                      }
+                    }
+                    // Detect MEDIA_RESULT_MARKER in text result (from codepilot-image-gen MCP)
+                    const MEDIA_MARKER = '__MEDIA_RESULT__';
+                    const markerIdx = resultContent.indexOf(MEDIA_MARKER);
+                    if (markerIdx >= 0) {
+                      try {
+                        const mediaJson = resultContent.slice(markerIdx + MEDIA_MARKER.length).trim();
+                        const parsed = JSON.parse(mediaJson) as Array<{ type: string; mimeType: string; localPath: string; mediaId?: string }>;
+                        for (const m of parsed) {
+                          mediaBlocks.push({
+                            type: (m.type as MediaBlock['type']) || 'image',
+                            mimeType: m.mimeType,
+                            localPath: m.localPath,
+                            mediaId: m.mediaId,
+                          });
+                        }
+                      } catch {
+                        // Malformed marker payload — ignore
+                      }
+                      // Strip marker from content so it's not shown in the UI
+                      resultContent = resultContent.slice(0, markerIdx).trim();
+                    }
+
+                    const ssePayload: Record<string, unknown> = {
+                      tool_use_id: block.tool_use_id,
+                      content: resultContent,
+                      is_error: block.is_error || false,
+                    };
+                    if (mediaBlocks.length > 0) {
+                      ssePayload.media = mediaBlocks;
+                    }
                     controller.enqueue(formatSSE({
                       type: 'tool_result',
-                      data: JSON.stringify({
-                        tool_use_id: block.tool_use_id,
-                        content: resultContent,
-                        is_error: block.is_error || false,
-                      }),
+                      data: JSON.stringify(ssePayload),
                     }));
 
                     // Deferred TodoWrite sync: only emit task_update after successful execution
@@ -1020,7 +1188,9 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                       message: taskMsg.summary || '',
                     }),
                   }));
-                  notifyGeneric(title, taskMsg.summary || '', telegramOpts).catch(() => {});
+                  if (!autoTrigger) {
+                    notifyGeneric(title, taskMsg.summary || '', telegramOpts).catch(() => {});
+                  }
                 }
               }
               break;
@@ -1073,7 +1243,10 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
                   type: 'status',
                   data: JSON.stringify({ notification: true, title: errTitle, message: errMsg }),
                 }));
-                notifyGeneric(errTitle, errMsg, telegramOpts).catch(() => {});
+                // Skip Telegram for auto-trigger turns (onboarding/heartbeat)
+                if (!autoTrigger) {
+                  notifyGeneric(errTitle, errMsg, telegramOpts).catch(() => {});
+                }
               }
               break;
             }

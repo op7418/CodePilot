@@ -2,12 +2,13 @@ import fs from 'fs';
 import path from 'path';
 import type { AssistantWorkspaceState, AssistantWorkspaceFiles, AssistantWorkspaceFilesV2, SearchResult } from '@/types';
 import { getLocalDateString } from '@/lib/utils';
+import { HEARTBEAT_TEMPLATE, isWithinActiveHours } from './heartbeat';
 
 const DEFAULT_STATE: AssistantWorkspaceState = {
   onboardingComplete: false,
-  lastCheckInDate: null,
-  schemaVersion: 4,
-  dailyCheckInEnabled: false,
+  lastHeartbeatDate: null,
+  heartbeatEnabled: false,
+  schemaVersion: 5,
 };
 
 const STATE_DIR = '.assistant';
@@ -24,7 +25,7 @@ const FILE_MAP: Record<keyof AssistantWorkspaceFiles, string[]> = {
 
 // Templates for initialization
 const FILE_TEMPLATES: Record<keyof AssistantWorkspaceFiles, string> = {
-  claude: '# Rules\n\n<!-- Assistant execution rules go here -->\n',
+  claude: '# Rules\n\n## Time Awareness\n任何涉及时间的场景，先用 date 命令确认当前时间，不要凭记忆猜测。\n\n## Memory Rules\n- 用户说"记一下"或"记住"：保留原文存笔记，不添加 TODO，不"发挥"，不改写\n- 重要决策和稳定偏好 → 写入 memory.md（追加，不覆写）\n- 日常工作记录 → 写入 memory/daily/{日期}.md\n- 修改 soul.md / user.md / claude.md → 必须告知用户\n\n## Document Organization\n- 双向链接：使用 [[文件名]] 创建文档之间的链接\n- 反向链接：追踪哪些文档引用了当前文档\n- 标签系统：使用 #标签 进行分类和检索\n- 属性标记：在文档顶部使用 YAML frontmatter 添加元数据\n- 少用文件夹层级，多用标签和链接做组织\n\n## Writing Constraints\n- 不使用空泛修饰词（核心能力、关键、彰显、赋能、驱动…）\n- 不使用"不是...而是..."对比句式，除非用户要求\n- 输出内容以实用为主，不添加不必要的修饰\n\n## Safety\n- 修改身份文件（soul/user/claude.md）后必须通知用户具体改了什么\n- memory.md 只追加，不覆写已有内容\n- 不在记忆文件中存储密码、API key 等敏感信息\n',
   soul: '# Soul\n\n<!-- Assistant personality and style go here -->\n',
   user: '# User Profile\n\n<!-- User preferences and information go here -->\n',
   memory: '# Memory\n\n<!-- Long-term facts and notes go here -->\n',
@@ -183,6 +184,45 @@ export function migrateStateV3ToV4(dir: string): void {
   saveState(dir, state);
 }
 
+/**
+ * v4→v5 migration: rename check-in fields to heartbeat fields.
+ * lastCheckInDate → lastHeartbeatDate, dailyCheckInEnabled → heartbeatEnabled.
+ */
+function migrateStateV4ToV5(dir: string): void {
+  let state: AssistantWorkspaceState;
+  try {
+    const statePath = path.join(dir, STATE_DIR, STATE_FILE);
+    const fileContent = fs.readFileSync(statePath, 'utf-8');
+    state = JSON.parse(fileContent) as AssistantWorkspaceState;
+  } catch {
+    return;
+  }
+
+  if (state.schemaVersion >= 5) return;
+
+  // Work with raw parsed object to safely rename fields across schema versions
+  const raw = state as unknown as Record<string, unknown>;
+
+  // Rename lastCheckInDate → lastHeartbeatDate
+  if ('lastCheckInDate' in raw && !('lastHeartbeatDate' in raw)) {
+    raw.lastHeartbeatDate = raw.lastCheckInDate ?? null;
+  }
+  if (!('lastHeartbeatDate' in raw)) {
+    raw.lastHeartbeatDate = null;
+  }
+
+  // Rename dailyCheckInEnabled → heartbeatEnabled
+  if ('dailyCheckInEnabled' in raw && !('heartbeatEnabled' in raw)) {
+    raw.heartbeatEnabled = raw.dailyCheckInEnabled ?? false;
+  }
+  if (!('heartbeatEnabled' in raw)) {
+    raw.heartbeatEnabled = false;
+  }
+
+  state.schemaVersion = 5;
+  saveState(dir, state);
+}
+
 // ==========================================
 // Root Docs
 // ==========================================
@@ -331,6 +371,13 @@ export function initializeWorkspace(dir: string): string[] {
     fs.mkdirSync(inboxDir, { recursive: true });
   }
 
+  // Create HEARTBEAT.md if not exists (V3)
+  const heartbeatPath = path.join(dir, 'HEARTBEAT.md');
+  if (!fs.existsSync(heartbeatPath)) {
+    fs.writeFileSync(heartbeatPath, HEARTBEAT_TEMPLATE, 'utf-8');
+    created.push(heartbeatPath);
+  }
+
   // State file
   const statePath = path.join(stateDir, STATE_FILE);
   if (!fs.existsSync(statePath)) {
@@ -340,6 +387,7 @@ export function initializeWorkspace(dir: string): string[] {
     migrateStateV1ToV2(dir);
     migrateStateV2ToV3(dir);
     migrateStateV3ToV4(dir);
+    migrateStateV4ToV5(dir);
   }
 
   // For existing directories, generate root docs and infer taxonomy
@@ -412,6 +460,12 @@ export function loadWorkspaceFiles(dir: string): AssistantWorkspaceFilesV2 {
     );
   }
 
+  // Load HEARTBEAT.md
+  const heartbeatPath = path.join(dir, 'HEARTBEAT.md');
+  if (fs.existsSync(heartbeatPath)) {
+    result.heartbeatMd = fs.readFileSync(heartbeatPath, 'utf-8');
+  }
+
   result.rootDir = dir;
 
   return result;
@@ -431,7 +485,10 @@ interface PromptSection {
 export function assembleWorkspacePrompt(files: AssistantWorkspaceFilesV2, retrievalResults?: SearchResult[]): string {
   const sections: PromptSection[] = [];
 
-  // Priority 1: Identity (claude + soul + user) — never drop claude
+  // Identity layer only (claude + soul + user) — never drop claude
+  // Memory, daily memories, root docs, and retrieval results are now
+  // accessed via codepilot_memory_search / codepilot_memory_get MCP tools
+  // instead of being stuffed into the system prompt.
   if (files.claude) {
     sections.push({ tag: 'claude', content: files.claude, priority: 1, maxSize: PER_FILE_LIMIT });
   }
@@ -440,45 +497,6 @@ export function assembleWorkspacePrompt(files: AssistantWorkspaceFilesV2, retrie
   }
   if (files.user) {
     sections.push({ tag: 'user', content: files.user, priority: 1, maxSize: PER_FILE_LIMIT });
-  }
-
-  // Priority 2: Long-term memory
-  if (files.memory) {
-    sections.push({ tag: 'memory', content: files.memory, priority: 2, maxSize: PER_FILE_LIMIT });
-  }
-
-  // Priority 3: Daily memories
-  if (files.dailyMemories && files.dailyMemories.length > 0) {
-    for (let i = 0; i < files.dailyMemories.length; i++) {
-      sections.push({
-        tag: `daily-memory-${i}`,
-        content: files.dailyMemories[i],
-        priority: 3,
-        maxSize: DAILY_MEMORY_LIMIT,
-      });
-    }
-  }
-
-  // Priority 4: Root docs
-  if (files.rootReadme) {
-    sections.push({ tag: 'workspace-readme', content: files.rootReadme, priority: 4, maxSize: ROOT_DOC_LIMIT });
-  }
-  if (files.rootPath) {
-    sections.push({ tag: 'workspace-path', content: files.rootPath, priority: 4, maxSize: ROOT_DOC_LIMIT });
-  }
-
-  // Priority 5: Retrieval results
-  if (retrievalResults && retrievalResults.length > 0) {
-    const results = retrievalResults.slice(0, MAX_RETRIEVAL_RESULTS);
-    for (const result of results) {
-      const content = `**${result.path}** (${result.source}, score: ${result.score.toFixed(1)})\n${result.heading ? `### ${result.heading}\n` : ''}${result.snippet}`;
-      sections.push({
-        tag: 'retrieval-result',
-        content: truncateContent(content, RETRIEVAL_RESULT_LIMIT),
-        priority: 5,
-        maxSize: RETRIEVAL_RESULT_LIMIT,
-      });
-    }
   }
 
   if (sections.length === 0) return '';
@@ -539,6 +557,10 @@ export function loadState(dir: string): AssistantWorkspaceState {
       migrateStateV3ToV4(dir);
       migrated = true;
     }
+    if (state.schemaVersion < 5) {
+      migrateStateV4ToV5(dir);
+      migrated = true;
+    }
     if (migrated) {
       return loadState(dir); // Reload after migration
     }
@@ -560,19 +582,31 @@ export function saveState(dir: string, state: AssistantWorkspaceState): void {
   fs.renameSync(tmpPath, statePath);
 }
 
+/** @deprecated Use shouldRunHeartbeat instead */
 export function needsDailyCheckIn(state: AssistantWorkspaceState, now?: Date): boolean {
+  return shouldRunHeartbeat(state, undefined, now);
+}
+
+export function shouldRunHeartbeat(
+  state: AssistantWorkspaceState,
+  heartbeatConfig?: { activeHours?: { start?: string; end?: string } },
+  now?: Date,
+): boolean {
   if (!state.onboardingComplete) return false;
-  if (state.dailyCheckInEnabled !== true) return false;
+  if (state.heartbeatEnabled !== true) return false;
+
   const d = now ?? new Date();
   const localToday = getLocalDateString(d);
-  if (state.lastCheckInDate === localToday) return false;
+  const lastDate = state.lastHeartbeatDate ?? state.lastCheckInDate;
+  if (lastDate === localToday) return false;
 
-  // Compat: before schema v3, lastCheckInDate was stored as a UTC date.
-  // If the stored value matches today's UTC date, the user checked in "today"
-  // under the old semantics. Accept it to avoid a spurious re-trigger.
-  // Once the next check-in writes a local date + v3, this path becomes inert.
+  // Compat: before schema v3, dates were stored as UTC
   const utcToday = d.toISOString().slice(0, 10);
-  if (state.lastCheckInDate === utcToday) return false;
+  if (lastDate === utcToday) return false;
+
+  if (heartbeatConfig?.activeHours) {
+    if (!isWithinActiveHours(heartbeatConfig.activeHours)) return false;
+  }
 
   return true;
 }

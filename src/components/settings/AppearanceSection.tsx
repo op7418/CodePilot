@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { useTheme } from "next-themes";
 import { codeToHtml, type BundledTheme } from "shiki";
 import { useThemeFamily } from "@/lib/theme/context";
@@ -135,11 +135,30 @@ function UIPreview() {
 
 // ── Main Appearance Section ─────────────────────────────────────────
 
+/** Persist theme setting to DB so it survives across sessions */
+function persistThemeSetting(key: string, value: string) {
+  fetch('/api/settings/app', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ settings: { [key]: value } }),
+  }).catch(() => { /* best-effort */ });
+}
+
 export function AppearanceSection() {
-  const { theme, setTheme, resolvedTheme } = useTheme();
-  const { family, setFamily, families } = useThemeFamily();
+  const { theme, setTheme: setThemeRaw, resolvedTheme } = useTheme();
+  const { family, setFamily: setFamilyRaw, families } = useThemeFamily();
   const { t } = useTranslation();
   const isDark = resolvedTheme === "dark";
+
+  const setTheme = useCallback((mode: string) => {
+    setThemeRaw(mode);
+    persistThemeSetting('theme_mode', mode);
+  }, [setThemeRaw]);
+
+  const setFamily = useCallback((id: string) => {
+    setFamilyRaw(id);
+    persistThemeSetting('theme_family', id);
+  }, [setFamilyRaw]);
 
   const mounted = useSyncExternalStore(
     () => () => {},

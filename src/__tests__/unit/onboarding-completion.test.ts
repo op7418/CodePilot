@@ -234,7 +234,7 @@ describe('onboarding completion + workspace state integration', () => {
   const { getLocalDateString } = require('../../lib/utils') as typeof import('../../lib/utils');
   /* eslint-enable @typescript-eslint/no-require-imports */
 
-  it('onboarding success should set onboardingComplete=true and lastCheckInDate=today', () => {
+  it('onboarding success should set onboardingComplete=true and lastHeartbeatDate=today', () => {
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'onb-state-'));
     initializeWorkspace(workDir);
 
@@ -242,14 +242,14 @@ describe('onboarding completion + workspace state integration', () => {
     const today = getLocalDateString();
     const state = loadState(workDir);
     state.onboardingComplete = true;
-    state.lastCheckInDate = today;
-    state.schemaVersion = 4;
-    state.dailyCheckInEnabled = true;
+    state.lastHeartbeatDate = today;
+    state.schemaVersion = 5;
+    state.heartbeatEnabled = true;
     saveState(workDir, state);
 
     const reloaded = loadState(workDir);
     assert.equal(reloaded.onboardingComplete, true);
-    assert.equal(reloaded.lastCheckInDate, today);
+    assert.equal(reloaded.lastHeartbeatDate, today);
     assert.equal(needsDailyCheckIn(reloaded), false, 'Should not need check-in on onboarding day');
 
     fs.rmSync(workDir, { recursive: true, force: true });
@@ -261,9 +261,11 @@ describe('onboarding completion + workspace state integration', () => {
 
     const state = loadState(workDir);
     state.onboardingComplete = true;
-    state.lastCheckInDate = '2020-01-01'; // yesterday or earlier
-    state.schemaVersion = 4;
-    state.dailyCheckInEnabled = true;
+    state.lastHeartbeatDate = '2020-01-01'; // yesterday or earlier
+    state.lastCheckInDate = '2020-01-01'; // keep deprecated field for needsDailyCheckIn compat
+    state.schemaVersion = 5;
+    state.heartbeatEnabled = true;
+    state.dailyCheckInEnabled = true; // keep deprecated field for needsDailyCheckIn compat
     saveState(workDir, state);
 
     const reloaded = loadState(workDir);
@@ -279,13 +281,13 @@ describe('onboarding completion + workspace state integration', () => {
     const today = getLocalDateString();
     const state = loadState(workDir);
     state.onboardingComplete = true;
-    state.lastCheckInDate = today;
+    state.lastHeartbeatDate = today;
     saveState(workDir, state);
 
     // Simulate re-entering: check trigger conditions
     const reloaded = loadState(workDir);
     const needsOnboarding = !reloaded.onboardingComplete;
-    const needsCheckIn = reloaded.onboardingComplete && reloaded.lastCheckInDate !== today;
+    const needsCheckIn = reloaded.onboardingComplete && reloaded.lastHeartbeatDate !== today;
     assert.equal(needsOnboarding, false);
     assert.equal(needsCheckIn, false);
 

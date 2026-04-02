@@ -37,9 +37,9 @@ test.describe('Chat Page', () => {
 
     test('chat page shows empty state when no messages', async ({ page }) => {
       await goToChat(page);
-      await expect(page.locator('h2:has-text("Claude Chat")')).toBeVisible();
+      await expect(page.locator('h2:has-text("CodePilot Chat")')).toBeVisible();
       await expect(
-        page.locator('text=Start a conversation with Claude')
+        page.locator('text=Start a conversation with CodePilot')
       ).toBeVisible();
     });
   });

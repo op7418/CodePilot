@@ -6,7 +6,7 @@
  * Tests verify:
  * 1. Auto-trigger: onboarding detects correctly for new workspace
  * 2. Input focus fallback: hookTriggeredSessionId prevents repeat
- * 3. Daily check-in: needsDailyCheckIn respects onboarding state
+ * 3. Daily check-in: needsDailyCheckIn respects onboarding state (uses heartbeat fields)
  * 4. Workspace prompt scoping: only assistant project sessions get prompts
  * 5. V2: Daily memory write/load, v1→v2 migration, budget-aware prompt assembly
  */
@@ -59,8 +59,8 @@ describe('Assistant Workspace', () => {
 
       const state = JSON.parse(fs.readFileSync(statePath, 'utf-8'));
       assert.equal(state.onboardingComplete, false);
-      assert.equal(state.lastCheckInDate, null);
-      assert.equal(state.schemaVersion, 4);
+      assert.equal(state.lastHeartbeatDate, null);
+      assert.equal(state.schemaVersion, 5);
     });
 
     it('should create all 4 template files', () => {
@@ -91,7 +91,7 @@ describe('Assistant Workspace', () => {
       initializeWorkspace(workDir);
       const state = loadState(workDir);
       state.onboardingComplete = true;
-      state.lastCheckInDate = getLocalDateString();
+      state.lastHeartbeatDate = getLocalDateString();
       saveState(workDir, state);
 
       const reloaded = loadState(workDir);
@@ -124,29 +124,29 @@ describe('Assistant Workspace', () => {
 
   describe('daily check-in respects onboarding state', () => {
     it('should not trigger check-in if onboarding not complete', () => {
-      const state = { onboardingComplete: false, lastCheckInDate: null, schemaVersion: 2 };
+      const state = { onboardingComplete: false, lastHeartbeatDate: null, lastCheckInDate: null, heartbeatEnabled: false, schemaVersion: 5 };
       assert.equal(needsDailyCheckIn(state), false);
     });
 
     it('should trigger check-in if onboarding done and no check-in today', () => {
-      const state = { onboardingComplete: true, lastCheckInDate: '2020-01-01', schemaVersion: 2, dailyCheckInEnabled: true };
+      const state = { onboardingComplete: true, lastHeartbeatDate: '2020-01-01', lastCheckInDate: '2020-01-01', heartbeatEnabled: true, dailyCheckInEnabled: true, schemaVersion: 5 };
       assert.equal(needsDailyCheckIn(state), true);
     });
 
     it('should not trigger check-in if already done today', () => {
       const today = getLocalDateString();
-      const state = { onboardingComplete: true, lastCheckInDate: today, schemaVersion: 2, dailyCheckInEnabled: true };
+      const state = { onboardingComplete: true, lastHeartbeatDate: today, lastCheckInDate: today, heartbeatEnabled: true, dailyCheckInEnabled: true, schemaVersion: 5 };
       assert.equal(needsDailyCheckIn(state), false);
     });
 
-    it('onboarding day should skip daily check-in (lastCheckInDate set)', () => {
+    it('onboarding day should skip daily check-in (lastHeartbeatDate set)', () => {
       const today = getLocalDateString();
-      const state = { onboardingComplete: true, lastCheckInDate: today, schemaVersion: 2, dailyCheckInEnabled: true };
+      const state = { onboardingComplete: true, lastHeartbeatDate: today, lastCheckInDate: today, heartbeatEnabled: true, dailyCheckInEnabled: true, schemaVersion: 5 };
       assert.equal(needsDailyCheckIn(state), false);
     });
 
-    it('should not trigger check-in if dailyCheckInEnabled is not set (default off)', () => {
-      const state = { onboardingComplete: true, lastCheckInDate: '2020-01-01', schemaVersion: 3 };
+    it('should not trigger check-in if heartbeatEnabled is not set (default off)', () => {
+      const state = { onboardingComplete: true, lastHeartbeatDate: '2020-01-01', lastCheckInDate: '2020-01-01', heartbeatEnabled: false, schemaVersion: 5 };
       assert.equal(needsDailyCheckIn(state), false);
     });
   });
@@ -268,25 +268,25 @@ describe('Assistant Workspace', () => {
       migrateStateV1ToV2(workDir);
 
       const state = loadState(workDir);
-      assert.equal(state.schemaVersion, 4);
+      assert.equal(state.schemaVersion, 5);
       assert.ok(fs.existsSync(path.join(workDir, 'memory', 'daily')));
       assert.ok(fs.existsSync(path.join(workDir, 'Inbox')));
     });
 
-    it('should not re-migrate v4 state', () => {
+    it('should not re-migrate v5 state', () => {
       initializeWorkspace(workDir);
       const state = loadState(workDir);
-      assert.equal(state.schemaVersion, 4);
+      assert.equal(state.schemaVersion, 5);
 
       // Should not throw or change anything
       migrateStateV1ToV2(workDir);
       const reloaded = loadState(workDir);
-      assert.equal(reloaded.schemaVersion, 4);
+      assert.equal(reloaded.schemaVersion, 5);
     });
   });
 
   describe('budget-aware prompt assembly', () => {
-    it('should include daily memories in prompt', () => {
+    it('should only include identity files in prompt (memory accessed via MCP)', () => {
       initializeWorkspace(workDir);
       fs.writeFileSync(path.join(workDir, 'soul.md'), '# Soul\nI am helpful.', 'utf-8');
       writeDailyMemory(workDir, '2024-03-06', '# Today\nDid coding.');
@@ -295,11 +295,12 @@ describe('Assistant Workspace', () => {
       const prompt = assembleWorkspacePrompt(files);
 
       assert.ok(prompt.includes('<assistant-workspace>'));
-      assert.ok(prompt.includes('I am helpful'));
-      assert.ok(prompt.includes('Did coding'));
+      assert.ok(prompt.includes('I am helpful'), 'soul.md should be in prompt');
+      // Daily memories are no longer in system prompt — accessed via codepilot_memory_search MCP
+      assert.ok(!prompt.includes('Did coding'), 'daily memories should NOT be in prompt');
     });
 
-    it('should include retrieval results in prompt', () => {
+    it('should not include retrieval results in prompt (accessed via MCP)', () => {
       initializeWorkspace(workDir);
       fs.writeFileSync(path.join(workDir, 'soul.md'), '# Soul\nI am helpful.', 'utf-8');
 
@@ -307,10 +308,12 @@ describe('Assistant Workspace', () => {
       const results = [
         { path: 'notes/test.md', heading: 'Test', snippet: 'Some test content', score: 15, source: 'title' as const },
       ];
-      const prompt = assembleWorkspacePrompt(files, results);
+      // assembleWorkspacePrompt no longer accepts retrieval results
+      const prompt = assembleWorkspacePrompt(files);
 
-      assert.ok(prompt.includes('retrieval-result'));
-      assert.ok(prompt.includes('Some test content'));
+      assert.ok(!prompt.includes('retrieval-result'), 'retrieval results should NOT be in prompt');
+      assert.ok(!prompt.includes('Some test content'), 'retrieval content should NOT be in prompt');
+      void results; // suppress unused variable warning
     });
 
     it('should respect total prompt limit', () => {
@@ -578,7 +581,7 @@ describe('saveState is atomic (write-then-rename)', () => {
     initializeWorkspace(workDir2);
     const state = loadState(workDir2);
     state.onboardingComplete = true;
-    state.lastCheckInDate = getLocalDateString();
+    state.lastHeartbeatDate = getLocalDateString();
     saveState(workDir2, state);
 
     // Read raw file to verify it's valid JSON

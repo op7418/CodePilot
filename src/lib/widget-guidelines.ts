@@ -38,6 +38,9 @@ Available modules: interactive, chart, mockup, art, diagram.
 9. SVG: \`<svg width="100%" viewBox="0 0 680 H">\`, arrow marker in \`<defs>\`
 10. Interactive controls MUST update visuals — call \`chart.update()\` after data changes
 11. Clickable drill-down: \`onclick="window.__widgetSendMessage('...')"\`
+12. Title should be human-readable in the user's language (e.g. "用户参与度" not "user_engagement")
+13. Use \`min-height\` instead of \`height\` for the outermost container to prevent bottom clipping
+14. Cross-widget filter: \`window.__widgetPublish('topic', {key:'value'})\`. Other widgets listen via \`window.addEventListener('widget-filter', e => { /* e.detail */ })\`
 </widget-capability>`;
 
 // ── Full module guidelines (injected on demand) ────────────────────────────

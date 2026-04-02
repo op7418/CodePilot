@@ -105,8 +105,8 @@ export const zh: MarketingContent = {
         a: '不会。所有 API 调用从你的电脑直接发送到 Provider，CodePilot 不会接触你的代码或对话。',
       },
       {
-        q: '支持 Windows 和 Linux 吗？',
-        a: '目前完整支持 macOS，Windows 和 Linux 版本在计划中。',
+        q: '支持哪些平台？',
+        a: 'CodePilot 支持 macOS（Apple Silicon 和 Intel）、Windows（x64）以及 Linux（x64 和 arm64）。前往 GitHub Releases 页面下载对应平台的最新版本。',
       },
     ],
   },
@@ -161,6 +161,11 @@ export const zh: MarketingContent = {
       { title: 'Bridge', description: '连接消息平台。', href: '/docs/bridge' },
       { title: 'Workspace', description: '文件检查与上下文。', href: '/docs/workspace' },
     ],
+  },
+  releases: {
+    title: '更新公告',
+    titleLight: '',
+    viewAll: '在 GitHub 上查看所有版本',
   },
   cta: {
     title: '准备好试试 CodePilot 了吗？',

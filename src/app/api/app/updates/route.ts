@@ -1,4 +1,6 @@
 import { NextResponse } from "next/server";
+import { getRuntimeArchitectureInfo } from "@/lib/platform";
+import { selectRecommendedReleaseAsset, type ReleaseAsset } from "@/lib/update-release";
 
 const GITHUB_REPO = "op7418/CodePilot";
 
@@ -15,6 +17,7 @@ function compareSemver(a: string, b: string): number {
 export async function GET() {
   try {
     const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION || "0.0.0";
+    const runtimeInfo = getRuntimeArchitectureInfo();
 
     const res = await fetch(
       `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
@@ -34,6 +37,10 @@ export async function GET() {
     const release = await res.json();
     const latestVersion = (release.tag_name || "").replace(/^v/, "");
     const updateAvailable = compareSemver(latestVersion, currentVersion) > 0;
+    const recommendedAsset = selectRecommendedReleaseAsset(
+      Array.isArray(release.assets) ? (release.assets as ReleaseAsset[]) : [],
+      runtimeInfo,
+    );
 
     return NextResponse.json({
       latestVersion,
@@ -43,6 +50,12 @@ export async function GET() {
       releaseNotes: release.body || "",
       publishedAt: release.published_at || "",
       releaseUrl: release.html_url || "",
+      downloadUrl: recommendedAsset?.browser_download_url || release.html_url || "",
+      downloadAssetName: recommendedAsset?.name || "",
+      detectedPlatform: runtimeInfo.platform,
+      detectedArch: runtimeInfo.processArch,
+      hostArch: runtimeInfo.hostArch,
+      runningUnderRosetta: runtimeInfo.runningUnderRosetta,
     });
   } catch {
     return NextResponse.json(

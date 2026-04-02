@@ -3,6 +3,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import type { MCPServerConfig, ErrorResponse, SuccessResponse } from '@/types';
+import { invalidateMcpCache } from '@/lib/mcp-loader';
 
 function getSettingsPath(): string {
   return path.join(os.homedir(), '.claude', 'settings.json');
@@ -67,6 +68,7 @@ export async function DELETE(
       );
     }
 
+    invalidateMcpCache();
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

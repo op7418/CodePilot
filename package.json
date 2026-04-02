@@ -1,6 +1,6 @@
 {
   "name": "codepilot",
-  "version": "0.38.5",
+  "version": "0.44.1",
   "private": true,
   "license": "BUSL-1.1",
   "workspaces": [
@@ -58,12 +58,15 @@
     "ai": "^6.0.73",
     "ansi-to-react": "^6.2.6",
     "better-sqlite3": "^12.6.2",
+    "boring-avatars": "^2.0.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
     "discord.js": "^14.25.1",
     "dompurify": "^3.3.3",
     "electron-updater": "^6.8.3",
+    "html-to-image": "^1.11.13",
+    "jdenticon": "^3.3.0",
     "markdown-it": "^14.1.1",
     "morphdom": "^2.7.8",
     "motion": "^12.33.0",

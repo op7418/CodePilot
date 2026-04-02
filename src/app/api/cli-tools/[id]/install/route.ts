@@ -1,8 +1,13 @@
 import { NextResponse } from 'next/server';
-import { spawn } from 'child_process';
+import { spawn, execFile } from 'child_process';
+import { promisify } from 'util';
 import { CLI_TOOLS_CATALOG } from '@/lib/cli-tools-catalog';
 import { invalidateDetectCache } from '@/lib/cli-tools-detect';
+import { createCustomCliTool } from '@/lib/db';
 import { getExpandedPath } from '@/lib/platform';
+import path from 'path';
+
+const execFileAsync = promisify(execFile);
 
 export async function POST(
   request: Request,
@@ -63,9 +68,47 @@ export async function POST(
           send('output', chunk.toString());
         });
 
-        child.on('close', (code) => {
+        child.on('close', async (code) => {
           invalidateDetectCache();
           if (code === 0) {
+            // Persist install metadata so MCP update can use the correct method/package
+            try {
+              const expandedPath = getExpandedPath();
+              const env = { ...process.env, PATH: expandedPath };
+              // Extract package spec from the install command
+              const cmdParts = installMethod.command.split(/\s+/);
+              const instIdx = cmdParts.findIndex((p: string) => p === 'install');
+              let packageSpec: string | undefined;
+              if (instIdx >= 0) {
+                for (let j = instIdx + 1; j < cmdParts.length; j++) {
+                  if (!cmdParts[j].startsWith('-')) { packageSpec = cmdParts[j]; break; }
+                }
+              }
+              // Find the binary path
+              for (const bin of tool.binNames) {
+                try {
+                  const { stdout: whichOut } = await execFileAsync('/usr/bin/which', [bin], { timeout: 5000, env });
+                  const binPath = whichOut.trim().split(/\r?\n/)[0]?.trim();
+                  if (binPath) {
+                    let version: string | null = null;
+                    try {
+                      const { stdout: vOut, stderr: vErr } = await execFileAsync(binPath, ['--version'], { timeout: 5000, env });
+                      const match = (vOut || vErr).trim().split('\n')[0]?.match(/(\d+\.\d+[\w.-]*)/);
+                      version = match ? match[1] : null;
+                    } catch { /* optional */ }
+                    createCustomCliTool({
+                      name: tool.name,
+                      binPath,
+                      binName: path.basename(binPath),
+                      version,
+                      installMethod: method,
+                      installPackage: packageSpec,
+                    });
+                    break;
+                  }
+                } catch { /* bin not found, try next */ }
+              }
+            } catch { /* metadata persistence is best-effort */ }
             send('done', 'Install completed successfully');
           } else {
             send('error', `Process exited with code ${code}`);

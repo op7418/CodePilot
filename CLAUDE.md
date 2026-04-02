@@ -57,16 +57,83 @@ CodePilot — Claude Code 的桌面 GUI 客户端，基于 Electron + Next.js。
 2. 改动是否涉及数据库 — 是否需要在 `src/lib/db.ts` 更新 schema 迁移
 3. 改动是否涉及类型 — 是否需要更新 `src/types/index.ts`
 4. 改动是否涉及已有文档 — 是否需要更新 `docs/handover/` 中的交接文档
+5. 改动是否构成新功能或大迭代 — 是否需要写文档（见下方"功能文档"）
+
+## 功能文档
+
+**新功能或大迭代完成后必须同时输出两份文档：**
+
+1. **技术交接文档** — 放 `docs/handover/`
+   - 目录结构、数据流、DB schema、API 路由、关键设计决策
+   - 涉及 MCP 工具的需列出工具名、参数、自动批准策略
+   - 目标读者：接手的开发者，需要能仅靠文档理解模块全貌
+2. **产品思考文档** — 放 `docs/insights/`
+   - 功能解决了什么用户问题、为什么这样设计而不是其他方案
+   - 用户反馈驱动的决策、参考的外部文章/竞品/趋势
+   - 未来可能的方向和已知的局限性
+   - 目标读者：产品决策者，需要能理解设计背后的"为什么"
+
+**两份文档必须互相反向链接：**
+- 交接文档开头：`> 产品思考见 [docs/insights/xxx.md](../insights/xxx.md)`
+- 产品文档开头：`> 技术实现见 [docs/handover/xxx.md](../handover/xxx.md)`
+
+**文件命名保持一致**（如 `cli-tools.md`），方便对照查找。
 
 ## 发版
 
-**发版流程：** 更新 package.json version → `npm install` 同步 lock → 提交推送 → `git tag v{版本号} && git push origin v{版本号}` → CI 自动构建发布。不要手动创建 GitHub Release。
+**发版流程：** 更新 `RELEASE_NOTES.md` → 更新 package.json version → `npm install` 同步 lock → 提交推送 → `git tag v{版本号} && git push origin v{版本号}` → CI 自动构建发布并使用 `RELEASE_NOTES.md` 作为 Release 正文。不要手动创建 GitHub Release（CI 会自动创建并上传构建产物）。
 
 **发版纪律：** 禁止自动发版。`git push` + `git tag` 必须等用户明确指示后才执行。commit 可以正常进行。
 
-**Release Notes 格式：** 标题 `CodePilot v{版本号}`，正文包含：更新内容、Downloads、Installation、Requirements、Changelog。
-
 **构建：** macOS 产出 DMG（arm64 + x64），Windows 产出 NSIS 安装包。`scripts/after-pack.js` 重编译 better-sqlite3 为 Electron ABI。构建前清理 `rm -rf release/ .next/`。
+
+**Release Notes 格式（必须严格遵循）：**
+
+标题：`CodePilot v{版本号}`
+
+正文结构：
+
+```markdown
+## CodePilot v{版本号}
+
+> 一句话版本摘要，说明这个版本的核心主题或推荐升级理由。
+
+### 新增功能
+- 功能描述（面向用户的语言，不要写 commit hash）
+
+### 修复问题
+- 修复了 xxx 的问题
+
+### 优化改进
+- 优化了 xxx
+
+## 下载地址
+
+### macOS
+- [Apple Silicon (M1/M2/M3/M4)](https://github.com/op7418/CodePilot/releases/download/v{版本号}/CodePilot-{版本号}-arm64.dmg)
+- [Intel](https://github.com/op7418/CodePilot/releases/download/v{版本号}/CodePilot-{版本号}-x64.dmg)
+
+### Windows
+- [Windows 安装包](https://github.com/op7418/CodePilot/releases/download/v{版本号}/CodePilot-Setup-{版本号}.exe)
+
+## 安装说明
+
+**macOS**: 下载 DMG → 拖入 Applications → 首次启动如遇安全提示，在系统设置 > 隐私与安全中点击"仍要打开"
+**Windows**: 下载 exe 安装包 → 双击安装
+
+## 系统要求
+
+- macOS 12.0+ / Windows 10+ / Linux (glibc 2.31+)
+- 需要配置 API 服务商（Anthropic / OpenRouter 等）
+- 推荐安装 Claude Code CLI 以获得完整功能
+```
+
+**Release Notes 写作规则：**
+- 更新内容必须用用户能理解的语言，不要出现 commit hash、函数名、文件路径
+- 每个条目说清楚"用户能感知到什么变化"
+- 下载链接必须是完整的 GitHub release download URL，用户点击即可下载
+- 如果某个分类没有内容（如没有修复），跳过该分类不要留空标题
+- `git log --oneline` 的输出只用于自己梳理，不要原样复制到 Release Notes
 
 ## 执行计划
 
@@ -80,7 +147,8 @@ CodePilot — Claude Code 的桌面 GUI 客户端，基于 Electron + Next.js。
 
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — 项目架构、目录结构、数据流、新功能触及点
 - `docs/exec-plans/` — 执行计划（进度状态 + 决策日志 + 技术债务）
-- `docs/handover/` — 交接文档（架构、数据流、设计决策）
+- `docs/handover/` — 技术交接文档（架构、数据流、设计决策）
+- `docs/insights/` — 产品思考文档（用户问题、设计理由、趋势洞察）
 - `docs/research/` — 调研文档（技术方案、可行性分析）
 
 **检索前先读对应目录的 README.md；增删文件后更新索引。**

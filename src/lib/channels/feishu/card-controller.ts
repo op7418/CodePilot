@@ -17,6 +17,44 @@ import type { CardStreamController, ToolCallInfo } from '../types';
 import type { CardStreamConfig } from './types';
 import { optimizeMarkdown } from './outbound';
 
+/** Extract error message from unknown catch value */
+function errMsg(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+/** Lark IM message response shape (shared by create/reply) */
+interface LarkMessageResponse {
+  code?: number;
+  msg?: string;
+  data?: { message_id?: string };
+}
+
+/** CardKit v2 API shape (not in SDK types — accessed via runtime) */
+interface CardKitV2 {
+  card: {
+    create(payload: { data: { type: string; data: string } }): Promise<{ data?: { card_id?: string } }>;
+    streamContent(payload: { path: { card_id: string }; data: { content: string; sequence: number } }): Promise<unknown>;
+    setStreamingMode(payload: { path: { card_id: string }; data: { streaming_mode: boolean; sequence: number } }): Promise<unknown>;
+    update(payload: { path: { card_id: string }; data: { type: string; data: string; sequence: number } }): Promise<unknown>;
+  };
+}
+
+/** Card element in Schema V2 cards */
+interface CardElement {
+  tag: string;
+  content?: string;
+  text_size?: string;
+  text_align?: string;
+  element_id?: string;
+  [key: string]: unknown;
+}
+
+/** Access cardkit.v2 from lark.Client (not typed in SDK) */
+function getCardKitV2(client: lark.Client): CardKitV2 {
+  return (client as unknown as { cardkit: { v2: CardKitV2 } }).cardkit.v2;
+}
+
 const LOG_TAG = '[card-controller]';
 
 interface CardState {
@@ -84,7 +122,7 @@ class FeishuCardStreamController implements CardStreamController {
         },
       };
 
-      const createResp = await (this.client as any).cardkit.v2.card.create({
+      const createResp = await getCardKitV2(this.client).card.create({
         data: { type: 'card_json', data: JSON.stringify(cardBody) },
       });
       const cardId = createResp?.data?.card_id;
@@ -95,7 +133,7 @@ class FeishuCardStreamController implements CardStreamController {
 
       // 2. Send card as IM message
       const cardContent = JSON.stringify({ type: 'card', data: { card_id: cardId } });
-      let msgResp: any;
+      let msgResp: LarkMessageResponse;
       if (replyToMessageId) {
         msgResp = await this.client.im.message.reply({
           path: { message_id: replyToMessageId },
@@ -122,8 +160,8 @@ class FeishuCardStreamController implements CardStreamController {
       });
 
       return messageId;
-    } catch (err: any) {
-      console.error(LOG_TAG, 'Card create failed:', err?.message || err);
+    } catch (err: unknown) {
+      console.error(LOG_TAG, 'Card create failed:', errMsg(err));
       return '';
     }
   }
@@ -169,14 +207,14 @@ class FeishuCardStreamController implements CardStreamController {
 
     try {
       state.sequence++;
-      await (this.client as any).cardkit.v2.card.streamContent({
+      await getCardKitV2(this.client).card.streamContent({
         path: { card_id: state.cardId },
         data: { content, sequence: state.sequence },
       });
       state.lastUpdateAt = Date.now();
       return 'ok';
-    } catch (err: any) {
-      console.error(LOG_TAG, 'Stream update failed:', err?.message || err);
+    } catch (err: unknown) {
+      console.error(LOG_TAG, 'Stream update failed:', errMsg(err));
       return 'fail';
     }
   }
@@ -223,13 +261,13 @@ class FeishuCardStreamController implements CardStreamController {
     try {
       // Close streaming mode
       state.sequence++;
-      await (this.client as any).cardkit.v2.card.setStreamingMode({
+      await getCardKitV2(this.client).card.setStreamingMode({
         path: { card_id: state.cardId },
         data: { streaming_mode: false, sequence: state.sequence },
       });
 
       // Build final card elements
-      const elements: any[] = [];
+      const elements: CardElement[] = [];
 
       // Main content (optimize markdown for Feishu rendering)
       elements.push({
@@ -288,12 +326,12 @@ class FeishuCardStreamController implements CardStreamController {
       };
 
       state.sequence++;
-      await (this.client as any).cardkit.v2.card.update({
+      await getCardKitV2(this.client).card.update({
         path: { card_id: state.cardId },
         data: { type: 'card_json', data: JSON.stringify(finalCard), sequence: state.sequence },
       });
-    } catch (err: any) {
-      console.error(LOG_TAG, 'Finalize failed:', err?.message || err);
+    } catch (err: unknown) {
+      console.error(LOG_TAG, 'Finalize failed:', errMsg(err));
     }
 
     this.cards.delete(messageId);

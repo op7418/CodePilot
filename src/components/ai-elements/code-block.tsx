@@ -96,18 +96,20 @@ const addKeysToTokens = (lines: ThemedToken[][]): KeyedLine[] =>
   }));
 
 // Token rendering component
-const TokenSpan = ({ token }: { token: ThemedToken }) => (
+const TokenSpan = ({ token, stripColors }: { token: ThemedToken; stripColors?: boolean }) => (
   <span
-    className="dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
+    className={stripColors ? undefined : "dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"}
     style={
-      {
-        backgroundColor: token.bgColor,
-        color: token.color,
-        fontStyle: isItalic(token.fontStyle) ? "italic" : undefined,
-        fontWeight: isBold(token.fontStyle) ? "bold" : undefined,
-        textDecoration: isUnderline(token.fontStyle) ? "underline" : undefined,
-        ...token.htmlStyle,
-      } as CSSProperties
+      stripColors
+        ? { color: "inherit" }
+        : {
+            backgroundColor: token.bgColor,
+            color: token.color,
+            fontStyle: isItalic(token.fontStyle) ? "italic" : undefined,
+            fontWeight: isBold(token.fontStyle) ? "bold" : undefined,
+            textDecoration: isUnderline(token.fontStyle) ? "underline" : undefined,
+            ...token.htmlStyle,
+          } as CSSProperties
     }
   >
     {token.content}
@@ -118,15 +120,17 @@ const TokenSpan = ({ token }: { token: ThemedToken }) => (
 const LineSpan = ({
   keyedLine,
   showLineNumbers,
+  stripColors,
 }: {
   keyedLine: KeyedLine;
   showLineNumbers: boolean;
+  stripColors?: boolean;
 }) => (
   <span className={showLineNumbers ? LINE_NUMBER_CLASSES : "block"}>
     {keyedLine.tokens.length === 0
       ? "\n"
       : keyedLine.tokens.map(({ token, key }) => (
-          <TokenSpan key={key} token={token} />
+          <TokenSpan key={key} token={token} stripColors={stripColors} />
         ))}
   </span>
 );
@@ -312,17 +316,18 @@ const CodeBlockBody = memo(
     tokenized,
     showLineNumbers,
     className,
+    isTerminal,
   }: {
     tokenized: TokenizedCode;
     showLineNumbers: boolean;
     className?: string;
+    isTerminal?: boolean;
   }) => {
     const preStyle = useMemo(
-      () => ({
-        backgroundColor: tokenized.bg,
-        color: tokenized.fg,
-      }),
-      [tokenized.bg, tokenized.fg]
+      () => isTerminal
+        ? {} // Terminal uses CSS variables, no inline Shiki colors
+        : { backgroundColor: tokenized.bg, color: tokenized.fg },
+      [tokenized.bg, tokenized.fg, isTerminal]
     );
 
     const keyedLines = useMemo(
@@ -333,7 +338,10 @@ const CodeBlockBody = memo(
     return (
       <pre
         className={cn(
-          "dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)] m-0 p-4 text-sm",
+          "m-0 p-4 text-sm",
+          isTerminal
+            ? "!bg-[var(--terminal-bg)] !text-[var(--terminal-foreground)]"
+            : "dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]",
           className
         )}
         style={preStyle}
@@ -349,6 +357,7 @@ const CodeBlockBody = memo(
               key={keyedLine.key}
               keyedLine={keyedLine}
               showLineNumbers={showLineNumbers}
+              stripColors={isTerminal}
             />
           ))}
         </code>
@@ -358,7 +367,8 @@ const CodeBlockBody = memo(
   (prevProps, nextProps) =>
     prevProps.tokenized === nextProps.tokenized &&
     prevProps.showLineNumbers === nextProps.showLineNumbers &&
-    prevProps.className === nextProps.className
+    prevProps.className === nextProps.className &&
+    prevProps.isTerminal === nextProps.isTerminal
 );
 
 CodeBlockBody.displayName = "CodeBlockBody";
@@ -538,7 +548,7 @@ export const CodeBlockContent = ({
         }}
       >
         <div className="relative overflow-auto">
-          <CodeBlockBody showLineNumbers={showLineNumbers} tokenized={tokenized} />
+          <CodeBlockBody showLineNumbers={showLineNumbers} tokenized={tokenized} isTerminal={isTerminal} />
         </div>
 
         {/* Gradient overlay for collapsed state */}
@@ -546,7 +556,7 @@ export const CodeBlockContent = ({
           <div className={cn(
             "absolute bottom-0 left-0 right-0 h-16 pointer-events-none",
             isTerminal
-              ? "bg-gradient-to-t from-[#0a0a0a] to-transparent"
+              ? "bg-gradient-to-t from-[var(--terminal-gradient-from)] to-transparent"
               : "bg-gradient-to-t from-muted to-transparent"
           )} />
         )}
@@ -560,7 +570,7 @@ export const CodeBlockContent = ({
           className={cn(
             "flex w-full items-center justify-center gap-1.5 py-1.5 text-xs transition-colors",
             isTerminal
-              ? "bg-zinc-950 text-zinc-400 hover:text-zinc-200"
+              ? "bg-[var(--terminal-bg)] text-[var(--terminal-muted)] hover:text-[var(--terminal-foreground)]"
               : "bg-muted text-muted-foreground hover:text-foreground"
           )}
         >
@@ -602,7 +612,7 @@ export const CodeBlock = ({
       <CodeBlockContainer
         className={cn(
           hasCustomChildren ? undefined : "not-prose my-3",
-          isTerminal && !hasCustomChildren && "border-zinc-700/50",
+          isTerminal && !hasCustomChildren && "border-[var(--terminal-border)]",
           className,
         )}
         language={language}
@@ -669,25 +679,25 @@ const CodeBlockDefaultHeader = ({
     <div className={cn(
       "flex items-center justify-between px-4 py-1.5 text-xs border-b",
       isTerminal
-        ? "bg-zinc-950 text-zinc-400"
+        ? "bg-[var(--terminal-bg)] text-[var(--terminal-muted)]"
         : "bg-muted text-muted-foreground"
     )}>
       <div className="flex items-center gap-2 min-w-0">
         {createElement(langIcon, { size: 14, className: cn(
           "shrink-0",
-          isTerminal ? "text-green-400" : "text-muted-foreground",
+          isTerminal ? "text-[var(--terminal-accent)]" : "text-muted-foreground",
         ) })}
         {filename && (
           <span className={cn(
             "truncate font-medium",
-            isTerminal ? "text-zinc-300" : "text-foreground"
+            isTerminal ? "text-[var(--terminal-foreground)]" : "text-foreground"
           )}>{filename}</span>
         )}
         {filename && <span className="text-muted-foreground/50">|</span>}
         <span className={cn(
           "rounded px-1.5 py-0.5",
           isTerminal
-            ? "bg-zinc-700/50 text-green-400"
+            ? "bg-[var(--terminal-hover-bg)] text-[var(--terminal-accent)]"
             : "bg-accent text-accent-foreground"
         )}>{language.toUpperCase()}</span>
       </div>
@@ -698,7 +708,7 @@ const CodeBlockDefaultHeader = ({
           className={cn(
             "flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors",
             isTerminal
-              ? "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/50"
+              ? "text-[var(--terminal-muted)] hover:text-[var(--terminal-foreground)] hover:bg-[var(--terminal-hover-bg)]"
               : "text-muted-foreground hover:text-foreground hover:bg-accent"
           )}
           title="Copy code"
@@ -721,7 +731,7 @@ const CodeBlockDefaultHeader = ({
           className={cn(
             "flex items-center gap-1 rounded px-1.5 py-0.5 transition-colors",
             isTerminal
-              ? "text-zinc-400 hover:text-zinc-200 hover:bg-zinc-700/50"
+              ? "text-[var(--terminal-muted)] hover:text-[var(--terminal-foreground)] hover:bg-[var(--terminal-hover-bg)]"
               : "text-muted-foreground hover:text-foreground hover:bg-accent"
           )}
           title="Copy as Markdown"

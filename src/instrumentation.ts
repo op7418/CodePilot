@@ -6,5 +6,10 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     const { initRuntimeLog } = await import('@/lib/runtime-log');
     initRuntimeLog();
+
+    // Start the task scheduler so persisted tasks resume on cold boot
+    // (previously only started as a side effect of /api/chat)
+    const { ensureSchedulerRunning } = await import('@/lib/task-scheduler');
+    ensureSchedulerRunning();
   }
 }

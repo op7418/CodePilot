@@ -2,7 +2,7 @@
 
 ## 核心思路
 
-让用户通过 Telegram（后续可扩展 Discord/飞书等）远程操控 CodePilot 中的 Claude 会话。复用现有 `streamClaude()` 管线，在服务端消费 SSE 流，而非通过浏览器。
+让用户通过 Telegram、Discord、飞书、微信等 IM 通道远程操控 CodePilot 中的 Claude 会话。Bridge 复用现有 `streamClaude()` 管线，在服务端直接消费 SSE 流，而不是依赖浏览器标签页。
 
 ## 目录结构
 
@@ -24,6 +24,13 @@ src/lib/bridge/
 │   ├── telegram-adapter.ts  # Telegram 长轮询 + offset 安全水位 + 图片/相册处理 + 自注册
 │   ├── telegram-media.ts    # Telegram 图片下载、尺寸选择、base64 转换
 │   ├── telegram-utils.ts    # callTelegramApi / sendMessageDraft / escapeHtml / splitMessage
+│   ├── weixin-adapter.ts    # 微信多账号长轮询 + batch ack + 纯文本出站 + 自注册
+│   ├── weixin/
+│   │   ├── weixin-api.ts    # 微信 ilink 协议客户端（getupdates/sendmessage/sendtyping/getconfig）
+│   │   ├── weixin-auth.ts   # 二维码登录 + HMR 安全会话存储
+│   │   ├── weixin-media.ts  # AES-128-ECB 媒体解密/上传
+│   │   ├── weixin-ids.ts    # synthetic chatId 编解码（weixin::<accountId>::<peerUserId>）
+│   │   └── weixin-session-guard.ts # errcode -14 暂停保护
 │   ├── feishu-adapter.ts    # 薄代理 → ChannelPluginAdapter(FeishuChannelPlugin)
 │   └── discord-adapter.ts   # Discord.js Client + Gateway intents + 按钮交互 + 流式预览 + 自注册
 ├── markdown/
@@ -110,39 +117,76 @@ Discord 消息 → discord.js Client (Gateway WebSocket)
 - **授权默认拒绝**：空白允许列表 = 拒绝所有（安全优先，同飞书模式）
 - **`!` 命令别名**：在 adapter 层规范化为 `/` 命令后入队——bridge-manager 命令处理器无需改动
 
-### WeChat Adapter
+### 微信（Native BaseChannelAdapter + 多账号长轮询）
 
-**Architecture**: Native `BaseChannelAdapter` implementation using HTTP long-polling.
+```
+微信消息 → WeixinAdapter.runPollLoop(account)
+  → getupdates(long-poll, get_updates_buf)
+  → context_token 落库(weixin_context_tokens)
+  → 媒体解密(AES-128-ECB，可按设置关闭)
+  → synthetic chatId = weixin::<accountId>::<peerUserId>
+  → enqueue(InboundMessage, updateId=batchId)
+  → BridgeManager.runAdapterLoop() → handleMessage()
+    → channel-router.resolve() 自愈坏 cwd / stale sdkSessionId
+    → conversation-engine.processMessage() 用有效 cwd 调 streamClaude()
+    → permission_request → `/perm allow|allow_session|deny <id>` 文本降级
+    → deliverResponse() 纯文本分片(4096 chars, 最多 5 段)
+      → sendmessage({ msg, base_info })
+  → handleMessage() finally
+    → adapter.acknowledgeUpdate(batchId)
+    → batch sealed + remaining=0
+    → channel_offsets["weixin:<accountId>"] = get_updates_buf
+```
 
-**Key files**:
-- `src/lib/bridge/adapters/weixin-adapter.ts` — Main adapter (multi-account worker model)
-- `src/lib/bridge/adapters/weixin/weixin-api.ts` — HTTP protocol client
-- `src/lib/bridge/adapters/weixin/weixin-auth.ts` — QR code login flow
-- `src/lib/bridge/adapters/weixin/weixin-media.ts` — AES-128-ECB media encryption/decryption
-- `src/lib/bridge/adapters/weixin/weixin-ids.ts` — Synthetic chatId encode/decode
-- `src/lib/bridge/adapters/weixin/weixin-session-guard.ts` — Account pause management
+**关键文件**
+- `src/lib/bridge/adapters/weixin-adapter.ts`：微信主 adapter。每个启用账号一个 poll worker，负责入站标准化、batch ack、typing、纯文本出站。
+- `src/lib/bridge/adapters/weixin/weixin-api.ts`：协议客户端。对齐 OpenClaw 微信插件协议，但不把其 npm 包作为运行时依赖。
+- `src/lib/bridge/adapters/weixin/weixin-auth.ts`：二维码登录，使用 `globalThis` 保存活跃登录会话以穿过 Next.js HMR。
+- `src/lib/bridge/adapters/weixin/weixin-media.ts`：微信 CDN 媒体下载/上传的 AES-128-ECB 加解密。
+- `src/lib/bridge/adapters/weixin/weixin-ids.ts`：`weixin::<accountId>::<peerUserId>` synthetic chatId 编解码。
+- `src/lib/bridge/adapters/weixin/weixin-session-guard.ts`：`errcode = -14` 会话失效时暂停账号 60 分钟，避免无限重试。
 
-**Multi-account model**: Each QR-linked WeChat account runs its own long-polling worker. Accounts are stored in the `weixin_accounts` table. The adapter uses synthetic chatId format `weixin::<accountId>::<peerUserId>` to isolate conversations across accounts without modifying the `channel_bindings` schema.
+**为什么用 synthetic chatId**
+- 微信 bridge 需要多账号并存，但 `channel_bindings` 表没有单独的 account 维度。
+- 方案是把账号隔离编码进 chatId：`weixin::<accountId>::<peerUserId>`。
+- 这样 `channel-router`、`permission-broker`、`delivery-layer` 和审计日志都可以继续复用原来的单 chat 抽象，不需要额外改 schema。
 
-**Data persistence**:
-- `weixin_accounts` — Bot credentials, base URLs, enabled status
-- `weixin_context_tokens` — Per-(account, peer) context tokens (required for sending messages)
-- `channel_offsets` with key `weixin:<accountId>` — Long-poll cursor (`get_updates_buf`)
+**数据持久化**
+- `weixin_accounts`：账号凭据、bot token、base URL、启用状态、最后登录时间。
+- `weixin_context_tokens`：按 `(account_id, peer_user_id)` 持久化 `context_token`。这是微信主动回消息的硬前置条件，不能只放内存。
+- `channel_offsets`：使用 key `weixin:<accountId>` 保存每个账号各自的 `get_updates_buf`。
 
-**Authentication**: QR code login via WeChat ilink bot API. The QR login flow is managed by `weixin-auth.ts` with active sessions stored in `globalThis` to survive Next.js HMR. Login results are persisted to `weixin_accounts`.
+**二维码登录与运行时刷新**
+- `/api/settings/weixin/login/start` 生成二维码；服务端读取微信返回的 `qrcode_img_content` URL，再用 `qrcode` 渲染为 data URL，前端无需额外跳转或依赖外链图片。
+- `/api/settings/weixin/login/wait` 轮询扫码状态。状态变成 `confirmed` 后，账号会落库到 `weixin_accounts`，并在 bridge 正在运行时自动调用 `bridge-manager.restart()`，让新账号立即加入 worker 池。
+- 账号启用/停用/删除也会走同样的 restart 流程；如果 DB 改动成功但 runtime 重启失败，API 会显式返回错误，前端 toast 告知“已保存但运行态未切换”。
 
-**Message flow**:
-- Inbound: `getUpdates` long-poll → message standardization → context_token persistence → media decryption → `InboundMessage` queue
-- Outbound: Decode synthetic chatId → retrieve context_token from DB → `sendTextMessage` (plain text only)
+**出站协议与成功判定**
+- `sendmessage` 请求体必须是 `{ msg, base_info }`，其中 `msg` 包含 `to_user_id`、`client_id`、`message_type`、`message_state`、`item_list`、`context_token`。
+- 不能依赖服务端返回 `message_id` 判成功。当前实现本地生成 `client_id`，HTTP 成功即视为投递成功，并把 `client_id` 作为 bridge 层的 `messageId`。
+- 微信只支持纯文本出站，所以 `bridge-manager.deliverResponse()` 会先做纯文本分片。Markdown / HTML 不走专门渲染器。
 
-**Media**: AES-128-ECB encryption for CDN upload/download. Inbound media (images, files, videos, voice) is decrypted and converted to `FileAttachment`. Outbound media is text-only in this version.
+**cursor / ack 语义**
+- 微信 worker 读到 `get_updates_buf` 后不会立即写库，而是先给本批消息分配 `batchId`。
+- 每条消息处理完成后，`bridge-manager.handleMessage()` 在 `finally` 中调用 `adapter.acknowledgeUpdate(batchId)`。
+- 只有当该 batch 被 `sealed` 且 `remaining = 0` 时，才真正把 cursor 提交到 `channel_offsets`。
+- 这样即使 Claude 处理、权限审批或微信出站在中途失败，也不会把上游 cursor 提前推进，避免静默丢消息。
 
-**Known limitations**:
-- Private chat only (no groups)
-- No streaming preview (WeChat doesn't support message editing)
-- No inline buttons (permissions use `/perm` text fallback)
-- Session expiry (errcode -14) pauses account for 60 minutes
-- Real QR code scanning requires a WeChat account with ilink bot access
+**cwd 自愈与 resume 清理**
+- 微信实现过程中补齐了 bridge 的 cwd 自愈链：`session.sdk_cwd` → `binding.workingDirectory` → `session.working_directory` → `bridge_default_work_dir` → `HOME/process cwd`。
+- `channel-router.resolve()` 会在每次消息到来时校验目录是否存在，并在回退到默认目录/Home 时清空 binding/session 上的 `sdk_session_id`，避免拿坏会话强行 resume。
+- `conversation-engine` 与 `claude-client` 也会再做一层防线：如果 cwd 已回退，不再尝试 resume 旧 Claude session。
+
+**typing / 媒体 / 权限**
+- typing 是 best-effort：先用 `getconfig(ilink_user_id, context_token)` 取 `typing_ticket`，再调用 `sendtyping`。失败不影响主流程。
+- 入站媒体可按 `bridge_weixin_media_enabled` 开关控制。开启时会把图片/文件/视频/语音下载、解密并转换成 `FileAttachment`，复用现有 vision / 文件上下文管线。
+- 微信没有按钮和消息编辑能力，权限审批统一降级为文本命令：`/perm allow|allow_session|deny <permission_request_id>`。
+
+**当前限制**
+- 仅支持私聊，不支持群聊语义。
+- 不支持流式预览；微信端无法像 Telegram/飞书那样持续编辑同一条消息。
+- 当前版本只做文本出站，AI 主动发图/发文件尚未接通。
+- 真实扫码联调依赖具备 ilink bot 权限的微信账号。
 
 ### Telegram
 
@@ -259,12 +303,20 @@ Claude 的回复是 Markdown 格式，Telegram 仅支持有限 HTML 标签（b/i
 **19. Telegram 通知模式互斥**
 `telegram-bot.ts` 的通知功能（UI 会话通知）与 bridge 模式互斥。通过 `globalThis.__codepilot_bridge_mode_active` 标志协调（存 globalThis 防 HMR 重置）。Bridge 启动时设 `true`，4 个 notify 函数检查此标志后提前返回。
 
+**20. 微信 `context_token` 必须持久化**
+微信不是“只靠 chatId 就能主动回消息”的协议。`sendmessage` 依赖最近一次入站消息带来的 `context_token`，所以必须把 `(account_id, peer_user_id) -> context_token` 持久化到 `weixin_context_tokens`。只放内存会在进程重启后导致“能收消息、不能回消息”。
+
+**21. 坏 cwd 不能继续 resume Claude 会话**
+Bridge 绑定和 chat session 中可能残留已经删除的 `working_directory` / `sdk_cwd`。一旦用坏目录继续携带旧 `sdk_session_id` 调 `streamClaude()`，Claude 子进程会在错误项目上下文里瞬间退出。当前修复要求在 cwd 回退时同步清空 binding/session 的 `sdk_session_id`，并把修正后的 cwd 回写 DB。
+
 ## 设置项（settings 表）
 
 | Key | 说明 |
 |-----|------|
 | remote_bridge_enabled | 总开关 |
 | bridge_telegram_enabled | Telegram 通道开关 |
+| bridge_weixin_enabled | 微信通道开关 |
+| bridge_weixin_media_enabled | 微信入站媒体下载开关（默认 true；关闭后只收文本） |
 | bridge_auto_start | 服务启动时自动拉起桥接 |
 | bridge_default_work_dir | 新建会话默认工作目录 |
 | bridge_default_model | 新建会话默认模型 |
@@ -296,6 +348,11 @@ Claude 的回复是 Markdown 格式，Telegram 仅支持有限 HTML 标签（b/i
 | /api/bridge | POST | `{ action: 'start' \| 'stop' \| 'auto-start' }` |
 | /api/bridge/channels | GET | 列出活跃通道（支持 `?active=true/false` 过滤） |
 | /api/bridge/settings | GET/PUT | 读写 bridge 设置 |
+| /api/settings/weixin | GET/PUT | 读写微信全局设置（当前仅开关和媒体选项） |
+| /api/settings/weixin/accounts | GET | 列出微信账号（token 脱敏，只返回 `has_token`） |
+| /api/settings/weixin/accounts/[accountId] | PATCH/DELETE | 启停或删除微信账号；bridge 运行中会同步 restart |
+| /api/settings/weixin/login/start | POST | 创建二维码登录会话并返回二维码图片 |
+| /api/settings/weixin/login/wait | POST | 轮询二维码状态；确认后自动尝试重启 bridge |
 
 ## Telegram 命令
 
@@ -315,10 +372,16 @@ Claude 的回复是 Markdown 格式，Telegram 仅支持有限 HTML 标签（b/i
 - `src/lib/telegram-bot.ts` — 通知模式（UI 发起会话的通知），与 bridge 模式互斥
 - `src/lib/permission-registry.ts` — 权限 Promise 注册表，bridge 和 UI 共用
 - `src/lib/claude-client.ts` — streamClaude()，bridge 和 UI 共用
-- `src/components/bridge/BridgeSection.tsx` — Bridge 设置 UI（一级导航 /bridge），含 Telegram/飞书通道开关
-- `src/components/bridge/BridgeLayout.tsx` — 侧边栏导航（Telegram + Feishu 入口）
+- `src/components/bridge/BridgeSection.tsx` — Bridge 设置 UI（一级导航 /bridge），含 Telegram/微信/飞书通道开关
+- `src/components/bridge/BridgeLayout.tsx` — 侧边栏导航（Telegram / 微信 / 飞书 入口）
 - `src/components/bridge/TelegramBridgeSection.tsx` — Telegram 凭据 + 白名单设置 UI（/bridge#telegram）
+- `src/components/bridge/WeixinBridgeSection.tsx` — 微信设置 UI：账号列表、二维码登录、运行态错误提示（/bridge#weixin）
 - `src/components/bridge/FeishuBridgeSection.tsx` — 飞书设置 UI：凭据 + 访问与行为（2 卡片 2 保存按钮 + 脏状态追踪）
+- `src/app/api/settings/weixin/route.ts` — 微信全局设置 API（当前仅 `bridge_weixin_enabled` / `bridge_weixin_media_enabled`）
+- `src/app/api/settings/weixin/accounts/route.ts` — 微信账号列表 API
+- `src/app/api/settings/weixin/accounts/[accountId]/route.ts` — 微信账号启停/删除 API（带 bridge restart 语义）
+- `src/app/api/settings/weixin/login/start/route.ts` — 微信二维码登录启动 API
+- `src/app/api/settings/weixin/login/wait/route.ts` — 微信二维码状态轮询 API（confirmed 后自动 restart bridge）
 - `src/app/api/settings/feishu/route.ts` — 飞书设置读写 API（简化后 10 个 key）
 - `src/app/api/settings/feishu/verify/route.ts` — 飞书凭据验证 API（测试 token 获取 + bot info）
 - `src/lib/channels/` — V2 ChannelPlugin 架构（见目录结构）

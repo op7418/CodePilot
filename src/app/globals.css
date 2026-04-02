@@ -115,6 +115,14 @@
   --status-info-foreground: oklch(0.546 0.245 262.881);
   --status-info-muted: oklch(0.546 0.245 262.881 / 10%);
   --status-info-border: oklch(0.546 0.245 262.881 / 20%);
+  /* Terminal / code-block (bash) tokens */
+  --terminal-bg: oklch(0.13 0.004 49.25);
+  --terminal-foreground: oklch(0.87 0.006 106);
+  --terminal-muted: oklch(0.55 0.01 58);
+  --terminal-border: oklch(0.30 0.005 49);
+  --terminal-accent: oklch(0.55 0.17 155);
+  --terminal-hover-bg: oklch(0.25 0.005 49);
+  --terminal-gradient-from: oklch(0.13 0.004 49.25);
 }
 
 .dark {
@@ -168,6 +176,14 @@
   --status-info-foreground: oklch(0.623 0.214 259.815);
   --status-info-muted: oklch(0.623 0.214 259.815 / 10%);
   --status-info-border: oklch(0.623 0.214 259.815 / 20%);
+  /* Terminal tokens — dark mode: stronger border contrast against dark page bg */
+  --terminal-bg: oklch(0.10 0.002 49);
+  --terminal-foreground: oklch(0.87 0.006 106);
+  --terminal-muted: oklch(0.60 0.01 58);
+  --terminal-border: oklch(0.35 0.006 49);
+  --terminal-accent: oklch(0.62 0.17 155);
+  --terminal-hover-bg: oklch(0.22 0.005 49);
+  --terminal-gradient-from: oklch(0.10 0.002 49);
 }
 
 @layer base {
@@ -274,4 +290,30 @@
     transparent 100%
   );
   background-size: 200% 100%;
+}
+
+/*
+ * Override Streamdown's bash/shell code block inline Shiki token colors.
+ * Placed outside @layer to ensure highest CSS specificity.
+ * Streamdown sets inline style="color:..." on each token span; only
+ * !important at the top layer can override inline styles.
+ */
+[data-language="bash"] pre,
+[data-language="sh"] pre,
+[data-language="shell"] pre,
+[data-language="zsh"] pre,
+[data-language="console"] pre,
+[data-language="terminal"] pre {
+  background-color: var(--terminal-bg) !important;
+  color: var(--terminal-foreground) !important;
+}
+
+[data-language="bash"] pre span[style],
+[data-language="sh"] pre span[style],
+[data-language="shell"] pre span[style],
+[data-language="zsh"] pre span[style],
+[data-language="console"] pre span[style],
+[data-language="terminal"] pre span[style] {
+  color: inherit !important;
+  background-color: transparent !important;
 }

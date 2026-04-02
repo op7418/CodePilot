@@ -5,6 +5,7 @@ import { HeroSection } from '@/components/marketing/HeroSection';
 import { FeaturesSection } from '@/components/marketing/FeaturesSection';
 import { IntegrationsSection } from '@/components/marketing/IntegrationsSection';
 import { FAQSection } from '@/components/marketing/FAQAccordion';
+import { ReleasesSection } from '@/components/marketing/ReleasesSection';
 import { FinalCTA } from '@/components/marketing/FinalCTA';
 import { SiteFooter } from '@/components/marketing/SiteFooter';
 import { siteConfig } from '@/lib/site.config';
@@ -48,6 +49,7 @@ export default async function HomePage({
       <FeaturesSection content={content.features} />
       <IntegrationsSection content={content.openSource} />
       <FAQSection content={content.faq} />
+      <ReleasesSection content={content.releases} />
       <FinalCTA content={content.cta} locale={lang} />
       <SiteFooter content={content.footer} />
     </main>

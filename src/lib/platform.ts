@@ -9,12 +9,53 @@ const execFileAsync = promisify(execFile);
 export const isWindows = process.platform === 'win32';
 export const isMac = process.platform === 'darwin';
 
+export interface RuntimeArchitectureInfo {
+  platform: NodeJS.Platform;
+  processArch: string;
+  hostArch: string;
+  runningUnderRosetta: boolean;
+}
+
 /**
  * Whether the given binary path requires shell execution.
  * On Windows, .cmd/.bat files cannot be executed directly by execFileSync.
  */
 function needsShell(binPath: string): boolean {
   return isWindows && /\.(cmd|bat)$/i.test(binPath);
+}
+
+function readSysctlValue(name: string): string | null {
+  try {
+    return execFileSync('/usr/sbin/sysctl', ['-in', name], {
+      encoding: 'utf-8',
+      timeout: 1000,
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    return null;
+  }
+}
+
+export function getRuntimeArchitectureInfo(): RuntimeArchitectureInfo {
+  const processArch = process.arch;
+  let hostArch = processArch;
+  let runningUnderRosetta = false;
+
+  if (isMac) {
+    const armCapable = readSysctlValue('hw.optional.arm64');
+    if (armCapable === '1') {
+      hostArch = 'arm64';
+    }
+
+    runningUnderRosetta = readSysctlValue('sysctl.proc_translated') === '1';
+  }
+
+  return {
+    platform: process.platform,
+    processArch,
+    hostArch,
+    runningUnderRosetta,
+  };
 }
 
 /**

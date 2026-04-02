@@ -134,54 +134,53 @@ export default function GalleryPage() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      {/* Header */}
-      <div className="shrink-0 border-b border-border/50 px-4 py-3">
-        <div className="flex items-center justify-between gap-3">
-          <h1 className="text-lg font-semibold">
-            {t('gallery.title' as TranslationKey)}
-          </h1>
-          <div className="flex items-center gap-2">
-            {/* Favorites toggle */}
-            <Button
-              variant={favoritesOnly ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setFavoritesOnly((v) => !v)}
-            >
-              <Heart
-                size={14}
-                className={cn(favoritesOnly && 'text-status-error-foreground')}
-                weight={favoritesOnly ? 'fill' : 'regular'}
-              />
-              {t('gallery.favoritesOnly' as TranslationKey)}
-            </Button>
+      {/* Fixed header — page identity only */}
+      <div className="shrink-0 border-b border-border/50 px-6 pt-4 pb-4">
+        <h1 className="text-xl font-semibold">
+          {t('gallery.title' as TranslationKey)}
+        </h1>
+        <p className="text-sm text-muted-foreground mt-1">{t('gallery.description' as TranslationKey)}</p>
+      </div>
 
-            {/* Filter toggle */}
-            <Button
-              variant={showFilters ? 'secondary' : 'ghost'}
-              size="sm"
-              onClick={() => setShowFilters(!showFilters)}
-            >
-              <Funnel size={14} />
-              {t('gallery.filters' as TranslationKey)}
-            </Button>
-
-            {/* Sort */}
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setSort((s) => (s === 'newest' ? 'oldest' : 'newest'))}
-            >
-              <SortDescending size={14} />
-              {sort === 'newest'
-                ? t('gallery.newestFirst' as TranslationKey)
-                : t('gallery.oldestFirst' as TranslationKey)}
-            </Button>
-          </div>
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto p-6">
+        {/* Content toolbar — filters/sort */}
+        <div className="flex items-center justify-end gap-2 mb-4">
+          <Button
+            variant={favoritesOnly ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => setFavoritesOnly((v) => !v)}
+          >
+            <Heart
+              size={14}
+              className={cn(favoritesOnly && 'text-status-error-foreground')}
+              weight={favoritesOnly ? 'fill' : 'regular'}
+            />
+            {t('gallery.favoritesOnly' as TranslationKey)}
+          </Button>
+          <Button
+            variant={showFilters ? 'secondary' : 'ghost'}
+            size="sm"
+            onClick={() => setShowFilters(!showFilters)}
+          >
+            <Funnel size={14} />
+            {t('gallery.filters' as TranslationKey)}
+          </Button>
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setSort((s) => (s === 'newest' ? 'oldest' : 'newest'))}
+          >
+            <SortDescending size={14} />
+            {sort === 'newest'
+              ? t('gallery.newestFirst' as TranslationKey)
+              : t('gallery.oldestFirst' as TranslationKey)}
+          </Button>
         </div>
 
         {/* Filter bar */}
         {showFilters && (
-          <div className="mt-3 space-y-2.5">
+          <div className="mb-4 space-y-2.5">
             {/* Date range */}
             <div className="flex items-center gap-2">
               <label className="text-xs text-muted-foreground">
@@ -217,10 +216,8 @@ export default function GalleryPage() {
             </div>
           </div>
         )}
-      </div>
 
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4">
+        {/* Gallery content */}
         {loading && items.length === 0 ? (
           <div className="flex h-full items-center justify-center">
             <SpinnerGap size={20} className="animate-spin text-muted-foreground" />

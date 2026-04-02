@@ -23,7 +23,9 @@ import {
   Code,
   SlidersHorizontal,
   SpinnerGap,
+  FileArrowDown,
 } from "@/components/ui/icon";
+import { ImportSessionDialog } from "@/components/layout/ImportSessionDialog";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { TranslationKey } from "@/i18n";
 
@@ -48,6 +50,7 @@ const KNOWN_FIELDS = [
 
 export function CliSettingsSection() {
   const [settings, setSettings] = useState<SettingsData>({});
+  const [importDialogOpen, setImportDialogOpen] = useState(false);
   const [originalSettings, setOriginalSettings] = useState<SettingsData>({});
   const [jsonText, setJsonText] = useState("");
   const [jsonError, setJsonError] = useState("");
@@ -170,6 +173,23 @@ export function CliSettingsSection() {
 
   return (
     <div className="max-w-3xl">
+      {/* Import CLI Session */}
+      <div className="mb-6">
+        <Button
+          variant="outline"
+          size="sm"
+          className="gap-2"
+          onClick={() => setImportDialogOpen(true)}
+        >
+          <FileArrowDown size={14} />
+          {t('chatList.importFromCli')}
+        </Button>
+        <ImportSessionDialog
+          open={importDialogOpen}
+          onOpenChange={setImportDialogOpen}
+        />
+      </div>
+
       <Tabs defaultValue="form">
         <TabsList className="mb-4">
           <TabsTrigger value="form" className="gap-2">

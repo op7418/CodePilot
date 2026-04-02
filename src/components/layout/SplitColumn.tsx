@@ -42,11 +42,18 @@ export function SplitColumn({ sessionId, isActive, onClose, onFocus }: SplitColu
         if (cancelled) return;
         if (res.ok) {
           const data: { session: ChatSession } = await res.json();
+          if (cancelled) return;
           setSessionTitle(data.session.title || t("chat.newConversation"));
-          setSessionModel(data.session.model || "");
-          setSessionProviderId(data.session.provider_id || "");
           setProjectName(data.session.project_name || "");
           setSessionWorkingDir(data.session.working_directory || "");
+
+          // Resolve model: session → global default → provider's first → localStorage
+          const { resolveSessionModel } = await import("@/lib/resolve-session-model");
+          if (cancelled) return;
+          const resolved = await resolveSessionModel(data.session.model || "", data.session.provider_id || "");
+          if (cancelled) return;
+          setSessionModel(resolved.model);
+          setSessionProviderId(resolved.providerId);
         }
       } catch {
         // ignore

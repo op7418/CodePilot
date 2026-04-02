@@ -8,6 +8,7 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import type { SkillKind } from '../../types';
+import { dispatchBadge as realDispatchBadge } from '../../lib/message-input-logic';
 
 // ─── SkillKind Type Values ──────────────────────────────────────
 
@@ -132,39 +133,8 @@ interface DispatchResult {
   displayLabel: string;
 }
 
-/**
- * Mimics the badge dispatch logic from MessageInput.tsx handleSubmit.
- * Extracted as a pure function for testability.
- */
-function dispatchBadge(badge: CommandBadge, userContent: string): DispatchResult {
-  const displayLabel = `/${badge.label}`;
-
-  switch (badge.kind) {
-    case 'agent_skill': {
-      // Agent skills: always include skill name so Claude knows which skill was selected
-      const agentPrompt = userContent
-        ? `Use the ${badge.label} skill. User context: ${userContent}`
-        : `Please use the ${badge.label} skill.`;
-      return { prompt: agentPrompt, displayLabel };
-    }
-
-    case 'slash_command':
-    case 'sdk_command': {
-      const slashPrompt = userContent
-        ? `${badge.command} ${userContent}`
-        : badge.command;
-      return { prompt: slashPrompt, displayLabel };
-    }
-
-    case 'codepilot_command': {
-      const expandedPrompt = COMMAND_PROMPTS[badge.command] || '';
-      const finalPrompt = userContent
-        ? `${expandedPrompt}\n\nUser context: ${userContent}`
-        : expandedPrompt || badge.command;
-      return { prompt: finalPrompt, displayLabel };
-    }
-  }
-}
+// Use the real implementation instead of a local copy to prevent drift
+const dispatchBadge = realDispatchBadge as (badge: CommandBadge, userContent: string) => DispatchResult;
 
 describe('badge dispatch logic', () => {
   describe('agent_skill kind', () => {
@@ -179,7 +149,7 @@ describe('badge dispatch logic', () => {
       const result = dispatchBadge(badge, 'fix the typo in README');
       assert.ok(result.prompt.includes('git-commit'), 'prompt must reference the skill name');
       assert.ok(result.prompt.includes('fix the typo in README'), 'prompt must include user context');
-      assert.equal(result.displayLabel, '/git-commit');
+      assert.equal(result.displayLabel, '/git-commit\nfix the typo in README');
     });
 
     it('should send trigger hint with skill name when no user content', () => {

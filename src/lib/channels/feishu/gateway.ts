@@ -64,10 +64,10 @@ export class FeishuGateway {
   /** Register the im.message.receive_v1 handler. */
   registerMessageHandler(handler: (data: unknown) => void): void {
     this.onMessage = handler;
-    this.eventDispatcher.register({
-      'im.message.receive_v1': ((data: unknown) => {
+    this.eventDispatcher.register<Record<string, (data: unknown) => void>>({
+      'im.message.receive_v1': (data: unknown) => {
         handler(data);
-      }) as any,
+      },
     });
   }
 
@@ -89,8 +89,8 @@ export class FeishuGateway {
 
     // Register the safe wrapper on the EventDispatcher.
     // The wrapper guarantees a response object is always returned.
-    this.eventDispatcher.register({
-      'card.action.trigger': ((data: unknown) => this.safeCardActionHandler(data)) as any,
+    this.eventDispatcher.register<Record<string, (data: unknown) => Promise<unknown>>>({
+      'card.action.trigger': (data: unknown) => this.safeCardActionHandler(data),
     });
   }
 
@@ -149,16 +149,19 @@ export class FeishuGateway {
     // The SDK's WSClient only handles type="event" by default; card action
     // callbacks arrive as type="card" and would be silently dropped.
     // Patch: rewrite type header from "card" to "event" before dispatching.
-    const wsClientAny = this.wsClient as any;
-    if (typeof wsClientAny.handleEventData === 'function') {
-      const origHandleEventData = wsClientAny.handleEventData.bind(wsClientAny);
-      wsClientAny.handleEventData = (data: any) => {
-        const msgType = data.headers?.find?.((h: any) => h.key === 'type')?.value;
+    interface WSHeader { key: string; value: string }
+    interface WSEventData { headers: WSHeader[]; [key: string]: unknown }
+    type HandleEventDataFn = (data: WSEventData) => unknown;
+    const wsClientRecord = this.wsClient as unknown as Record<string, unknown>;
+    if (typeof wsClientRecord.handleEventData === 'function') {
+      const origHandleEventData = (wsClientRecord.handleEventData as HandleEventDataFn).bind(this.wsClient);
+      wsClientRecord.handleEventData = (data: WSEventData) => {
+        const msgType = data.headers?.find?.((h: WSHeader) => h.key === 'type')?.value;
         if (msgType !== 'event') console.log(LOG_TAG, 'handleEventData type:', msgType);
         if (msgType === 'card') {
-          const patchedData = {
+          const patchedData: WSEventData = {
             ...data,
-            headers: data.headers.map((h: any) =>
+            headers: data.headers.map((h: WSHeader) =>
               h.key === 'type' ? { ...h, value: 'event' } : h,
             ),
           };

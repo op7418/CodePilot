@@ -20,11 +20,11 @@ export function FinalCTA({
         </h2>
 
         <div className="mt-8 flex items-center gap-4">
-          <Link href={`${prefix}/docs/installation`}>
+          <a href="https://github.com/op7418/CodePilot/releases/latest" target="_blank" rel="noopener noreferrer">
             <RainbowButton className="h-12 rounded-full px-10 text-base">
               {content.primary}
             </RainbowButton>
-          </Link>
+          </a>
           <Link
             href={`${prefix}/docs`}
             className="text-base font-semibold text-muted-foreground transition-colors hover:text-foreground"

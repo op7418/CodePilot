@@ -7,6 +7,8 @@ import {
   TreeStructure,
   PencilSimple,
   DotOutline,
+  ChartBar,
+  Brain,
 } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -19,6 +21,7 @@ import { usePanel } from "@/hooks/usePanel";
 import { useTranslation } from "@/hooks/useTranslation";
 import { useClientPlatform } from '@/hooks/useClientPlatform';
 import { showToast } from '@/hooks/useToast';
+import { SPECIES_IMAGE_URL, EGG_IMAGE_URL, type Species } from '@/lib/buddy';
 
 export function UnifiedTopBar() {
   const {
@@ -30,11 +33,29 @@ export function UnifiedTopBar() {
     setFileTreeOpen,
     gitPanelOpen,
     setGitPanelOpen,
+    dashboardPanelOpen,
+    setDashboardPanelOpen,
+    assistantPanelOpen,
+    setAssistantPanelOpen,
+    isAssistantWorkspace,
     currentBranch,
     gitDirtyCount,
   } = usePanel();
   const { t } = useTranslation();
   const { isWindows } = useClientPlatform();
+  const [assistantName, setAssistantName] = useState('');
+  const [buddyEmoji, setBuddyEmoji] = useState('');
+  const [buddySpecies, setBuddySpecies] = useState('');
+
+  useEffect(() => {
+    if (!isAssistantWorkspace) return;
+    let cancelled = false;
+    fetch('/api/workspace/summary')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => { if (!cancelled) { setAssistantName(data?.name || ''); setBuddyEmoji(data?.buddy?.emoji || ''); setBuddySpecies(data?.buddy?.species || ''); } })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isAssistantWorkspace]);
   const pathname = usePathname();
 
   // Only show Git/terminal/panel controls on chat detail routes (/chat/[id]),
@@ -90,6 +111,17 @@ export function UnifiedTopBar() {
 
   // Extract project name from working directory
   const projectName = workingDirectory ? workingDirectory.split(/[\\/]/).filter(Boolean).pop() || '' : '';
+
+  // On non-chat routes, render only a thin drag region (no visible bar)
+  if (!isChatRoute) {
+    // Thin drag region for macOS window dragging — just enough for traffic light area
+    return (
+      <div
+        className="h-3 shrink-0"
+        style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
+      />
+    );
+  }
 
   return (
     <>
@@ -213,6 +245,28 @@ export function UnifiedTopBar() {
                   </Button>
                 </TooltipTrigger>
                 <TooltipContent side="bottom">{t('topBar.fileTree')}</TooltipContent>
+              </Tooltip>
+
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant={dashboardPanelOpen ? "secondary" : "ghost"}
+                    size="icon-sm"
+                    className={dashboardPanelOpen ? "" : "text-muted-foreground hover:text-foreground"}
+                    onClick={() => setDashboardPanelOpen(!dashboardPanelOpen)}
+                  >
+                    {isAssistantWorkspace
+                      ? <img
+                          src={buddySpecies ? (SPECIES_IMAGE_URL[buddySpecies as Species] || '') : EGG_IMAGE_URL}
+                          alt="" width={16} height={16} className="rounded-sm"
+                        />
+                      : <ChartBar size={16} />}
+                    <span className="sr-only">{t('topBar.dashboard')}</span>
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom">
+                  {isAssistantWorkspace ? 'Assistant' : t('topBar.dashboard')}
+                </TooltipContent>
               </Tooltip>
             </>
           )}

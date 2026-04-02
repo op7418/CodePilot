@@ -13,8 +13,10 @@ import {
   CheckCircle,
   XCircle,
   CaretRight,
+  Image as ImageIcon,
 } from "@phosphor-icons/react";
 import { cn } from '@/lib/utils';
+import type { MediaBlock } from '@/types';
 
 // ---------------------------------------------------------------------------
 // Types
@@ -26,6 +28,7 @@ export interface ToolAction {
   input: unknown;
   result?: string;
   isError?: boolean;
+  media?: MediaBlock[];
 }
 
 interface ToolActionsGroupProps {
@@ -167,6 +170,10 @@ function ToolActionRow({ tool }: { tool: ToolAction }) {
         <span className="text-muted-foreground/40 text-[11px] font-mono truncate max-w-[200px] hidden sm:inline">
           {truncatePath(filePath)}
         </span>
+      )}
+
+      {tool.media && tool.media.length > 0 && (
+        <ImageIcon size={14} className="shrink-0 text-primary/60" />
       )}
 
       <StatusDot status={status} />

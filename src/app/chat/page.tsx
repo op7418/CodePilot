@@ -1,15 +1,17 @@
 'use client';
 
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useState, useCallback, useRef, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import type { Message, SSEEvent, SessionResponse, TokenUsage, PermissionRequestEvent } from '@/types';
 import { MessageList } from '@/components/chat/MessageList';
 import { MessageInput } from '@/components/chat/MessageInput';
 import { ChatComposerActionBar } from '@/components/chat/ChatComposerActionBar';
+import { ModeIndicator } from '@/components/chat/ModeIndicator';
 import { ChatPermissionSelector } from '@/components/chat/ChatPermissionSelector';
 import { ImageGenToggle } from '@/components/chat/ImageGenToggle';
 import { PermissionPrompt } from '@/components/chat/PermissionPrompt';
 import { ChatEmptyState } from '@/components/chat/ChatEmptyState';
+import { OnboardingWizard } from '@/components/assistant/OnboardingWizard';
 import { ErrorBanner } from '@/components/ui/error-banner';
 import { FolderPicker } from '@/components/chat/FolderPicker';
 import { useNativeFolderPicker } from '@/hooks/useNativeFolderPicker';
@@ -29,6 +31,12 @@ interface ToolResultInfo {
 
 export default function NewChatPage() {
   const router = useRouter();
+  // Read prefill from URL once on mount — avoids useSearchParams which requires Suspense boundary
+  const prefillText = useMemo(() => {
+    if (typeof window === 'undefined') return '';
+    const params = new URLSearchParams(window.location.search);
+    return params.get('prefill') || '';
+  }, []);
   const { setPendingApprovalSessionId } = usePanel();
   const { t } = useTranslation();
   const { isElectron, openNativePicker } = useNativeFolderPicker();
@@ -43,7 +51,10 @@ export default function NewChatPage() {
   const [errorBanner, setErrorBanner] = useState<{ message: string; description?: string } | null>(null);
   const [recentProjects, setRecentProjects] = useState<string[]>([]);
   const [hasProvider, setHasProvider] = useState(true); // assume true until checked
-  const [mode] = useState('code');
+  const [showWizard, setShowWizard] = useState(false);
+  const [assistantConfigured, setAssistantConfigured] = useState(false);
+  const [assistantWorkspacePath, setAssistantWorkspacePath] = useState('');
+  const [mode, setMode] = useState('code');
   // Model/provider start empty — populated by the async global-default fetch.
   // This prevents the race where a user sends before the fetch completes and
   // gets the stale localStorage model instead of the configured default.
@@ -175,7 +186,7 @@ export default function NewChatPage() {
     });
 
     return () => { cancelled = true; };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+   
   }, []); // Run once on mount to validate initial values
 
   // Initialize workingDir from localStorage (or setup default), validating the path exists
@@ -237,6 +248,19 @@ export default function NewChatPage() {
     fetch('/api/setup/recent-projects')
       .then(r => r.ok ? r.json() : { projects: [] })
       .then(data => setRecentProjects(data.projects || []))
+      .catch(() => {});
+  }, []);
+
+  // Detect assistant workspace status
+  useEffect(() => {
+    fetch('/api/settings/workspace')
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.path && data?.valid !== false) {
+          setAssistantWorkspacePath(data.path);
+          setAssistantConfigured(!!data.state?.onboardingComplete);
+        }
+      })
       .catch(() => {});
   }, []);
 
@@ -723,6 +747,24 @@ export default function NewChatPage() {
           onSelectFolder={handleSelectFolder}
           recentProjects={recentProjects}
           onSelectProject={handleSelectProject}
+          assistantConfigured={assistantConfigured}
+          onOpenAssistant={() => {
+            if (assistantConfigured) {
+              // Navigate to the latest assistant session
+              fetch(`/api/workspace/session`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ mode: 'checkin' }),
+              })
+                .then(r => r.json())
+                .then(data => router.push(`/chat/${data.session.id}`))
+                .catch(() => {});
+            } else if (assistantWorkspacePath) {
+              setShowWizard(true);
+            } else {
+              router.push('/settings#assistant');
+            }
+          }}
         />
       ) : (
         <MessageList
@@ -771,9 +813,10 @@ export default function NewChatPage() {
         workingDirectory={workingDir}
         effort={selectedEffort}
         onEffortChange={setSelectedEffort}
+        initialValue={prefillText}
       />
       <ChatComposerActionBar
-        left={<ImageGenToggle />}
+        left={<><ModeIndicator mode={mode} onModeChange={setMode} disabled={isStreaming} /><ImageGenToggle /></>}
         center={
           <ChatPermissionSelector
             permissionProfile={permissionProfile}
@@ -786,6 +829,16 @@ export default function NewChatPage() {
         onOpenChange={setFolderPickerOpen}
         onSelect={handleFolderPickerSelect}
       />
+      {showWizard && assistantWorkspacePath && (
+        <OnboardingWizard
+          workspacePath={assistantWorkspacePath}
+          onComplete={(session) => {
+            setShowWizard(false);
+            setAssistantConfigured(true);
+            router.push(`/chat/${session.id}`);
+          }}
+        />
+      )}
     </div>
   );
 }

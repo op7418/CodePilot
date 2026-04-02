@@ -5,6 +5,7 @@ import { useImageGen } from '@/hooks/useImageGen';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
 import { Button } from '@/components/ui/button';
+import { PaintBrush } from '@/components/ui/icon';
 import {
   Tooltip,
   TooltipContent,
@@ -27,12 +28,13 @@ export function ImageGenToggle() {
           size="sm"
           onClick={handleToggle}
           className={cn(
-            'rounded-full px-2.5 h-7 text-xs font-medium border transition-all',
+            'rounded-md px-2.5 h-7 text-xs font-medium border transition-all',
             state.enabled
               ? 'bg-primary/15 text-primary border-primary/30'
               : 'text-muted-foreground border-border/60 hover:text-foreground hover:border-foreground/30 hover:bg-accent/50'
           )}
         >
+          <PaintBrush size={12} />
           {t('composer.designAgent' as TranslationKey)}
         </Button>
       </TooltipTrigger>

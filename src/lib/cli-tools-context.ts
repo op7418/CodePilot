@@ -1,5 +1,6 @@
 import { detectAllCliTools } from './cli-tools-detect';
 import { CLI_TOOLS_CATALOG, EXTRA_WELL_KNOWN_BINS } from './cli-tools-catalog';
+import { getAllCustomCliTools } from './db';
 
 /**
  * Build a concise CLI tools context block for chat system prompt injection.
@@ -27,7 +28,14 @@ export async function buildCliToolsContext(): Promise<string | null> {
       return `- ${name}${ver}`;
     });
 
-    const allLines = [...catalogLines, ...extraLines];
+    // Custom user-added tools
+    const customTools = getAllCustomCliTools();
+    const customLines = customTools.map(t => {
+      const ver = t.version ? ` (v${t.version})` : '';
+      return `- ${t.name}${ver}: ${t.binPath}`;
+    });
+
+    const allLines = [...catalogLines, ...extraLines, ...customLines];
     if (allLines.length === 0) return null;
 
     return `<available_cli_tools>\nThe following CLI tools are installed on this system and available for use:\n${allLines.join('\n')}\n</available_cli_tools>`;

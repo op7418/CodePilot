@@ -1,4 +1,3 @@
-import Link from 'next/link';
 import Image from 'next/image';
 import type { MarketingContent } from '../../../content/marketing/en';
 import { ChatDemo } from './ChatDemo';
@@ -38,11 +37,11 @@ export function HeroSection({
           </h1>
 
           <div className="mt-7 flex items-center justify-center">
-            <Link href={`${prefix}/docs/installation`}>
+            <a href="https://github.com/op7418/CodePilot/releases/latest" target="_blank" rel="noopener noreferrer">
               <RainbowButton className="h-14 rounded-full px-14 text-lg">
                 {content.cta}
               </RainbowButton>
-            </Link>
+            </a>
           </div>
         </div>
 

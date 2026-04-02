@@ -46,6 +46,11 @@ export interface MarketingContent {
     title: string;
     cards: { title: string; description: string; href: string }[];
   };
+  releases: {
+    title: string;
+    titleLight: string;
+    viewAll: string;
+  };
   cta: {
     title: string;
     description: string;
@@ -163,8 +168,8 @@ export const en: MarketingContent = {
         a: 'No. All API calls go directly from your machine to the provider. CodePilot never sees your code or conversations.',
       },
       {
-        q: 'Can I use it on Windows and Linux?',
-        a: 'macOS is fully supported today. Windows and Linux builds are on the roadmap.',
+        q: 'Which platforms are supported?',
+        a: 'CodePilot supports macOS (Apple Silicon & Intel), Windows (x64), and Linux (x64 & arm64). Download the latest version for your platform from the GitHub releases page.',
       },
     ],
   },
@@ -219,6 +224,11 @@ export const en: MarketingContent = {
       { title: 'Bridge', description: 'Connect messaging platforms.', href: '/docs/bridge' },
       { title: 'Workspace', description: 'File inspection and context.', href: '/docs/workspace' },
     ],
+  },
+  releases: {
+    title: 'What\'s New',
+    titleLight: 'in CodePilot',
+    viewAll: 'View all releases on GitHub',
   },
   cta: {
     title: 'Ready to try CodePilot?',

@@ -9,13 +9,34 @@ import type { FeishuConfig } from './types';
 
 const LOG_TAG = '[feishu/inbound]';
 
+/** Shape of a Feishu im.message.receive_v1 event message */
+interface FeishuRawMessage {
+  chat_id?: string;
+  message_id?: string;
+  message_type?: string;
+  content?: string;
+  root_id?: string;
+  create_time?: string;
+}
+
+/** Shape of a Feishu event (may be wrapped or unwrapped) */
+interface FeishuRawEvent {
+  event?: {
+    message?: FeishuRawMessage;
+    sender?: { sender_id?: { open_id?: string } };
+  };
+  message?: FeishuRawMessage;
+  sender?: { sender_id?: { open_id?: string } };
+}
+
 /** Parse a raw Feishu im.message.receive_v1 event into an InboundMessage. */
 export function parseInboundMessage(
-  eventData: any,
+  eventData: unknown,
   _config: FeishuConfig,
 ): InboundMessage | null {
   try {
-    const event = eventData?.event ?? eventData;
+    const raw = eventData as FeishuRawEvent;
+    const event = raw?.event ?? raw;
     const message = event?.message;
     if (!message) return null;
 
@@ -52,7 +73,7 @@ export function parseInboundMessage(
         userId: sender,
       },
       text: text.trim(),
-      timestamp: parseInt(message.create_time, 10) || Date.now(),
+      timestamp: parseInt(message.create_time || '0', 10) || Date.now(),
     };
   } catch (err) {
     console.error(LOG_TAG, 'Failed to parse inbound message:', err);

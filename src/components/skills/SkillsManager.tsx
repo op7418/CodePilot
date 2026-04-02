@@ -11,6 +11,7 @@ import { SkillEditor } from "./SkillEditor";
 import { CreateSkillDialog } from "./CreateSkillDialog";
 import { MarketplaceBrowser } from "./MarketplaceBrowser";
 import { useTranslation } from "@/hooks/useTranslation";
+import type { TranslationKey } from "@/i18n";
 import { cn } from "@/lib/utils";
 import type { SkillItem } from "./SkillListItem";
 
@@ -151,12 +152,23 @@ export function SkillsManager() {
   }
 
   return (
-    <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="flex items-center gap-3 mb-4">
-        <h3 className="text-lg font-semibold">{t('extensions.skills')}</h3>
+    <div className="flex h-full flex-col">
+      {/* Fixed header */}
+      <div className="shrink-0 border-b border-border/50 px-6 pt-4 pb-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-xl font-semibold">{t('extensions.skills')}</h1>
+            <p className="text-sm text-muted-foreground mt-1">{t('skills.description' as TranslationKey)}</p>
+          </div>
+          {viewTab === "local" && (
+            <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1">
+              <Plus size={14} />
+              {t('skills.newSkill')}
+            </Button>
+          )}
+        </div>
         {/* Segmented control */}
-        <div className="flex items-center bg-muted rounded-md p-0.5">
+        <div className="flex items-center bg-muted rounded-md p-0.5 mt-3 w-fit">
           <Button
             variant="ghost"
             size="sm"
@@ -184,23 +196,16 @@ export function SkillsManager() {
             {t('skills.marketplace')}
           </Button>
         </div>
-        <div className="flex-1" />
-        {viewTab === "local" && (
-          <Button size="sm" onClick={() => setShowCreate(true)} className="gap-1">
-            <Plus size={14} />
-            {t('skills.newSkill')}
-          </Button>
-        )}
       </div>
 
       {/* Main content */}
       {viewTab === "marketplace" ? (
         <MarketplaceBrowser onInstalled={fetchSkills} />
       ) : (
-      <div className="flex gap-4 flex-1 min-h-0">
+      <div className="flex flex-1 min-h-0">
         {/* Left: skill list */}
-        <div className="w-64 shrink-0 flex flex-col border border-border rounded-lg overflow-hidden">
-          <div className="p-2 border-b border-border">
+        <div className="w-64 shrink-0 flex flex-col overflow-hidden pl-4">
+          <div className="px-2 pt-4 pb-2">
             <div className="relative">
               <MagnifyingGlass size={14} className="absolute left-2 top-1/2 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -296,8 +301,11 @@ export function SkillsManager() {
           </div>
         </div>
 
+        {/* Divider */}
+        <div className="shrink-0 w-px bg-border/50" />
+
         {/* Right: editor */}
-        <div className="flex-1 min-w-0 border border-border rounded-lg overflow-hidden">
+        <div className="flex-1 min-w-0 overflow-hidden">
           {selected ? (
             <SkillEditor
               key={`${selected.source}:${selected.name}`}

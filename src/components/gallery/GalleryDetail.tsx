@@ -116,6 +116,7 @@ export function GalleryDetail({
 
   const currentImage = item.images[currentImageIndex];
   const hasMultipleImages = item.images.length > 1;
+  const isVideo = item.type === 'video' || !!currentImage?.mimeType?.startsWith('video/');
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -125,16 +126,26 @@ export function GalleryDetail({
         </DialogTitle>
 
         <div className="flex flex-row h-full">
-          {/* Left: Image preview */}
+          {/* Left: Media preview */}
           <div className="relative w-[70%] shrink-0 bg-black">
             <div className="absolute inset-0 flex items-center justify-center">
               {currentImage && (
-                // eslint-disable-next-line @next/next/no-img-element
-                <img
-                  src={imageUrl(currentImage)}
-                  alt={item.prompt}
-                  className="max-w-full max-h-full object-contain"
-                />
+                isVideo ? (
+                  // eslint-disable-next-line jsx-a11y/media-has-caption
+                  <video
+                    src={imageUrl(currentImage)}
+                    controls
+                    preload="metadata"
+                    className="max-w-full max-h-full object-contain"
+                  />
+                ) : (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={imageUrl(currentImage)}
+                    alt={item.prompt}
+                    className="max-w-full max-h-full object-contain"
+                  />
+                )
               )}
             </div>
 

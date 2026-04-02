@@ -1,22 +1,25 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect, useMemo, memo } from 'react';
-import type { Message, TokenUsage, FileAttachment } from '@/types';
+import type { Message, TokenUsage, FileAttachment, MediaBlock } from '@/types';
 import {
   Message as AIMessage,
   MessageContent,
   MessageResponse,
 } from '@/components/ai-elements/message';
 import { ToolActionsGroup } from '@/components/ai-elements/tool-actions-group';
+import { MediaPreview } from './MediaPreview';
 import { Button } from "@/components/ui/button";
-import { Copy, Check, CaretDown, CaretUp } from "@/components/ui/icon";
+import { Copy, Check, CaretDown, CaretUp, PushPin, DownloadSimple } from "@/components/ui/icon";
 import { FileAttachmentDisplay } from './FileAttachmentDisplay';
 import { ImageGenConfirmation } from './ImageGenConfirmation';
 import { ImageGenCard } from './ImageGenCard';
 import { BatchPlanInlinePreview } from './batch-image-gen/BatchPlanInlinePreview';
 import { WidgetRenderer } from './WidgetRenderer';
 import { buildReferenceImages } from '@/lib/image-ref-store';
+import { SPECIES_IMAGE_URL, EGG_IMAGE_URL, RARITY_BG_GRADIENT, type Species, type Rarity } from '@/lib/buddy';
 import { parseDBDate } from '@/lib/utils';
+import { usePanel } from '@/hooks/usePanel';
 import type { PlannerOutput } from '@/types';
 
 interface ImageGenRequest {
@@ -156,59 +159,103 @@ export type WidgetSegment =
   | { type: 'text'; content: string }
   | { type: 'widget'; data: ShowWidgetData };
 
-/** Parse ALL show-widget fences in text, returning alternating text/widget segments. */
+/**
+ * Fence-format-agnostic widget parser.
+ *
+ * Models produce many fence variants (```show-widget, `show-widget`, `show-widget\n...\n`, etc.).
+ * Instead of normalizing each variant, we directly scan for "show-widget" markers followed by
+ * JSON containing "widget_code", regardless of surrounding backtick syntax.
+ */
+
+/** Find the end of a JSON object starting at `{`, accounting for nested braces and strings. */
+function findJsonEnd(text: string, start: number): number {
+  let depth = 0;
+  let inString = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escaped) { escaped = false; continue; }
+    if (ch === '\\' && inString) { escaped = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') depth++;
+    else if (ch === '}') { depth--; if (depth === 0) return i; }
+  }
+  return -1; // unclosed
+}
+
+/** Parse ALL show-widget blocks in text, returning alternating text/widget segments. */
 export function parseAllShowWidgets(text: string): WidgetSegment[] {
   const segments: WidgetSegment[] = [];
-  const fenceRegex = /```show-widget\s*\n?([\s\S]*?)\n?\s*```/g;
+  // Match any backtick(s) + show-widget, capturing the full marker to strip it
+  const markerRegex = /`{1,3}show-widget`{0,3}\s*(?:\n\s*`{3}(?:json)?\s*)?\n?/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let foundAny = false;
 
-  while ((match = fenceRegex.exec(text)) !== null) {
-    foundAny = true;
-    // Text before this fence
-    const before = text.slice(lastIndex, match.index).trim();
-    if (before) segments.push({ type: 'text', content: before });
-
-    // Parse widget JSON
-    try {
-      const json = JSON.parse(match[1]);
-      if (json.widget_code) {
-        segments.push({ type: 'widget', data: { title: json.title || undefined, widget_code: String(json.widget_code) } });
+  while ((match = markerRegex.exec(text)) !== null) {
+    const afterMarker = match.index + match[0].length;
+    // Find the JSON object start
+    const jsonStart = text.indexOf('{', afterMarker);
+    if (jsonStart === -1 || jsonStart > afterMarker + 20) {
+      // No JSON nearby — skip this malformed marker, advance past any fence block
+      const fenceClose = text.indexOf('```', afterMarker);
+      if (fenceClose !== -1 && fenceClose < afterMarker + 200) {
+        lastIndex = fenceClose + 3;
+        markerRegex.lastIndex = fenceClose + 3;
+        foundAny = true; // so trailing text is captured
       }
-    } catch { /* skip malformed widget */ }
+      continue;
+    }
 
-    lastIndex = match.index + match[0].length;
+    const jsonEnd = findJsonEnd(text, jsonStart);
+    if (jsonEnd === -1) {
+      // Truncated JSON — try extracting partial widget
+      const partialBody = text.slice(jsonStart);
+      const widget = extractTruncatedWidget(partialBody);
+      if (widget) {
+        foundAny = true;
+        const before = text.slice(lastIndex, match.index).trim();
+        if (before) segments.push({ type: 'text', content: before });
+        segments.push({ type: 'widget', data: widget });
+        lastIndex = text.length;
+      }
+      break;
+    }
+
+    const jsonStr = text.slice(jsonStart, jsonEnd + 1);
+    try {
+      const json = JSON.parse(jsonStr);
+      if (json.widget_code) {
+        foundAny = true;
+        const before = text.slice(lastIndex, match.index).trim();
+        if (before) segments.push({ type: 'text', content: before });
+        segments.push({ type: 'widget', data: { title: json.title || undefined, widget_code: String(json.widget_code) } });
+        // Skip past the JSON and any trailing fence/backticks
+        let endPos = jsonEnd + 1;
+        const trailing = text.slice(endPos, endPos + 10);
+        const trailingFence = trailing.match(/^\s*\n?`{1,3}\s*/);
+        if (trailingFence) endPos += trailingFence[0].length;
+        lastIndex = endPos;
+        markerRegex.lastIndex = endPos;
+      }
+    } catch {
+      // Malformed JSON — skip past the fence block
+      const fenceClose = text.indexOf('```', jsonStart);
+      if (fenceClose !== -1) {
+        markerRegex.lastIndex = fenceClose + 3;
+        lastIndex = fenceClose + 3;
+        foundAny = true; // Mark as found so trailing text is captured
+      }
+    }
   }
 
-  if (!foundAny) {
-    // Fallback: handle truncated output (last fence not closed)
-    const fenceStart = text.indexOf('```show-widget');
-    if (fenceStart === -1) return [];
+  if (!foundAny) return [];
 
-    const before = text.slice(0, fenceStart).trim();
-    if (before) segments.push({ type: 'text', content: before });
-
-    const fenceBody = text.slice(fenceStart + '```show-widget'.length).trim();
-    const widget = extractTruncatedWidget(fenceBody);
-    if (widget) segments.push({ type: 'widget', data: widget });
-    return segments;
-  }
-
-  // Remaining text after last fence
+  // Remaining text after last widget
   const remaining = text.slice(lastIndex).trim();
   if (remaining) {
-    // Check if remaining text has a truncated widget fence
-    const truncFenceStart = remaining.indexOf('```show-widget');
-    if (truncFenceStart !== -1) {
-      const beforeTrunc = remaining.slice(0, truncFenceStart).trim();
-      if (beforeTrunc) segments.push({ type: 'text', content: beforeTrunc });
-      const truncBody = remaining.slice(truncFenceStart + '```show-widget'.length).trim();
-      const widget = extractTruncatedWidget(truncBody);
-      if (widget) segments.push({ type: 'widget', data: widget });
-    } else {
-      segments.push({ type: 'text', content: remaining });
-    }
+    segments.push({ type: 'text', content: remaining });
   }
 
   return segments;
@@ -223,9 +270,11 @@ export function parseAllShowWidgets(text: string): WidgetSegment[] {
  * → iframe destroyed → height collapse → scroll jump (P2 regression).
  */
 export function computePartialWidgetKey(content: string): string {
-  const lastFenceStart = content.lastIndexOf('```show-widget');
-  const beforePart = content.slice(0, lastFenceStart).trim();
-  const hasCompletedFences = beforePart.length > 0 && /```show-widget/.test(beforePart);
+  const markers = [...content.matchAll(/`{1,3}show-widget/g)];
+  if (markers.length === 0) return 'w-0';
+  const lastMarker = markers[markers.length - 1];
+  const beforePart = content.slice(0, lastMarker.index).trim();
+  const hasCompletedFences = beforePart.length > 0 && /`{1,3}show-widget/.test(beforePart);
   const completedSegments = hasCompletedFences ? parseAllShowWidgets(beforePart) : [];
   return `w-${hasCompletedFences ? completedSegments.length : (beforePart ? 1 : 0)}`;
 }
@@ -256,6 +305,7 @@ function extractTruncatedWidget(fenceBody: string): ShowWidgetData | null {
       .replace(/\\t/g, '\t')
       .replace(/\\r/g, '\r')
       .replace(/\\"/g, '"')
+      .replace(/\\u([0-9a-fA-F]{4})/g, (_, hex) => String.fromCharCode(parseInt(hex, 16)))
       .replace(/\x00BACKSLASH\x00/g, '\\');
     if (widgetCode.length < 10) return null;
 
@@ -271,6 +321,10 @@ function extractTruncatedWidget(fenceBody: string): ShowWidgetData | null {
 interface MessageItemProps {
   message: Message;
   sessionId?: string;
+  /** Whether this is an assistant workspace project */
+  isAssistantProject?: boolean;
+  /** Assistant name for avatar */
+  assistantName?: string;
 }
 
 interface ToolBlock {
@@ -280,6 +334,7 @@ interface ToolBlock {
   input?: unknown;
   content?: string;
   is_error?: boolean;
+  media?: MediaBlock[];
 }
 
 function parseToolBlocks(content: string): { text: string; tools: ToolBlock[] } {
@@ -316,6 +371,7 @@ function parseToolBlocks(content: string): { text: string; tools: ToolBlock[] } 
             id: block.tool_use_id,
             content: block.content,
             is_error: block.is_error,
+            media: (block as { media?: MediaBlock[] }).media,
           });
         }
       }
@@ -359,12 +415,14 @@ function pairTools(tools: ToolBlock[]): Array<{
   input: unknown;
   result?: string;
   isError?: boolean;
+  media?: MediaBlock[];
 }> {
   const paired: Array<{
     name: string;
     input: unknown;
     result?: string;
     isError?: boolean;
+    media?: MediaBlock[];
   }> = [];
 
   const resultMap = new Map<string, ToolBlock>();
@@ -382,6 +440,7 @@ function pairTools(tools: ToolBlock[]): Array<{
         input: t.input,
         result: result?.content,
         isError: result?.is_error,
+        media: result?.media,
       });
     }
   }
@@ -393,6 +452,7 @@ function pairTools(tools: ToolBlock[]): Array<{
         input: {},
         result: t.content,
         isError: t.is_error,
+        media: t.media,
       });
     }
   }
@@ -462,7 +522,7 @@ function TokenUsageDisplay({ usage }: { usage: TokenUsage }) {
 
 const COLLAPSE_HEIGHT = 300;
 
-export const MessageItem = memo(function MessageItem({ message, sessionId }: MessageItemProps) {
+export const MessageItem = memo(function MessageItem({ message, sessionId, isAssistantProject, assistantName }: MessageItemProps) {
   const isUser = message.role === 'user';
 
   // Collapse/expand state for long user messages (hooks must be called unconditionally)
@@ -512,7 +572,22 @@ export const MessageItem = memo(function MessageItem({ message, sessionId }: Mes
     minute: '2-digit',
   });
 
+  const showAssistantAvatar = !isUser && isAssistantProject;
+  const buddyInfo = isAssistantProject ? (globalThis as Record<string, unknown>).__codepilot_buddy_info__ as { emoji?: string; species?: string; rarity?: string } | undefined : undefined;
+
   return (
+    <div className={showAssistantAvatar ? 'flex gap-2.5 items-start' : ''}>
+      {showAssistantAvatar && (
+        buddyInfo?.species
+          ? <img
+              src={SPECIES_IMAGE_URL[buddyInfo.species as Species] || ''}
+              alt="" width={28} height={28}
+              className="mt-0.5 shrink-0 rounded-lg"
+              style={{ background: RARITY_BG_GRADIENT[buddyInfo.rarity as Rarity] || '' }}
+            />
+          : <img src={EGG_IMAGE_URL} alt="egg" width={28} height={28} className="mt-0.5 shrink-0" />
+      )}
+      <div className="flex-1 min-w-0">
     <AIMessage from={isUser ? 'user' : 'assistant'}>
       <MessageContent>
         {/* File attachments for user messages */}
@@ -529,9 +604,16 @@ export const MessageItem = memo(function MessageItem({ message, sessionId }: Mes
               input: tool.input,
               result: tool.result,
               isError: tool.isError,
+              media: tool.media,
             }))}
           />
         )}
+
+        {/* Media from tool results — rendered outside tool group so images stay visible regardless of collapse state */}
+        {!isUser && (() => {
+          const allMedia = pairedTools.flatMap(t => t.media || []);
+          return allMedia.length > 0 ? <MediaPreview media={allMedia} /> : null;
+        })()}
 
         {/* Text content */}
         {displayText && (
@@ -583,8 +665,66 @@ export const MessageItem = memo(function MessageItem({ message, sessionId }: Mes
         {displayText && <CopyButton text={displayText} />}
       </div>
     </AIMessage>
+      </div>
+    </div>
   );
 });
+
+/** Widget wrapper with "Pin to Dashboard" button.
+ * Pin triggers a chat message → AI uses codepilot_dashboard_pin MCP tool.
+ * Button is a pure trigger — no local pin/unpin state tracking.
+ * Brief cooldown prevents double-click. */
+function PinnableWidget({ widgetCode, title }: {
+  widgetCode: string; title?: string; messageId: string; sessionId?: string;
+}) {
+  const [cooldown, setCooldown] = useState(false);
+  const { workingDirectory } = usePanel();
+
+  const handlePin = useCallback(() => {
+    if (cooldown || !workingDirectory) return;
+    setCooldown(true);
+    window.dispatchEvent(new CustomEvent('widget-pin-request', {
+      detail: { widgetCode, title: title || 'Untitled Widget' },
+    }));
+    // 5s cooldown to prevent rapid duplicate pins
+    setTimeout(() => setCooldown(false), 5000);
+  }, [cooldown, workingDirectory, widgetCode, title]);
+
+  const handleExport = useCallback(async () => {
+    try {
+      const { exportWidgetAsImage, downloadBlob } = await import('@/lib/dashboard-export');
+      const blob = await exportWidgetAsImage(widgetCode);
+      downloadBlob(blob, `${(title || 'widget').replace(/[^a-zA-Z0-9\u4e00-\u9fff]/g, '_')}.png`);
+    } catch (e) {
+      console.error('[PinnableWidget] Export failed:', e);
+    }
+  }, [widgetCode, title]);
+
+  const buttons = (
+    <>
+      {workingDirectory && (
+        <button
+          className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 disabled:opacity-30 flex items-center gap-0.5"
+          onClick={handlePin}
+          disabled={cooldown}
+        >
+          <PushPin size={12} />
+          Pin
+        </button>
+      )}
+      <button
+        className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 flex items-center gap-0.5"
+        onClick={handleExport}
+      >
+        <DownloadSimple size={12} />
+      </button>
+    </>
+  );
+
+  return (
+    <WidgetRenderer widgetCode={widgetCode} isStreaming={false} title={title} extraButtons={buttons} />
+  );
+}
 
 /**
  * Memoized assistant message content — avoids re-running parseBatchPlan / parseImageGenResult /
@@ -600,7 +740,7 @@ const AssistantContent = memo(function AssistantContent({ displayText, messageId
           {widgetSegments.map((seg, i) =>
             seg.type === 'text'
               ? <MessageResponse key={`t-${i}`}>{seg.content}</MessageResponse>
-              : <WidgetRenderer key={`w-${i}`} widgetCode={seg.data.widget_code} isStreaming={false} title={seg.data.title} />
+              : <PinnableWidget key={`w-${i}`} widgetCode={seg.data.widget_code} title={seg.data.title} messageId={messageId} sessionId={sessionId} />
           )}
         </>
       );

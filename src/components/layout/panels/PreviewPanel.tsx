@@ -24,6 +24,11 @@ type ViewMode = "source" | "rendered";
 /** Extensions that support a rendered preview */
 const RENDERABLE_EXTENSIONS = new Set([".md", ".mdx", ".html", ".htm"]);
 
+/** Media file extensions that get direct preview (no API fetch needed) */
+const IMAGE_EXTENSIONS = new Set([".png", ".jpg", ".jpeg", ".gif", ".bmp", ".webp", ".svg", ".avif", ".ico"]);
+const VIDEO_EXTENSIONS = new Set([".mp4", ".mov", ".webm", ".mkv", ".avi"]);
+const AUDIO_EXTENSIONS = new Set([".mp3", ".wav", ".ogg", ".flac", ".aac"]);
+
 function getExtension(filePath: string): string {
   const dot = filePath.lastIndexOf(".");
   return dot >= 0 ? filePath.slice(dot).toLowerCase() : "";
@@ -31,6 +36,22 @@ function getExtension(filePath: string): string {
 
 function isRenderable(filePath: string): boolean {
   return RENDERABLE_EXTENSIONS.has(getExtension(filePath));
+}
+
+function isImagePreview(filePath: string): boolean {
+  return IMAGE_EXTENSIONS.has(getExtension(filePath));
+}
+
+function isVideoPreview(filePath: string): boolean {
+  return VIDEO_EXTENSIONS.has(getExtension(filePath));
+}
+
+function isAudioPreview(filePath: string): boolean {
+  return AUDIO_EXTENSIONS.has(getExtension(filePath));
+}
+
+function isMediaPreview(filePath: string): boolean {
+  return isImagePreview(filePath) || isVideoPreview(filePath) || isAudioPreview(filePath);
 }
 
 function isHtml(filePath: string): boolean {
@@ -44,7 +65,7 @@ const PREVIEW_DEFAULT_WIDTH = 480;
 
 export function PreviewPanel() {
   const { resolvedTheme } = useTheme();
-  const { workingDirectory, previewFile, setPreviewFile, previewViewMode, setPreviewViewMode, setPreviewOpen } = usePanel();
+  const { workingDirectory, sessionId, previewFile, setPreviewFile, previewViewMode, setPreviewViewMode, setPreviewOpen } = usePanel();
   const isDark = resolvedTheme === "dark";
   const [preview, setPreview] = useState<FilePreviewType | null>(null);
   const [loading, setLoading] = useState(true);
@@ -60,7 +81,10 @@ export function PreviewPanel() {
   const filePath = previewFile || "";
 
   useEffect(() => {
-    if (!filePath) return;
+    if (!filePath || isMediaPreview(filePath)) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
 
     async function loadPreview() {
@@ -117,6 +141,16 @@ export function PreviewPanel() {
   }, [filePath]);
 
   const canRender = isRenderable(filePath);
+  const isMedia = isMediaPreview(filePath);
+
+  // Build direct file serve URL for media files.
+  // Prefer /api/files/serve (session-scoped) when sessionId is available;
+  // fall back to /api/files/raw (home-scoped) for pre-session state.
+  const fileServeUrl = filePath
+    ? sessionId
+      ? `/api/files/serve?path=${encodeURIComponent(filePath)}&sessionId=${encodeURIComponent(sessionId)}`
+      : `/api/files/raw?path=${encodeURIComponent(filePath)}`
+    : '';
 
   return (
     <div className="flex h-full shrink-0 overflow-hidden">
@@ -128,18 +162,20 @@ export function PreviewPanel() {
           <p className="truncate text-sm font-medium">{fileName}</p>
         </div>
 
-        {canRender && (
+        {canRender && !isMedia && (
           <ViewModeToggle value={previewViewMode} onChange={setPreviewViewMode} />
         )}
 
-        <Button variant="ghost" size="icon-sm" onClick={handleCopyContent}>
-          {copied ? (
-            <Check size={14} className="text-status-success-foreground" />
-          ) : (
-            <Copy size={14} />
-          )}
-          <span className="sr-only">Copy content</span>
-        </Button>
+        {!isMedia && (
+          <Button variant="ghost" size="icon-sm" onClick={handleCopyContent}>
+            {copied ? (
+              <Check size={14} className="text-status-success-foreground" />
+            ) : (
+              <Copy size={14} />
+            )}
+            <span className="sr-only">Copy content</span>
+          </Button>
+        )}
 
         <Button variant="ghost" size="icon-sm" onClick={handleClose}>
           <X size={14} />
@@ -152,7 +188,7 @@ export function PreviewPanel() {
         <p className="min-w-0 flex-1 truncate text-[11px] text-muted-foreground/60">
           {breadcrumb}
         </p>
-        {preview && (
+        {preview && !isMedia && (
           <span className="shrink-0 text-[10px] text-muted-foreground/50">
             {preview.language}
           </span>
@@ -161,7 +197,9 @@ export function PreviewPanel() {
 
       {/* Content */}
       <div className="flex-1 min-h-0 overflow-auto">
-        {loading ? (
+        {isMedia ? (
+          <MediaView filePath={filePath} fileServeUrl={fileServeUrl} />
+        ) : loading ? (
           <div className="flex items-center justify-center py-12">
             <SpinnerGap size={20} className="animate-spin text-muted-foreground" />
           </div>
@@ -258,7 +296,43 @@ function SourceView({ preview, isDark }: { preview: FilePreviewType; isDark: boo
   );
 }
 
-/** Rendered view for markdown / HTML files */
+/** Direct media preview — no API fetch needed */
+function MediaView({ filePath, fileServeUrl }: { filePath: string; fileServeUrl: string }) {
+  if (isImagePreview(filePath)) {
+    return (
+      <div className="flex items-center justify-center p-4 h-full">
+        <img
+          src={fileServeUrl}
+          alt={filePath.split('/').pop() || ''}
+          className="max-w-full max-h-full object-contain rounded"
+        />
+      </div>
+    );
+  }
+
+  if (isVideoPreview(filePath)) {
+    return (
+      <div className="flex items-center justify-center p-4 h-full">
+        <video
+          src={fileServeUrl}
+          controls
+          preload="metadata"
+          className="max-w-full max-h-full rounded"
+        />
+      </div>
+    );
+  }
+
+  if (isAudioPreview(filePath)) {
+    return (
+      <div className="flex items-center justify-center p-8">
+        <audio src={fileServeUrl} controls preload="metadata" className="w-full" />
+      </div>
+    );
+  }
+
+  return null;
+}
 function RenderedView({
   content,
   filePath,

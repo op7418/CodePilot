@@ -36,7 +36,7 @@ export async function GET(
     const limit = limitParam ? Math.min(Math.max(parseInt(limitParam, 10) || 30, 1), 500) : 30;
     const beforeRowId = beforeParam ? parseInt(beforeParam, 10) || undefined : undefined;
 
-    const { messages, hasMore } = getMessages(id, { limit, beforeRowId });
+    const { messages, hasMore } = getMessages(id, { limit, beforeRowId, excludeHeartbeatAck: true });
     // Sanitize: strip base64 data from file attachments in old messages
     const sanitizedMessages = messages.map(m => ({
       ...m,

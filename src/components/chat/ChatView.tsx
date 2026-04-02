@@ -6,6 +6,7 @@ import type { Message, MessagesResponse, FileAttachment, SessionStreamSnapshot }
 import { MessageList } from './MessageList';
 import { MessageInput } from './MessageInput';
 import { ChatComposerActionBar } from './ChatComposerActionBar';
+import { ModeIndicator } from './ModeIndicator';
 import { ChatPermissionSelector } from './ChatPermissionSelector';
 import { ContextUsageIndicator } from './ContextUsageIndicator';
 import { ImageGenToggle } from './ImageGenToggle';
@@ -33,21 +34,26 @@ interface ChatViewProps {
   modelName?: string;
   providerId?: string;
   initialPermissionProfile?: 'default' | 'full_access';
+  initialMode?: 'code' | 'plan';
 }
 
-export function ChatView({ sessionId, initialMessages = [], initialHasMore = false, modelName, providerId, initialPermissionProfile }: ChatViewProps) {
-  const { setStreamingSessionId, workingDirectory, setPendingApprovalSessionId } = usePanel();
+export function ChatView({ sessionId, initialMessages = [], initialHasMore = false, modelName, providerId, initialPermissionProfile, initialMode }: ChatViewProps) {
+  const { setStreamingSessionId, workingDirectory, setPendingApprovalSessionId, setDashboardPanelOpen, setFileTreeOpen, setIsAssistantWorkspace } = usePanel();
   const { t } = useTranslation();
   const router = useRouter();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [permissionProfile, setPermissionProfile] = useState<'default' | 'full_access'>(initialPermissionProfile || 'default');
+
+  // Whether this session's working directory matches the configured assistant workspace
+  const [isAssistantProject, setIsAssistantProject] = useState(false);
+  const [assistantName, setAssistantName] = useState('');
 
   // Workspace mismatch banner state
   const [workspaceMismatchPath, setWorkspaceMismatchPath] = useState<string | null>(null);
   const [hasMore, setHasMore] = useState(initialHasMore);
   const [loadingMore, setLoadingMore] = useState(false);
   const loadingMoreRef = useRef(false);
-  const [mode, setMode] = useState('code'); // Desktop chat always uses 'code'
+  const [mode, setMode] = useState<string>(initialMode || 'code');
   const [currentModel, setCurrentModel] = useState(() => modelName || (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-model') : null) || 'sonnet');
   const [currentProviderId, setCurrentProviderId] = useState(() => providerId || (typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-provider-id') : null) || '');
   const [selectedEffort, setSelectedEffort] = useState<string | undefined>(undefined);
@@ -96,7 +102,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
 
   // Pending image generation notices
   const pendingImageNoticesRef = useRef<string[]>([]);
-  const sendMessageRef = useRef<(content: string, files?: FileAttachment[]) => Promise<void>>(undefined);
+  const sendMessageRef = useRef<(content: string, files?: FileAttachment[], systemPromptAppend?: string, displayOverride?: string) => Promise<void>>(undefined);
   const initMetaRef = useRef<{ tools?: unknown; slash_commands?: unknown; skills?: unknown } | null>(null);
 
   const handleModeChange = useCallback((newMode: string) => {
@@ -181,6 +187,8 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         if (cancelled) return;
 
         if (data.path && workingDirectory !== data.path) {
+          setIsAssistantProject(false);
+          setIsAssistantWorkspace(false);
           const inspectRes = await fetch(`/api/workspace/inspect?path=${encodeURIComponent(workingDirectory)}`);
           if (!inspectRes.ok || cancelled) return;
           const inspectData = await inspectRes.json();
@@ -190,7 +198,31 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
             setWorkspaceMismatchPath(null);
           }
         } else {
+          // workingDirectory matches assistant workspace path
+          const isAssistant = !!data.path;
+          setIsAssistantProject(isAssistant);
           setWorkspaceMismatchPath(null);
+          // Assistant project: show dashboard (with assistant status card) instead of file tree
+          setIsAssistantWorkspace(isAssistant);
+          if (isAssistant) {
+            setFileTreeOpen(false);
+            setDashboardPanelOpen(true);
+          }
+          // Load assistant name for avatar display
+          if (data.path) {
+            try {
+              const summaryRes = await fetch('/api/workspace/summary');
+              if (summaryRes.ok && !cancelled) {
+                const summary = await summaryRes.json();
+                setAssistantName(summary.name || '');
+                // Store buddy emoji globally for MessageItem avatar rendering
+                // Store buddy info globally for MessageItem avatar rendering
+                (globalThis as Record<string, unknown>).__codepilot_buddy_info__ = summary.buddy
+                  ? { emoji: summary.buddy.emoji, species: summary.buddy.species, rarity: summary.buddy.rarity }
+                  : undefined;
+              }
+            } catch { /* ignore */ }
+          }
         }
       } catch {
         // ignore
@@ -344,6 +376,47 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
     };
   }, []);
 
+  // Listen for widget pin requests from PinnableWidget buttons.
+  // The AI model receives the widget code + instructions and calls the
+  // codepilot_dashboard_pin MCP tool to complete the pin operation.
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { widgetCode, title } = (e as CustomEvent).detail || {};
+      if (!widgetCode || !sendMessageRef.current) return;
+
+      const instruction = `请将下面的可视化组件固定到项目看板。\n\n标题建议：${title || 'Untitled'}\n\n组件代码：\n${widgetCode}`;
+      sendMessageRef.current(instruction, undefined, undefined, `📌 固定「${title || 'Widget'}」到看板`);
+    };
+    window.addEventListener('widget-pin-request', handler);
+    return () => window.removeEventListener('widget-pin-request', handler);
+  }, []);
+
+  // Listen for dashboard widget drilldown (click title → conversation)
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { title, dataContract } = (e as CustomEvent).detail || {};
+      if (!title || !sendMessageRef.current) return;
+      sendMessageRef.current(
+        `请深入分析看板组件「${title}」的数据。\n数据契约：${dataContract || '无'}`,
+        undefined, undefined,
+        `🔍 分析「${title}」`,
+      );
+    };
+    window.addEventListener('dashboard-widget-drilldown', handler);
+    return () => window.removeEventListener('dashboard-widget-drilldown', handler);
+  }, []);
+
+  // Listen for dashboard command input
+  useEffect(() => {
+    const handler = (e: Event) => {
+      const { text } = (e as CustomEvent).detail || {};
+      if (!text || !sendMessageRef.current) return;
+      sendMessageRef.current(text, undefined, undefined, text);
+    };
+    window.addEventListener('dashboard-command', handler);
+    return () => window.removeEventListener('dashboard-command', handler);
+  }, []);
+
   const handleCommand = useChatCommands({ sessionId, messages, setMessages, sendMessage });
 
   // Listen for image generation completion
@@ -404,6 +477,8 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         onLoadMore={loadEarlierMessages}
         rewindPoints={rewindPoints}
         sessionId={sessionId}
+        isAssistantProject={isAssistantProject}
+        assistantName={assistantName}
       />
       {/* Permission prompt */}
       <PermissionPrompt
@@ -434,9 +509,11 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         effort={selectedEffort}
         onEffortChange={setSelectedEffort}
         sdkInitMeta={initMetaRef.current}
+        isAssistantProject={isAssistantProject}
+        hasMessages={messages.length > 0}
       />
       <ChatComposerActionBar
-        left={<ImageGenToggle />}
+        left={<><ModeIndicator mode={mode} onModeChange={handleModeChange} disabled={isStreaming} /><ImageGenToggle /></>}
         center={
           <ChatPermissionSelector
             sessionId={sessionId}

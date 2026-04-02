@@ -83,6 +83,18 @@ export function UpdateDialog() {
           Current: v{updateInfo.currentVersion} &rarr; Latest: v{updateInfo.latestVersion}
         </p>
 
+        {updateInfo.runningUnderRosetta && (
+          <p className="rounded-md border border-status-warning-border bg-status-warning-muted px-2 py-1 text-xs text-status-warning-foreground">
+            {t('update.rosettaWarning')}
+          </p>
+        )}
+
+        {updateInfo.downloadAssetName && (
+          <p className="text-xs text-muted-foreground">
+            {t('update.recommendedAsset', { asset: updateInfo.downloadAssetName })}
+          </p>
+        )}
+
         {/* Download progress bar */}
         {isDownloading && (
           <div className="space-y-1">
@@ -111,10 +123,10 @@ export function UpdateDialog() {
           {!isNativeUpdate ? (
             <Button
               onClick={() => {
-                window.open(updateInfo.releaseUrl, "_blank");
+                window.open(updateInfo.downloadUrl || updateInfo.releaseUrl, "_blank");
               }}
             >
-              {t('settings.viewRelease')}
+              {updateInfo.downloadAssetName ? t('update.getRecommendedBuild') : t('settings.viewRelease')}
             </Button>
           ) : readyToInstall ? (
             <Button onClick={quitAndInstall}>

@@ -37,8 +37,6 @@ jobs:
         run: npm ci
 
       - name: Lint
-        # TODO: fix 4 existing lint errors then remove continue-on-error
-        continue-on-error: true
         run: npm run lint
 
       - name: Typecheck
@@ -47,8 +45,36 @@ jobs:
       - name: Unit tests
         run: npm run test:unit
 
-  build-windows:
+  smoke-test:
     needs: [lint-test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Run smoke tests
+        run: npm run test:smoke
+
+      - name: Upload report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
+
+  build-windows:
+    needs: [lint-test, smoke-test]
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'windows' }}
     runs-on: windows-latest
     steps:
@@ -88,7 +114,7 @@ jobs:
           retention-days: 3
 
   build-macos:
-    needs: [lint-test]
+    needs: [lint-test, smoke-test]
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'macos' }}
     runs-on: macos-latest
     env:
@@ -177,7 +203,7 @@ jobs:
           retention-days: 3
 
   build-linux-x64:
-    needs: [lint-test]
+    needs: [lint-test, smoke-test]
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'linux' }}
     runs-on: ubuntu-latest
     steps:
@@ -260,7 +286,7 @@ jobs:
           retention-days: 3
 
   build-linux-arm64:
-    needs: [lint-test]
+    needs: [lint-test, smoke-test]
     if: ${{ github.event_name == 'push' || inputs.platform == 'all' || inputs.platform == 'linux' }}
     # Use a native arm64 runner — avoids fragile cross-compilation toolchain
     # setup that breaks across Ubuntu versions (sources.list vs deb822).
@@ -393,49 +419,36 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           VERSION="${{ steps.meta.outputs.version }}"
-          PREV_TAG="${{ steps.meta.outputs.prev_tag }}"
 
-          cat > release-notes.md << 'NOTES_EOF'
-          ## Downloads
+          # Use RELEASE_NOTES.md from repo if present; otherwise generate a minimal fallback
+          if [ -f "RELEASE_NOTES.md" ]; then
+            echo "Using RELEASE_NOTES.md from repository"
+            cp RELEASE_NOTES.md release-notes.md
+          else
+            echo "RELEASE_NOTES.md not found, generating default notes"
+            cat > release-notes.md << NOTES_EOF
+          ## CodePilot v${VERSION}
 
-          **Windows**
-          - **CodePilot Setup ${{ steps.meta.outputs.version }}.exe** — Windows installer (x64 + arm64)
+          ## 下载地址
 
-          **macOS**
-          - **CodePilot-${{ steps.meta.outputs.version }}-arm64.dmg** — macOS Apple Silicon (M1/M2/M3/M4)
-          - **CodePilot-${{ steps.meta.outputs.version }}-x64.dmg** — macOS Intel
+          ### macOS
+          - [Apple Silicon (M1/M2/M3/M4)](https://github.com/op7418/CodePilot/releases/download/v${VERSION}/CodePilot-${VERSION}-arm64.dmg)
+          - [Intel](https://github.com/op7418/CodePilot/releases/download/v${VERSION}/CodePilot-${VERSION}-x64.dmg)
 
-          **Linux**
-          - **AppImage / deb / rpm** — x64 and arm64
+          ### Windows
+          - [Windows 安装包](https://github.com/op7418/CodePilot/releases/download/v${VERSION}/CodePilot-Setup-${VERSION}.exe)
 
-          ## Installation
+          ## 安装说明
 
-          **Windows**: Download the exe installer, double-click to install.
+          **macOS**: 下载 DMG → 拖入 Applications → 首次启动如遇安全提示，在系统设置 > 隐私与安全中点击"仍要打开"
+          **Windows**: 下载 exe 安装包 → 双击安装
 
-          **macOS**:
-          1. Download the DMG for your chip architecture
-          2. Open the DMG, drag CodePilot into Applications
-          3. If you see a security prompt on first launch, go to **System Settings > Privacy & Security** and click "Open Anyway"
-          4. Configure your Anthropic API Key in Settings
+          ## 系统要求
 
-          **Linux**: Run the AppImage directly, or install via deb/rpm package.
-
-          ## Requirements
-
-          - Windows 10+ / macOS 12.0+ / Linux (glibc 2.31+)
-          - Anthropic API Key or `ANTHROPIC_API_KEY` environment variable
-          - Claude Code CLI recommended for code features
-
-          ## Changelog
+          - macOS 12.0+ / Windows 10+ / Linux (glibc 2.31+)
+          - 需要配置 API 服务商（Anthropic / OpenRouter 等）
+          - 推荐安装 Claude Code CLI 以获得完整功能
           NOTES_EOF
-
-          if [ -n "$PREV_TAG" ]; then
-            echo "" >> release-notes.md
-            echo "| Commit | Description |" >> release-notes.md
-            echo "|--------|-------------|" >> release-notes.md
-            cat >> release-notes.md << 'CHANGELOG_INLINE_EOF'
-          ${{ steps.changelog.outputs.changelog }}
-          CHANGELOG_INLINE_EOF
           fi
 
           # Merge per-platform checksums into a single file

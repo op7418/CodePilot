@@ -130,7 +130,9 @@ export function resolveItemSelection(
  * Used by handleSubmit in MessageInput.
  */
 export function dispatchBadge(badge: CommandBadge, userContent: string): BadgeDispatchResult {
-  const displayLabel = `/${badge.label}`;
+  const baseLabel = `/${badge.label}`;
+  // Show user's text in the chat bubble so it's not "swallowed"
+  const displayLabel = userContent ? `${baseLabel}\n${userContent}` : baseLabel;
 
   switch (badge.kind) {
     case 'agent_skill': {

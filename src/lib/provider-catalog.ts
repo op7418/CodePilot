@@ -176,10 +176,10 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     protocol: 'anthropic',
     authStyle: 'api_key',
     baseUrl: 'https://open.bigmodel.cn/api/anthropic',
-    defaultEnvOverrides: { API_TIMEOUT_MS: '3000000', ANTHROPIC_API_KEY: '' },
+    defaultEnvOverrides: { API_TIMEOUT_MS: '3000000', ANTHROPIC_API_KEY: '', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'glm-4.5-air', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5-turbo', ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5.1' },
     defaultModels: [
-      { modelId: 'sonnet', upstreamModelId: 'sonnet', displayName: 'GLM-4.7', role: 'sonnet' },
-      { modelId: 'opus', upstreamModelId: 'opus', displayName: 'GLM-5', role: 'opus' },
+      { modelId: 'sonnet', upstreamModelId: 'sonnet', displayName: 'GLM-5-Turbo', role: 'sonnet' },
+      { modelId: 'opus', upstreamModelId: 'opus', displayName: 'GLM-5.1', role: 'opus' },
       { modelId: 'haiku', upstreamModelId: 'haiku', displayName: 'GLM-4.5-Air', role: 'haiku' },
     ],
     fields: ['api_key'],
@@ -196,10 +196,10 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     protocol: 'anthropic',
     authStyle: 'api_key',
     baseUrl: 'https://api.z.ai/api/anthropic',
-    defaultEnvOverrides: { API_TIMEOUT_MS: '3000000', ANTHROPIC_API_KEY: '' },
+    defaultEnvOverrides: { API_TIMEOUT_MS: '3000000', ANTHROPIC_API_KEY: '', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'glm-4.5-air', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5-turbo', ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5.1' },
     defaultModels: [
-      { modelId: 'sonnet', upstreamModelId: 'sonnet', displayName: 'GLM-4.7', role: 'sonnet' },
-      { modelId: 'opus', upstreamModelId: 'opus', displayName: 'GLM-5', role: 'opus' },
+      { modelId: 'sonnet', upstreamModelId: 'sonnet', displayName: 'GLM-5-Turbo', role: 'sonnet' },
+      { modelId: 'opus', upstreamModelId: 'opus', displayName: 'GLM-5.1', role: 'opus' },
       { modelId: 'haiku', upstreamModelId: 'haiku', displayName: 'GLM-4.5-Air', role: 'haiku' },
     ],
     fields: ['api_key'],
@@ -520,11 +520,11 @@ export function inferProtocolFromLegacy(
     if (urlLower.includes('/anthropic')) {
       return 'anthropic';
     }
-    // Default custom → openai-compatible
-    return 'openai-compatible';
+    // Default custom → anthropic (SDK only supports Anthropic-compatible endpoints)
+    return 'anthropic';
   }
 
-  return 'openai-compatible';
+  return 'anthropic';
 }
 
 /**

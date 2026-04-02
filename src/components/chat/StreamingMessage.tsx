@@ -8,6 +8,7 @@ import {
   MessageResponse,
 } from '@/components/ai-elements/message';
 import { ToolActionsGroup } from '@/components/ai-elements/tool-actions-group';
+import { MediaPreview } from './MediaPreview';
 import { Button } from '@/components/ui/button';
 import { Shimmer } from '@/components/ai-elements/shimmer';
 import { ImageGenConfirmation } from './ImageGenConfirmation';
@@ -15,7 +16,7 @@ import { BatchPlanInlinePreview } from './batch-image-gen/BatchPlanInlinePreview
 import { WidgetRenderer } from './WidgetRenderer';
 import { parseAllShowWidgets, computePartialWidgetKey } from './MessageItem';
 import { PENDING_KEY, buildReferenceImages } from '@/lib/image-ref-store';
-import type { PlannerOutput } from '@/types';
+import type { PlannerOutput, MediaBlock } from '@/types';
 
 interface ImageGenRequest {
   prompt: string;
@@ -98,6 +99,7 @@ interface ToolResultInfo {
   tool_use_id: string;
   content: string;
   is_error?: boolean;
+  media?: MediaBlock[];
 }
 
 interface StreamingMessageProps {
@@ -243,6 +245,7 @@ export function StreamingMessage({
                 input: tool.input,
                 result: result?.content,
                 isError: result?.is_error,
+                media: result?.media,
               };
             })}
             isStreaming={isStreaming}
@@ -250,20 +253,41 @@ export function StreamingMessage({
           />
         )}
 
+        {/* Media from tool results — rendered outside tool group so images stay visible */}
+        {(() => {
+          const allMedia = toolResults.flatMap(r => r.media || []);
+          return allMedia.length > 0 ? <MediaPreview media={allMedia} /> : null;
+        })()}
+
         {/* Streaming text content rendered via Streamdown */}
         {content && (() => {
           // ── Show-widget handling ──
           // During streaming: detect partial fences FIRST to avoid premature script execution.
           // After streaming: use parseAllShowWidgets for completed fences only.
-          const hasWidgetFence = /```show-widget/.test(content);
+          const hasWidgetFence = /`{1,3}show-widget/.test(content);
 
           if (hasWidgetFence && isStreaming) {
-            // Streaming mode: find the last ```show-widget fence.
-            // If it's closed, all fences are complete → render them all.
-            // If it's open, render completed fences before it + partial preview for the open one.
-            const lastFenceStart = content.lastIndexOf('```show-widget');
+            // Fence-agnostic: find the last show-widget marker
+            const lastMarkerMatch = [...content.matchAll(/`{1,3}show-widget/g)].pop();
+            if (!lastMarkerMatch) return <MessageResponse>{content}</MessageResponse>;
+
+            const lastFenceStart = lastMarkerMatch.index!;
             const afterLastFence = content.slice(lastFenceStart);
-            const lastFenceClosed = /```show-widget\s*\n?[\s\S]*?\n?\s*```/.test(afterLastFence);
+            // Check if JSON is complete (has matching closing brace)
+            const jsonStart = afterLastFence.indexOf('{');
+            let lastFenceClosed = false;
+            if (jsonStart !== -1) {
+              let depth = 0, inStr = false, esc = false;
+              for (let i = jsonStart; i < afterLastFence.length; i++) {
+                const ch = afterLastFence[i];
+                if (esc) { esc = false; continue; }
+                if (ch === '\\' && inStr) { esc = true; continue; }
+                if (ch === '"') { inStr = !inStr; continue; }
+                if (inStr) continue;
+                if (ch === '{') depth++;
+                else if (ch === '}') { depth--; if (depth === 0) { lastFenceClosed = true; break; } }
+              }
+            }
 
             if (lastFenceClosed) {
               // All fences complete — parse and render the full content
@@ -282,11 +306,12 @@ export function StreamingMessage({
             // Last fence is still being streamed.
             // Parse everything BEFORE it (completed fences + interleaved text).
             const beforePart = content.slice(0, lastFenceStart).trim();
-            const hasCompletedFences = beforePart && /```show-widget/.test(beforePart);
+            const hasCompletedFences = beforePart && /`{1,3}show-widget/.test(beforePart);
             const completedSegments = hasCompletedFences ? parseAllShowWidgets(beforePart) : [];
 
-            // Extract partial widget_code from the open fence
-            const fenceBody = content.slice(lastFenceStart + '```show-widget'.length).trim();
+            // Extract partial widget_code from the open fence (skip marker)
+            const markerEnd = afterLastFence.match(/^`{1,3}show-widget`{0,3}\s*(?:\n\s*`{3}(?:json)?\s*)?\n?/);
+            const fenceBody = markerEnd ? afterLastFence.slice(markerEnd[0].length).trim() : afterLastFence.trim();
             let partialCode: string | null = null;
             const keyIdx = fenceBody.indexOf('"widget_code"');
             if (keyIdx !== -1) {
@@ -304,6 +329,7 @@ export function StreamingMessage({
                       .replace(/\\t/g, '\t')
                       .replace(/\\r/g, '\r')
                       .replace(/\\"/g, '"')
+                      .replace(/\\u([0-9a-fA-F]{4})/g, (_: string, hex: string) => String.fromCharCode(parseInt(hex, 16)))
                       .replace(/\x00BACKSLASH\x00/g, '\\');
                   } catch { partialCode = null; }
                 }

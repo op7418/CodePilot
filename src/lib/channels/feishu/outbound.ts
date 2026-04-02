@@ -11,6 +11,19 @@
 import type * as lark from '@larksuiteoapi/node-sdk';
 import type { OutboundMessage, SendResult } from '../../bridge/types';
 
+/** Extract error message from unknown catch value */
+function errMsg(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+/** Lark IM message response shape (shared by create/reply) */
+interface LarkMessageResponse {
+  code?: number;
+  msg?: string;
+  data?: { message_id?: string };
+}
+
 const LOG_TAG = '[feishu/outbound]';
 
 // ─── Markdown optimization for Feishu ────────────────────────────────────────
@@ -112,9 +125,9 @@ export async function sendMessage(
 
     // Post format with md tag for markdown support
     return sendAsPost(client, chatId, message.text, message.parseMode, replyId);
-  } catch (err: any) {
-    console.error(LOG_TAG, 'Send failed:', err?.message || err);
-    return { ok: false, error: err?.message || 'Unknown error' };
+  } catch (err: unknown) {
+    console.error(LOG_TAG, 'Send failed:', errMsg(err));
+    return { ok: false, error: errMsg(err) };
   }
 }
 
@@ -139,7 +152,7 @@ async function sendAsPost(
     },
   });
 
-  let resp: any;
+  let resp: LarkMessageResponse;
   if (replyToMessageId) {
     resp = await client.im.message.reply({
       path: { message_id: replyToMessageId },
@@ -217,7 +230,7 @@ async function sendAsInteractiveCard(
         : { title: 'Action Required', template: 'blue' as const, icon: 'info-circle_outlined' };
 
     // Build body elements
-    const bodyElements: any[] = [
+    const bodyElements: Record<string, unknown>[] = [
       {
         tag: 'markdown' as const,
         content: mdText,
@@ -267,7 +280,7 @@ async function sendAsInteractiveCard(
 
     const cardContent = JSON.stringify(card);
 
-    let resp: any;
+    let resp: LarkMessageResponse;
     if (replyToMessageId) {
       resp = await client.im.message.reply({
         path: { message_id: replyToMessageId },
@@ -283,9 +296,9 @@ async function sendAsInteractiveCard(
     const msgId = resp?.data?.message_id || '';
     console.log(LOG_TAG, 'Sent interactive card:', msgId);
     return { ok: true, messageId: msgId };
-  } catch (err: any) {
-    console.error(LOG_TAG, 'Interactive card send failed:', err?.message || err);
-    return { ok: false, error: err?.message || 'Unknown error' };
+  } catch (err: unknown) {
+    console.error(LOG_TAG, 'Interactive card send failed:', errMsg(err));
+    return { ok: false, error: errMsg(err) };
   }
 }
 
@@ -305,10 +318,10 @@ export async function addReaction(
       path: { message_id: messageId },
       data: { reaction_type: { emoji_type: emojiType } },
     });
-    return (resp?.data as any)?.reaction_id || null;
-  } catch (err: any) {
+    return resp?.data?.reaction_id || null;
+  } catch (err: unknown) {
     // Non-critical — log and swallow
-    console.warn(LOG_TAG, 'Failed to add reaction:', err?.message || err);
+    console.warn(LOG_TAG, 'Failed to add reaction:', errMsg(err));
     return null;
   }
 }
@@ -326,8 +339,8 @@ export async function removeReaction(
     await client.im.messageReaction.delete({
       path: { message_id: messageId, reaction_id: reactionId },
     });
-  } catch (err: any) {
-    console.warn(LOG_TAG, 'Failed to remove reaction:', err?.message || err);
+  } catch (err: unknown) {
+    console.warn(LOG_TAG, 'Failed to remove reaction:', errMsg(err));
   }
 }
 
@@ -343,7 +356,7 @@ export async function sendPermissionCard(
   try {
     const realChatId = chatId.split(':thread:')[0];
 
-    let resp: any;
+    let resp: LarkMessageResponse;
     if (replyToMessageId) {
       resp = await client.im.message.reply({
         path: { message_id: replyToMessageId },
@@ -358,8 +371,8 @@ export async function sendPermissionCard(
 
     const msgId = resp?.data?.message_id || '';
     return { ok: true, messageId: msgId };
-  } catch (err: any) {
-    console.error(LOG_TAG, 'Permission card send failed:', err?.message || err);
-    return { ok: false, error: err?.message || 'Unknown error' };
+  } catch (err: unknown) {
+    console.error(LOG_TAG, 'Permission card send failed:', errMsg(err));
+    return { ok: false, error: errMsg(err) };
   }
 }

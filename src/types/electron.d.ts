@@ -81,6 +81,10 @@ interface ElectronAPI {
     isActive: () => Promise<boolean>;
   };
   terminal?: ElectronTerminalAPI;
+  notification?: {
+    show: (options: { title: string; body?: string; onClick?: string }) => Promise<void>;
+    onClick: (listener: (action: string) => void) => () => void;
+  };
 }
 
 declare global {

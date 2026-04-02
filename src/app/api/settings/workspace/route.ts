@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
+import path from 'path';
 import { getSetting, setSetting } from '@/lib/db';
-import { validateWorkspace, initializeWorkspace, loadState, saveState } from '@/lib/assistant-workspace';
+import { validateWorkspace, initializeWorkspace, loadState, saveState, shouldRunHeartbeat } from '@/lib/assistant-workspace';
 
 export async function GET() {
   try {
@@ -89,6 +90,9 @@ export async function GET() {
       files: fileStatus,
       state,
       taxonomy,
+      // Server-computed heartbeat check — single source of truth for all consumers.
+      // Requires buddy to exist (heartbeat defers to buddy-welcome when no buddy).
+      needsHeartbeat: !!state.buddy && shouldRunHeartbeat(state),
     });
   } catch (e) {
     console.error('[settings/workspace] GET failed:', e);
@@ -183,7 +187,7 @@ export async function PUT(request: NextRequest) {
   }
 }
 
-/** PATCH — update individual state fields (e.g. dailyCheckInEnabled toggle) */
+/** PATCH — update individual state fields (e.g. heartbeatEnabled toggle) */
 export async function PATCH(request: NextRequest) {
   try {
     const body = await request.json();
@@ -195,8 +199,35 @@ export async function PATCH(request: NextRequest) {
     const state = loadState(workspacePath);
 
     // Apply supported state patches
-    if ('dailyCheckInEnabled' in body && typeof body.dailyCheckInEnabled === 'boolean') {
-      state.dailyCheckInEnabled = body.dailyCheckInEnabled;
+    if ('heartbeatEnabled' in body && typeof body.heartbeatEnabled === 'boolean') {
+      state.heartbeatEnabled = body.heartbeatEnabled;
+    }
+    // Reset buddy so user can hatch a new one
+    if (body.resetBuddy === true) {
+      state.buddy = undefined;
+
+      // Also remove the ## Buddy Trait section from soul.md so re-hatch gets a fresh one
+      try {
+        const soulVariants = ['soul.md', 'Soul.md', 'SOUL.md'];
+        for (const variant of soulVariants) {
+          const soulPath = path.join(workspacePath, variant);
+          if (fs.existsSync(soulPath)) {
+            const content = fs.readFileSync(soulPath, 'utf-8');
+            // Remove ## Buddy Trait section (everything from the heading to the next ## or end of file)
+            const cleaned = content.replace(/\n*## Buddy Trait[\s\S]*?(?=\n## |\n*$)/, '');
+            if (cleaned !== content) {
+              fs.writeFileSync(soulPath, cleaned.trimEnd() + '\n', 'utf-8');
+            }
+            break;
+          }
+        }
+      } catch { /* best effort — soul.md cleanup is non-critical */ }
+    }
+    // Reset heartbeat date to force re-trigger on next session open
+    if (body.resetHeartbeat === true) {
+      state.lastHeartbeatDate = null;
+      state.hookTriggeredSessionId = undefined;
+      state.hookTriggeredAt = undefined;
     }
 
     saveState(workspacePath, state);

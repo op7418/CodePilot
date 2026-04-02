@@ -13,6 +13,8 @@ const ALLOWED_KEYS = [
   'generative_ui_enabled',
   'locale',
   'thinking_mode',
+  'theme_mode',
+  'theme_family',
 ];
 
 export async function GET() {

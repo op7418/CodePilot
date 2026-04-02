@@ -140,7 +140,7 @@ export function WorkspaceConfirmDialogs({
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{t('assistant.summaryLastCheckIn')}:</span>
-                      <span>{confirmDialog.summary.lastCheckInDate || t('assistant.summaryNever')}</span>
+                      <span>{confirmDialog.summary.lastHeartbeatDate || t('assistant.summaryNever')}</span>
                     </div>
                     <div className="flex justify-between">
                       <span className="text-muted-foreground">{t('assistant.summaryFileCount')}:</span>

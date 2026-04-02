@@ -9,11 +9,17 @@ export interface UpdateInfo {
   releaseName: string;
   releaseNotes: string;
   releaseUrl: string;
+  downloadUrl?: string;
+  downloadAssetName?: string;
   publishedAt: string;
   downloadProgress: number | null;
   readyToInstall: boolean;
   isNativeUpdate: boolean;
   lastError: string | null;
+  detectedPlatform?: string;
+  detectedArch?: string;
+  hostArch?: string;
+  runningUnderRosetta?: boolean;
 }
 
 export interface UpdateContextValue {

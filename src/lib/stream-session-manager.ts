@@ -374,7 +374,12 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
         contentBlocks.push({ type: 'tool_use', id: tu.id, name: tu.name, input: tu.input });
         const tr = finalToolResults.find(r => r.tool_use_id === tu.id);
         if (tr) {
-          contentBlocks.push({ type: 'tool_result', tool_use_id: tr.tool_use_id, content: tr.content });
+          contentBlocks.push({
+            type: 'tool_result',
+            tool_use_id: tr.tool_use_id,
+            content: tr.content,
+            ...(tr.media && tr.media.length > 0 ? { media: tr.media } : {}),
+          });
         }
       }
       messageContent = JSON.stringify(contentBlocks);

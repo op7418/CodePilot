@@ -133,13 +133,23 @@ export interface Message {
   content: string; // JSON string of MessageContentBlock[] for structured content
   created_at: string;
   token_usage: string | null; // JSON string of TokenUsage
+  is_heartbeat_ack?: number; // 1 = heartbeat ack (prunable from transcript), 0 = normal
+}
+
+// Media content block (MCP-compatible: image/audio/video in tool results)
+export interface MediaBlock {
+  type: 'image' | 'audio' | 'video';
+  data?: string;        // base64 (transit only, cleared after save to disk)
+  mimeType: string;     // e.g. 'image/png', 'video/mp4'
+  localPath?: string;   // local file path (after save to .codepilot-media/)
+  mediaId?: string;     // media_generations.id (after DB save)
 }
 
 // Structured message content blocks (stored as JSON in messages.content)
 export type MessageContentBlock =
   | { type: 'text'; text: string }
   | { type: 'tool_use'; id: string; name: string; input: unknown }
-  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean }
+  | { type: 'tool_result'; tool_use_id: string; content: string; is_error?: boolean; media?: MediaBlock[] }
   | { type: 'code'; language: string; code: string };
 
 // Helper to parse message content - returns blocks or wraps plain text
@@ -588,13 +598,26 @@ export interface SetupState {
 
 export interface AssistantWorkspaceState {
   onboardingComplete: boolean;
-  lastCheckInDate: string | null;
+  /** @deprecated Use lastHeartbeatDate instead */
+  lastCheckInDate?: string | null;
+  lastHeartbeatDate: string | null;
+  lastHeartbeatText?: string;
+  lastHeartbeatSentAt?: number;
+  /** @deprecated Use heartbeatEnabled instead */
+  dailyCheckInEnabled?: boolean;
+  heartbeatEnabled: boolean;
   schemaVersion: number;
   hookTriggeredSessionId?: string;
-  /** ISO timestamp when hookTriggeredSessionId was set — used for staleness detection */
   hookTriggeredAt?: string;
-  /** When false, daily check-in auto-trigger is disabled (default: true) */
-  dailyCheckInEnabled?: boolean;
+  buddy?: {
+    species: string;
+    rarity: string;
+    stats: Record<string, number>;
+    emoji: string;
+    peakStat: string;
+    hatchedAt: string;
+    buddyName?: string;
+  };
 }
 
 export interface AssistantWorkspaceFiles {
@@ -609,6 +632,7 @@ export interface AssistantWorkspaceFilesV2 extends AssistantWorkspaceFiles {
   rootReadme?: string;
   rootPath?: string;
   rootDir?: string;
+  heartbeatMd?: string;
 }
 
 // ==========================================
@@ -624,7 +648,9 @@ export interface WorkspaceInspectResult {
   workspaceStatus: 'empty' | 'normal_directory' | 'existing_workspace' | 'partial_workspace' | 'invalid';
   summary?: {
     onboardingComplete: boolean;
-    lastCheckInDate: string | null;
+    lastHeartbeatDate: string | null;
+    /** @deprecated Use lastHeartbeatDate instead */
+    lastCheckInDate?: string | null;
     fileCount: number;
   };
 }
@@ -745,6 +771,16 @@ export interface FileAttachment {
 // Check if a MIME type is an image
 export function isImageFile(type: string): boolean {
   return type.startsWith('image/');
+}
+
+// Check if a MIME type is a video
+export function isVideoFile(type: string): boolean {
+  return type.startsWith('video/');
+}
+
+// Check if a MIME type is any visual media (image or video)
+export function isMediaFile(type: string): boolean {
+  return type.startsWith('image/') || type.startsWith('video/') || type.startsWith('audio/');
 }
 
 // Format bytes into human-readable size
@@ -916,6 +952,7 @@ export interface ToolUseInfo {
 export interface ToolResultInfo {
   tool_use_id: string;
   content: string;
+  media?: MediaBlock[];
 }
 
 export type StreamPhase = 'active' | 'completed' | 'error' | 'stopped';
@@ -1024,6 +1061,22 @@ export interface CliToolDefinition {
   useCases: { zh: string[]; en: string[] };
   guideSteps: { zh: string[]; en: string[] };
   examplePrompts: CliToolExamplePrompt[];
+  /** Commands that MUST be run after install (e.g. skills install, dependency install).
+   *  These are injected into the chat prefill — only include machine-executable commands,
+   *  not human-readable guidance. */
+  postInstallCommands?: string[];
+  /** Tool is designed for AI agents (non-interactive flags, structured output, skills) */
+  agentFriendly?: boolean;
+  /** Tool supports --json or similar structured output flag */
+  supportsJson?: boolean;
+  /** Tool supports runtime schema introspection (e.g. "gws schema", "--help --json") */
+  supportsSchema?: boolean;
+  /** Tool supports --dry-run for previewing destructive actions */
+  supportsDryRun?: boolean;
+  /** Tool supports field masks or pagination to reduce context window usage */
+  contextFriendly?: boolean;
+  /** Command to check auth/health status (e.g. "stripe status", "lark-cli auth status") */
+  healthCheckCommand?: string;
   homepage?: string;
   repoUrl?: string;
   officialDocsUrl?: string;
@@ -1036,6 +1089,35 @@ export interface CliToolRuntimeInfo {
   version: string | null;
   binPath: string | null;
   autoDescription?: { zh: string; en: string } | null;
+}
+
+export interface CustomCliTool {
+  id: string;
+  name: string;
+  binPath: string;
+  binName: string;
+  version: string | null;
+  installMethod: string;
+  installPackage: string;
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CliToolAgentCompat {
+  agentFriendly?: boolean;
+  supportsJson?: boolean;
+  supportsSchema?: boolean;
+  supportsDryRun?: boolean;
+  contextFriendly?: boolean;
+}
+
+export interface CliToolStructuredDesc {
+  intro: { zh: string; en: string };
+  useCases: { zh: string[]; en: string[] };
+  guideSteps: { zh: string[]; en: string[] };
+  examplePrompts: CliToolExamplePrompt[];
+  agentCompat?: CliToolAgentCompat;
 }
 
 // ==========================================
@@ -1109,4 +1191,30 @@ export interface WeixinContextTokenRecord {
   peerUserId: string;
   contextToken: string;
   updatedAt: string;
+}
+
+// ==========================================
+// Scheduled Tasks
+// ==========================================
+
+export interface ScheduledTask {
+  id: string;
+  name: string;
+  prompt: string;
+  schedule_type: 'cron' | 'interval' | 'once';
+  schedule_value: string;
+  next_run: string;
+  last_run?: string;
+  last_status?: 'success' | 'error' | 'skipped' | 'running';
+  last_error?: string;
+  last_result?: string;
+  consecutive_errors: number;
+  status: 'active' | 'paused' | 'completed' | 'disabled';
+  priority: 'low' | 'normal' | 'urgent';
+  notify_on_complete: number;
+  session_id?: string;
+  working_directory?: string;
+  permanent: number;
+  created_at: string;
+  updated_at: string;
 }

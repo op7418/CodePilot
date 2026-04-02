@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from 'react';
 import type { Message, FileAttachment } from '@/types';
-import { getLocalDateString } from '@/lib/utils';
+// getLocalDateString removed — heartbeat no longer auto-triggers
 import { startStream } from '@/lib/stream-session-manager';
 
 // ── localStorage heartbeat for cross-tab liveness detection ──
@@ -164,59 +164,21 @@ export function useAssistantTrigger({
       }
       if (state.hookTriggeredSessionId === sessionId && initialMessages.length > 0) return;
 
-      const today = getLocalDateString();
       const needsOnboarding = !state.onboardingComplete;
-      const needsCheckIn = state.onboardingComplete && state.dailyCheckInEnabled === true && state.lastCheckInDate !== today;
 
-      if (!needsOnboarding && !needsCheckIn) return;
+      // Onboarding is now handled by the frontend Wizard component (OnboardingWizard.tsx).
+      if (needsOnboarding) return;
 
-      // ── Compensation: check if a past message already contains a completion fence ──
-      // This handles the case where the server-side detection also missed (e.g. crash/restart)
-      // and the frontend is about to re-trigger onboarding unnecessarily.
-      if (needsOnboarding && initialMessages.length > 0) {
-        try {
-          const { extractCompletion } = await import('@/lib/onboarding-completion');
-          // Scan assistant messages from newest to oldest for an unprocessed completion
-          for (let i = initialMessages.length - 1; i >= 0; i--) {
-            const msg = initialMessages[i];
-            if (msg.role !== 'assistant') continue;
-            const completion = extractCompletion(msg.content);
-            if (completion?.type === 'onboarding') {
-              console.log('[useAssistantTrigger] Found unprocessed onboarding completion in message history, compensating...');
-              const resp = await fetch('/api/workspace/onboarding', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ answers: completion.answers, sessionId }),
-              });
-              if (resp.ok) {
-                await fetch('/api/workspace/hook-triggered', {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({
-                    sessionId: '__clear__',
-                    expectedOwner: state.hookTriggeredSessionId || null,
-                  }),
-                }).catch(() => {});
-                console.log('[useAssistantTrigger] Onboarding compensation succeeded, skipping re-trigger');
-                return; // Don't re-trigger onboarding
-              }
-              break; // Found fence but processing failed — fall through to re-trigger
-            }
-          }
-        } catch (e) {
-          console.error('[useAssistantTrigger] Onboarding compensation check failed:', e);
-        }
-      }
+      // Auto-trigger for:
+      // 1. Buddy welcome: no buddy + empty session → adoption prompt (takes priority)
+      // 2. Heartbeat: server says overdue + has buddy + empty session → full HEARTBEAT.md check
+      // Buddy welcome takes priority: heartbeat defers until buddy exists.
+      // Once buddy is hatched and user opens a new empty session, heartbeat fires.
+      const needsBuddyWelcome = state.onboardingComplete && !state.buddy && initialMessages.length === 0;
+      // Only trigger heartbeat when buddy exists — avoids collision with buddy-welcome
+      const needsHeartbeat = !!data.needsHeartbeat && !!state.buddy && initialMessages.length === 0;
 
-      // For daily check-in, only trigger in the most recent session for this workspace.
-      // This prevents older sessions from hijacking the check-in when reopened.
-      if (needsCheckIn) {
-        const latestRes = await fetch(`/api/workspace/latest-session?workingDirectory=${encodeURIComponent(data.path)}`);
-        if (latestRes.ok) {
-          const { sessionId: latestSessionId } = await latestRes.json();
-          if (latestSessionId && latestSessionId !== sessionId) return;
-        }
-      }
+      if (!needsBuddyWelcome && !needsHeartbeat) return;
 
       // Mark fired so we don't re-trigger on focus/re-render
       assistantTriggerFiredRef.current = true;
@@ -260,9 +222,9 @@ export function useAssistantTrigger({
       }
 
       // Use autoTrigger: the message is invisible (no user bubble, no title update)
-      const triggerMsg = needsOnboarding
-        ? '请开始助理引导设置。'
-        : '请开始每日问询。';
+      const triggerMsg = needsBuddyWelcome
+        ? '请做自我介绍并引导用户领养伙伴。'
+        : '心跳检查';
       startStream({
         sessionId,
         content: triggerMsg,

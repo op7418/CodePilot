@@ -121,16 +121,16 @@ export async function GET(request: NextRequest) {
     if (workspaceStatus === 'existing_workspace') {
       try {
         const raw = fs.readFileSync(statePath, 'utf-8');
-        const state = JSON.parse(raw) as { onboardingComplete?: boolean; lastCheckInDate?: string | null };
+        const state = JSON.parse(raw) as { onboardingComplete?: boolean; lastHeartbeatDate?: string | null; lastCheckInDate?: string | null };
         result.summary = {
           onboardingComplete: state.onboardingComplete ?? false,
-          lastCheckInDate: state.lastCheckInDate ?? null,
+          lastHeartbeatDate: state.lastHeartbeatDate ?? state.lastCheckInDate ?? null,
           fileCount,
         };
       } catch {
         result.summary = {
           onboardingComplete: false,
-          lastCheckInDate: null,
+          lastHeartbeatDate: null,
           fileCount,
         };
       }

@@ -4,6 +4,7 @@ import { useRef, useEffect, useCallback, useState, useMemo } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import { resolveThemeVars, getWidgetIframeStyleBlock } from '@/lib/widget-css-bridge';
 import { sanitizeForStreaming, sanitizeForIframe, buildReceiverSrcdoc } from '@/lib/widget-sanitizer';
+import { Code } from '@/components/ui/icon';
 import { WidgetErrorBoundary } from './WidgetErrorBoundary';
 
 interface WidgetRendererProps {
@@ -12,6 +13,8 @@ interface WidgetRendererProps {
   title?: string;
   /** Show shimmer overlay (e.g. while scripts are still streaming). */
   showOverlay?: boolean;
+  /** Extra buttons rendered alongside the "show code" button (top-right toolbar). */
+  extraButtons?: React.ReactNode;
 }
 
 /** Max iframe height to prevent runaway widgets. */
@@ -34,7 +37,7 @@ function getHeightCacheKey(code: string): string {
   return code.slice(0, 200);
 }
 
-function WidgetRendererInner({ widgetCode, isStreaming, title, showOverlay }: WidgetRendererProps) {
+function WidgetRendererInner({ widgetCode, isStreaming, title, showOverlay, extraButtons }: WidgetRendererProps) {
   const { t } = useTranslation();
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -46,7 +49,6 @@ function WidgetRendererInner({ widgetCode, isStreaming, title, showOverlay }: Wi
   });
   const [showCode, setShowCode] = useState(false);
   const [finalized, setFinalized] = useState(false);
-  const finalizedRef = useRef(false);
   // If we restored from cache, treat as already having received first height
   const hasReceivedFirstHeight = useRef(
     (_heightCache.get(getHeightCacheKey(widgetCode)) || 0) > 0
@@ -75,6 +77,33 @@ function WidgetRendererInner({ widgetCode, isStreaming, title, showOverlay }: Wi
       switch (e.data.type) {
         case 'widget:ready':
           setIframeReady(true);
+          break;
+
+        case 'widget:hatch-buddy':
+          // Widget requested buddy hatching — call API from parent (widgets can't fetch due to sandbox)
+          fetch('/api/workspace/hatch-buddy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ buddyName: e.data.buddyName || '' }),
+          })
+            .then(r => r.json())
+            .then(data => {
+              if (data.buddy) {
+                // Reload to show the celebration message + new widget that the API inserted into chat
+                setTimeout(() => window.location.reload(), 500);
+              }
+            })
+            .catch(() => {});
+          break;
+
+        case 'widget:name-buddy':
+          fetch('/api/workspace/hatch-buddy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ buddyName: e.data.buddyName || '' }),
+          })
+            .then(() => setTimeout(() => window.location.reload(), 500))
+            .catch(() => {});
           break;
 
         case 'widget:resize':
@@ -127,6 +156,14 @@ function WidgetRendererInner({ widgetCode, isStreaming, title, showOverlay }: Wi
           }
           break;
         }
+
+        case 'widget:publish': {
+          // Bubble up to parent window for cross-widget relay
+          window.dispatchEvent(new CustomEvent('widget-cross-publish', {
+            detail: { topic: e.data.topic, data: e.data.data, sourceIframe: iframeRef.current },
+          }));
+          break;
+        }
       }
     }
 
@@ -152,12 +189,15 @@ function WidgetRendererInner({ widgetCode, isStreaming, title, showOverlay }: Wi
   }, [widgetCode, isStreaming, iframeReady, sendUpdate]);
 
   // ── Finalize ───────────────────────────────────────────────────────────
+  // Track which widgetCode was last finalized to detect prop changes (dashboard refresh).
+  const finalizedCodeRef = useRef('');
   useEffect(() => {
-    if (isStreaming || !iframeReady || finalizedRef.current) return;
+    if (isStreaming || !iframeReady) return;
+    if (finalizedCodeRef.current === widgetCode) return; // already finalized this code
     const sanitized = sanitizeForIframe(widgetCode);
     const iframe = iframeRef.current;
     if (!iframe?.contentWindow) return;
-    finalizedRef.current = true;
+    finalizedCodeRef.current = widgetCode;
     lastSentRef.current = sanitized;
     // Lock height to prevent flash: innerHTML swap briefly empties DOM,
     // causing ResizeObserver to report near-zero height before scripts run.
@@ -227,12 +267,17 @@ function WidgetRendererInner({ widgetCode, isStreaming, title, showOverlay }: Wi
         </pre>
       )}
 
-      <button
-        onClick={() => setShowCode(!showCode)}
-        className="absolute top-1 right-1 opacity-0 group-hover/widget:opacity-100 transition-opacity text-[10px] px-1.5 py-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50"
-      >
-        {showCode ? t('widget.hideCode') : t('widget.showCode')}
-      </button>
+      {/* Toolbar — top-right, visible on hover */}
+      <div className="absolute top-1 right-1 opacity-0 group-hover/widget:opacity-100 transition-opacity flex items-center gap-1">
+        {extraButtons}
+        <button
+          onClick={() => setShowCode(!showCode)}
+          className="text-[10px] px-1.5 py-0.5 rounded text-muted-foreground/50 hover:text-muted-foreground hover:bg-muted/50 flex items-center gap-0.5"
+        >
+          <Code size={12} />
+          {showCode ? t('widget.hideCode') : t('widget.showCode')}
+        </button>
+      </div>
     </div>
   );
 }

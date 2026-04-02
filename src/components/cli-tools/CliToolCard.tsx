@@ -1,11 +1,22 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, CaretDown } from "@/components/ui/icon";
+import { Plus, CaretDown, Star } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { TranslationKey } from "@/i18n";
 import type { CliToolDefinition, CliToolRuntimeInfo, CliToolPlatform } from "@/types";
+
+/** Compute agent compatibility score (0-5) from tool definition fields */
+export function computeAgentScore(tool: { agentFriendly?: boolean; supportsJson?: boolean; supportsSchema?: boolean; supportsDryRun?: boolean; contextFriendly?: boolean }): number {
+  let score = 0;
+  if (tool.agentFriendly) score++;
+  if (tool.supportsJson) score++;
+  if (tool.supportsSchema) score++;
+  if (tool.supportsDryRun) score++;
+  if (tool.contextFriendly) score++;
+  return score;
+}
 
 interface CliToolCardProps {
   tool: CliToolDefinition;
@@ -80,9 +91,29 @@ export function CliToolCard({
             </span>
           )}
         </div>
-        <p className="text-xs text-muted-foreground mt-0.5 truncate">
+        <p className="text-xs text-muted-foreground mt-1.5 truncate">
           {summary || t('cliTools.noDescription' as TranslationKey)}
         </p>
+        {/* Agent friendliness stars */}
+        {(() => {
+          const score = computeAgentScore(tool);
+          if (score === 0) return null;
+          return (
+            <div className="flex items-center gap-1 mt-0.5">
+              <span className="text-xs text-muted-foreground">{t('cliTools.agentFriendliness' as TranslationKey)}</span>
+              <div className="flex gap-0.5">
+                {[1, 2, 3, 4, 5].map(i => (
+                  <Star
+                    key={i}
+                    size={10}
+                    weight={i <= score ? 'fill' : 'regular'}
+                    className={i <= score ? 'text-primary' : 'text-muted-foreground/30'}
+                  />
+                ))}
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* Right action */}

@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { invalidateMcpCache } from '@/lib/mcp-loader';
 import type {
   MCPServerConfig,
   MCPConfigResponse,
@@ -129,6 +130,7 @@ export async function PUT(
     }
     fs.writeFileSync(userConfigPath, JSON.stringify(userConfig, null, 2), 'utf-8');
 
+    invalidateMcpCache();
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(
@@ -175,6 +177,7 @@ export async function POST(
     mcpServers[name] = server;
     writeSettings(settings);
 
+    invalidateMcpCache();
     return NextResponse.json({ success: true });
   } catch (error) {
     return NextResponse.json(

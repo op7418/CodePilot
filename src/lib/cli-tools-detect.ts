@@ -37,9 +37,19 @@ export async function detectCliTool(tool: CliToolDefinition): Promise<CliToolRun
           env,
         });
         const versionText = (versionOut || versionErr).trim();
-        // Extract version number from first line
+        // Try semver pattern from first line
         const match = versionText.split('\n')[0]?.match(/(\d+\.\d+[\w.-]*)/);
-        version = match ? match[1] : versionText.split('\n')[0]?.slice(0, 50) || null;
+        if (match) {
+          version = match[1];
+        } else {
+          // Try JSON format (e.g. dreamina outputs {"version": "xxx", ...})
+          try {
+            const json = JSON.parse(versionText);
+            if (json.version) version = String(json.version);
+          } catch {
+            // Not JSON — skip, leave version null rather than showing garbage
+          }
+        }
       } catch {
         // Binary exists but --version failed — still mark as installed
       }
@@ -90,7 +100,11 @@ async function detectBinary(id: string, bin: string): Promise<CliToolRuntimeInfo
       });
       const vText = (vOut || vErr).trim();
       const match = vText.split('\n')[0]?.match(/(\d+\.\d+[\w.-]*)/);
-      version = match ? match[1] : null;
+      if (match) {
+        version = match[1];
+      } else {
+        try { const j = JSON.parse(vText); if (j.version) version = String(j.version); } catch { /* not JSON */ }
+      }
     } catch { /* version extraction optional */ }
 
     return { id, status: 'installed', version, binPath: resolvedPath };

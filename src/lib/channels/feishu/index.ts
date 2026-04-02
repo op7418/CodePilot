@@ -8,6 +8,25 @@
 import type { InboundMessage, OutboundMessage, SendResult } from '../../bridge/types';
 import type { ChannelPlugin, ChannelCapabilities, ChannelMeta, CardStreamController } from '../types';
 import type { FeishuConfig } from './types';
+
+/** Shape of a Feishu card.action.trigger event */
+interface CardActionEvent {
+  action?: {
+    value?: {
+      callback_data?: string;
+      chatId?: string;
+      action?: string;
+      operation_id?: string;
+    };
+  };
+  context?: {
+    open_chat_id?: string;
+    open_message_id?: string;
+  };
+  operator?: { open_id?: string };
+  open_id?: string;
+  open_message_id?: string;
+}
 import { loadFeishuConfig, validateFeishuConfig } from './config';
 import { FeishuGateway } from './gateway';
 import { parseInboundMessage } from './inbound';
@@ -77,7 +96,7 @@ export class FeishuChannelPlugin implements ChannelPlugin<FeishuConfig> {
     //   1. { callback_data: "perm:allow:xxx" }  — CodePilot permission buttons
     //   2. { action: "app_auth_done", operation_id: "xxx" }  — OpenClaw-style buttons
     this.gateway.registerCardActionHandler(async (data: unknown) => {
-      const event = data as any;
+      const event = data as CardActionEvent;
       console.log('[feishu/plugin]', 'Card action raw event:', JSON.stringify(event).slice(0, 500));
       const value = event?.action?.value ?? {};
       // Feishu card.action.trigger v2 callback structure (per official docs):

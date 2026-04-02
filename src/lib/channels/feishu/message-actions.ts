@@ -11,6 +11,29 @@
 import type * as lark from '@larksuiteoapi/node-sdk';
 import type { MessageListResult, FeishuMessageItem } from './types';
 
+/** Extract error message from unknown catch value */
+function errMsg(err: unknown): string {
+  if (err instanceof Error) return err.message;
+  return String(err);
+}
+
+/** Shape of a single message item from Lark IM list API */
+interface LarkMessageItem {
+  message_id?: string;
+  root_id?: string;
+  parent_id?: string;
+  msg_type?: string;
+  create_time?: string;
+  update_time?: string;
+  body?: { content: string };
+  sender?: {
+    id: string;
+    id_type: string;
+    sender_type: string;
+    tenant_key?: string;
+  };
+}
+
 interface ReadOptions {
   pageSize?: number;
   pageToken?: string;
@@ -44,7 +67,7 @@ export async function readMessages(
       },
     });
 
-    const items: FeishuMessageItem[] = (resp?.data?.items || []).map((item: any) => ({
+    const items: FeishuMessageItem[] = (resp?.data?.items || []).map((item: LarkMessageItem) => ({
       messageId: item.message_id || '',
       rootId: item.root_id || undefined,
       parentId: item.parent_id || undefined,
@@ -65,8 +88,8 @@ export async function readMessages(
       hasMore: resp?.data?.has_more || false,
       pageToken: resp?.data?.page_token || undefined,
     };
-  } catch (err: any) {
-    console.error('[feishu/message-actions] readMessages failed:', err?.message || err);
+  } catch (err: unknown) {
+    console.error('[feishu/message-actions] readMessages failed:', errMsg(err));
     return { items: [], hasMore: false };
   }
 }
@@ -94,7 +117,7 @@ export async function readThreadMessages(
       },
     });
 
-    const items: FeishuMessageItem[] = (resp?.data?.items || []).map((item: any) => ({
+    const items: FeishuMessageItem[] = (resp?.data?.items || []).map((item: LarkMessageItem) => ({
       messageId: item.message_id || '',
       rootId: item.root_id || undefined,
       parentId: item.parent_id || undefined,
@@ -115,8 +138,8 @@ export async function readThreadMessages(
       hasMore: resp?.data?.has_more || false,
       pageToken: resp?.data?.page_token || undefined,
     };
-  } catch (err: any) {
-    console.error('[feishu/message-actions] readThreadMessages failed:', err?.message || err);
+  } catch (err: unknown) {
+    console.error('[feishu/message-actions] readThreadMessages failed:', errMsg(err));
     return { items: [], hasMore: false };
   }
 }
@@ -145,12 +168,12 @@ export async function searchMessagesLocal(
         container_id_type: 'chat',
         container_id: chatId,
         page_size: Math.min(pageSize * 5, 50), // fetch more to filter
-        sort_type: 'ByCreateTimeDesc' as any,
+        sort_type: 'ByCreateTimeDesc',
         ...(pageToken ? { page_token: pageToken } : {}),
       },
     });
 
-    const allItems: FeishuMessageItem[] = (resp?.data?.items || []).map((item: any) => ({
+    const allItems: FeishuMessageItem[] = (resp?.data?.items || []).map((item: LarkMessageItem) => ({
       messageId: item.message_id || '',
       rootId: item.root_id || undefined,
       parentId: item.parent_id || undefined,
@@ -181,8 +204,8 @@ export async function searchMessagesLocal(
       items: filtered,
       hasMore: false, // can't paginate client-side filter reliably
     };
-  } catch (err: any) {
-    console.error('[feishu/message-actions] searchMessagesLocal failed:', err?.message || err);
+  } catch (err: unknown) {
+    console.error('[feishu/message-actions] searchMessagesLocal failed:', errMsg(err));
     return { items: [], hasMore: false };
   }
 }

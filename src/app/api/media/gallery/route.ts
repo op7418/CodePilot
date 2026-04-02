@@ -6,6 +6,7 @@ export const dynamic = 'force-dynamic';
 
 interface DbRow {
   id: string;
+  type: string;
   prompt: string;
   model: string;
   aspect_ratio: string;
@@ -24,11 +25,20 @@ function mapRow(row: DbRow) {
   const images: Array<{ mimeType: string; localPath: string }> = [];
   if (row.local_path) {
     const ext = row.local_path.split('.').pop()?.toLowerCase();
-    const mimeType = ext === 'jpg' || ext === 'jpeg' ? 'image/jpeg'
-      : ext === 'webp' ? 'image/webp'
-      : 'image/png';
+    const VIDEO_MIME: Record<string, string> = {
+      mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime',
+      avi: 'video/x-msvideo', mkv: 'video/x-matroska',
+    };
+    const IMAGE_MIME: Record<string, string> = {
+      jpg: 'image/jpeg', jpeg: 'image/jpeg', webp: 'image/webp',
+      gif: 'image/gif', svg: 'image/svg+xml', avif: 'image/avif',
+    };
+    const mimeType = (ext && VIDEO_MIME[ext]) || (ext && IMAGE_MIME[ext]) || 'image/png';
     images.push({ mimeType, localPath: row.local_path });
   }
+
+  // Determine media type from DB type column or MIME detection
+  const mediaType = row.type || 'image';
 
   // Parse tags JSON string to array
   let tags: string[] = [];
@@ -51,6 +61,7 @@ function mapRow(row: DbRow) {
 
   return {
     id: row.id,
+    type: mediaType,
     prompt: row.prompt,
     images,
     model: row.model,

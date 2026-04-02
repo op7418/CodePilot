@@ -68,19 +68,6 @@ export interface QuickPreset {
 }
 
 export const QUICK_PRESETS: QuickPreset[] = [
-  // ── Custom endpoints ──
-  {
-    key: "custom-openai",
-    name: "Custom API (OpenAI-compatible)",
-    description: "OpenAI-compatible custom endpoint",
-    descriptionZh: "自定义 OpenAI 兼容 API 端点",
-    icon: <Gear size={18} className="text-muted-foreground" />,
-    provider_type: "custom",
-    protocol: "openai-compatible",
-    base_url: "",
-    extra_env: "{}",
-    fields: ["name", "api_key", "base_url", "extra_env"],
-  },
   // ── Anthropic-compatible services ──
   {
     key: "anthropic-thirdparty",
@@ -342,9 +329,7 @@ export function findMatchingPreset(provider: ApiProvider): QuickPreset | undefin
   if (provider.provider_type === "anthropic" && provider.base_url) {
     return QUICK_PRESETS.find(p => p.key === "anthropic-thirdparty");
   }
-  // Custom/OpenAI-compatible
-  if (provider.provider_type === "custom" || provider.protocol === "openai-compatible") {
-    return QUICK_PRESETS.find(p => p.key === "custom-openai");
-  }
+  // Custom providers no longer have a matching preset (OpenAI-compatible removed).
+  // They are deleted during DB migration; any survivors use the generic edit form.
   return undefined;
 }

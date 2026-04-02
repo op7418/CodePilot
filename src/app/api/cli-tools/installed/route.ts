@@ -3,6 +3,7 @@ import { execFile } from 'child_process';
 import { promisify } from 'util';
 import { detectAllCliTools } from '@/lib/cli-tools-detect';
 import { getExpandedPath } from '@/lib/platform';
+import { getAllCliToolDescriptions, getAllCustomCliTools } from '@/lib/db';
 
 const execFileAsync = promisify(execFile);
 
@@ -26,9 +27,17 @@ export async function GET() {
       detectAllCliTools(),
       detectBrew(),
     ]);
+    const descriptions = getAllCliToolDescriptions();
+    const allCustom = getAllCustomCliTools();
+    // Filter out custom rows that shadow catalog tools (same binary path).
+    // These rows exist only to store install metadata for update commands.
+    const catalogBinPaths = new Set(catalog.filter(c => c.binPath).map(c => c.binPath!));
+    const custom = allCustom.filter(ct => !catalogBinPaths.has(ct.binPath));
     return NextResponse.json({
       tools: catalog,
       extra,
+      custom,
+      descriptions,
       platform: process.platform,
       hasBrew,
     });

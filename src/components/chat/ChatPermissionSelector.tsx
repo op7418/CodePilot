@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { cn } from '@/lib/utils';
 import { useTranslation } from '@/hooks/useTranslation';
 import {
   DropdownMenu,
@@ -72,13 +73,14 @@ export function ChatPermissionSelector({
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
-            variant="ghost"
+            variant="outline"
             size="sm"
-            className={`gap-1 px-2 py-1 text-xs font-medium ${
+            className={cn(
+              'rounded-md px-2.5 h-7 text-xs font-medium border transition-all gap-1',
               isFullAccess
-                ? 'bg-status-error-muted text-status-error-foreground hover:bg-status-error-muted'
-                : 'bg-muted text-muted-foreground hover:bg-muted/80'
-            }`}
+                ? 'bg-status-error-muted text-status-error-foreground border-status-error-foreground/30'
+                : 'text-muted-foreground border-border/60 hover:text-foreground hover:border-foreground/30 hover:bg-accent/50'
+            )}
           >
             {isFullAccess ? (
               <LockOpen size={14} className="text-status-error-foreground" />

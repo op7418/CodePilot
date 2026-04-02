@@ -11,6 +11,15 @@ let WeixinAdapter: typeof import('../../lib/bridge/adapters/weixin-adapter').Wei
 let getChannelOffset: typeof import('../../lib/db').getChannelOffset;
 let closeDb: typeof import('../../lib/db').closeDb;
 
+/** Test-only facade to access WeixinAdapter internals */
+interface WeixinAdapterTestable {
+  pendingCursors: Map<number, { offsetKey: string; cursor: string; remaining: number; sealed: boolean }>;
+  processMessage: (...args: unknown[]) => Promise<void>;
+  consumeOne: () => Promise<{ updateId?: number } | null>;
+  acknowledgeUpdate: (id: number) => void;
+  maybeCommitPendingCursor: (id: number) => void;
+}
+
 before(async () => {
   ({ WeixinAdapter } = await import('../../lib/bridge/adapters/weixin-adapter'));
   ({ getChannelOffset, closeDb } = await import('../../lib/db'));
@@ -23,7 +32,7 @@ after(() => {
 
 describe('WeixinAdapter deferred cursor ack', () => {
   it('attaches batch updateId to enqueued inbound messages', async () => {
-    const adapter = new WeixinAdapter() as any;
+    const adapter = new WeixinAdapter() as unknown as WeixinAdapterTestable;
     adapter.pendingCursors.set(42, {
       offsetKey: 'weixin:acc-1',
       cursor: 'cursor-42',
@@ -54,7 +63,7 @@ describe('WeixinAdapter deferred cursor ack', () => {
   });
 
   it('commits cursor only after final acknowledgeUpdate', () => {
-    const adapter = new WeixinAdapter() as any;
+    const adapter = new WeixinAdapter() as unknown as WeixinAdapterTestable;
 
     adapter.pendingCursors.set(7, {
       offsetKey: 'weixin:acc-7',
@@ -71,7 +80,7 @@ describe('WeixinAdapter deferred cursor ack', () => {
   });
 
   it('does not commit cursor before the batch is sealed', () => {
-    const adapter = new WeixinAdapter() as any;
+    const adapter = new WeixinAdapter() as unknown as WeixinAdapterTestable;
 
     adapter.pendingCursors.set(8, {
       offsetKey: 'weixin:acc-8',
@@ -83,7 +92,7 @@ describe('WeixinAdapter deferred cursor ack', () => {
     adapter.acknowledgeUpdate(8);
     assert.equal(getChannelOffset('weixin:acc-8'), '0');
 
-    adapter.pendingCursors.get(8).sealed = true;
+    adapter.pendingCursors.get(8)!.sealed = true;
     adapter.maybeCommitPendingCursor(8);
     assert.equal(getChannelOffset('weixin:acc-8'), 'cursor-8');
   });

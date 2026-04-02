@@ -29,6 +29,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   bridge: {
     isActive: () => ipcRenderer.invoke('bridge:is-active'),
   },
+  widget: {
+    exportPng: (html: string, width: number, isDark: boolean) =>
+      ipcRenderer.invoke('widget:export-png', { html, width, isDark }),
+  },
   terminal: {
     create: (opts: { id: string; cwd: string; cols: number; rows: number }) =>
       ipcRenderer.invoke('terminal:create', opts),
@@ -47,6 +51,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const listener = (_event: unknown, data: { id: string; code: number }) => callback(data);
       ipcRenderer.on('terminal:exit', listener);
       return () => { ipcRenderer.removeListener('terminal:exit', listener); };
+    },
+  },
+  notification: {
+    show: (options: { title: string; body: string; onClick?: unknown }) =>
+      ipcRenderer.invoke('notification:show', options),
+    onClick: (callback: (action: { type: string; payload: string }) => void) => {
+      const listener = (_event: unknown, action: { type: string; payload: string }) => callback(action);
+      ipcRenderer.on('notification:click', listener);
+      return () => { ipcRenderer.removeListener('notification:click', listener); };
     },
   },
 });

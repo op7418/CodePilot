@@ -665,7 +665,7 @@ describe('Full keyboard interaction scenarios', () => {
 
     const result = dispatchBadge(badge, userContent);
     assert.equal(result.prompt, '/compact keep last 5 messages');
-    assert.equal(result.displayLabel, '/compact');
+    assert.equal(result.displayLabel, '/compact\nkeep last 5 messages');
   });
 
   it('badge set -> empty submit dispatches with no context', () => {

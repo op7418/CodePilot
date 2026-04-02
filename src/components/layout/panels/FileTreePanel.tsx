@@ -27,16 +27,15 @@ export function FileTreePanel() {
   }, []);
 
   const handleFileSelect = useCallback((path: string) => {
-    // Only open preview for text-based files, skip images/videos/binaries
     const ext = path.split(".").pop()?.toLowerCase() || "";
+
+    // Truly non-previewable: archives, binaries, office docs, fonts
     const NON_PREVIEWABLE = new Set([
-      "png", "jpg", "jpeg", "gif", "bmp", "ico", "webp", "svg", "avif",
-      "mp4", "mov", "avi", "mkv", "webm", "flv", "wmv",
-      "mp3", "wav", "ogg", "flac", "aac", "wma",
       "zip", "tar", "gz", "rar", "7z", "bz2",
       "pdf", "doc", "docx", "xls", "xlsx", "ppt", "pptx",
       "exe", "dll", "so", "dylib", "bin", "dmg", "iso",
       "woff", "woff2", "ttf", "otf", "eot",
+      "flv", "wmv", "wma",
     ]);
     if (NON_PREVIEWABLE.has(ext)) return;
 

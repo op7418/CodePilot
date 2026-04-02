@@ -66,10 +66,10 @@ export function MarketplaceBrowser({ onInstalled }: MarketplaceBrowserProps) {
   }, [search, doSearch, onInstalled]);
 
   return (
-    <div className="flex gap-4 flex-1 min-h-0">
+    <div className="flex flex-1 min-h-0">
       {/* Left: search + results */}
-      <div className="w-64 shrink-0 flex flex-col border border-border rounded-lg overflow-hidden">
-        <div className="p-2 border-b border-border">
+      <div className="w-64 shrink-0 flex flex-col overflow-hidden pl-4">
+        <div className="px-2 pt-4 pb-2">
           <div className="relative">
             <MagnifyingGlass
               size={14}
@@ -114,8 +114,11 @@ export function MarketplaceBrowser({ onInstalled }: MarketplaceBrowserProps) {
         </div>
       </div>
 
+      {/* Divider */}
+      <div className="shrink-0 w-px bg-border/50" />
+
       {/* Right: detail */}
-      <div className="flex-1 min-w-0 border border-border rounded-lg overflow-hidden">
+      <div className="flex-1 min-w-0 overflow-hidden">
         {selected ? (
           <MarketplaceSkillDetail
             key={selected.id}

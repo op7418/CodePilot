@@ -10,7 +10,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import type { ChannelBinding } from './types';
-import type { SSEEvent, TokenUsage, MessageContentBlock, FileAttachment, MCPServerConfig } from '@/types';
+import type { SSEEvent, TokenUsage, MessageContentBlock, FileAttachment } from '@/types';
 import { streamClaude } from '../claude-client';
 import {
   addMessage,
@@ -26,54 +26,9 @@ import {
   getSetting,
 } from '../db';
 import { resolveProvider as resolveProviderUnified } from '../provider-resolver';
+import { loadCodePilotMcpServers } from '../mcp-loader';
+import { assembleContext } from '../context-assembler';
 import crypto from 'crypto';
-
-/** Read MCP server configs from ~/.claude.json and ~/.claude/settings.json */
-function loadMcpServers(): Record<string, MCPServerConfig> | undefined {
-  try {
-    const readJson = (p: string): Record<string, unknown> => {
-      if (!fs.existsSync(p)) return {};
-      try { return JSON.parse(fs.readFileSync(p, 'utf-8')); } catch { return {}; }
-    };
-    const userConfig = readJson(path.join(os.homedir(), '.claude.json'));
-    const settings = readJson(path.join(os.homedir(), '.claude', 'settings.json'));
-    // Also read project-level .mcp.json
-    const projectMcp = readJson(path.join(process.cwd(), '.mcp.json'));
-    const merged = {
-      ...((userConfig.mcpServers || {}) as Record<string, MCPServerConfig>),
-      ...((settings.mcpServers || {}) as Record<string, MCPServerConfig>),
-      ...((projectMcp.mcpServers || {}) as Record<string, MCPServerConfig>),
-    };
-    // Apply persistent enabled overrides for project-level servers
-    const settingsOverrides = (settings.mcpServerOverrides || {}) as Record<string, { enabled?: boolean }>;
-    for (const [name, override] of Object.entries(settingsOverrides)) {
-      if (merged[name] && override.enabled !== undefined) {
-        merged[name] = { ...merged[name], enabled: override.enabled };
-      }
-    }
-    // Resolve ${...} placeholders in env values against DB settings
-    for (const server of Object.values(merged)) {
-      if (server.env) {
-        for (const [key, value] of Object.entries(server.env)) {
-          if (typeof value === 'string' && value.startsWith('${') && value.endsWith('}')) {
-            const settingKey = value.slice(2, -1);
-            const resolved = getSetting(settingKey);
-            server.env[key] = resolved || '';
-          }
-        }
-      }
-    }
-    // Filter out persistently disabled servers
-    for (const [name, server] of Object.entries(merged)) {
-      if (server.enabled === false) {
-        delete merged[name];
-      }
-    }
-    return Object.keys(merged).length > 0 ? merged : undefined;
-  } catch {
-    return undefined;
-  }
-}
 
 export interface PermissionRequestInfo {
   permissionRequestId: string;
@@ -221,7 +176,7 @@ export async function processMessage(
     const bypassPermissions = session?.permission_profile === 'full_access';
 
     // Load conversation history for context
-    const { messages: recentMsgs } = getMessages(sessionId, { limit: 50 });
+    const { messages: recentMsgs } = getMessages(sessionId, { limit: 50, excludeHeartbeatAck: true });
     const historyMsgs = recentMsgs.slice(0, -1).map(m => ({
       role: m.role as 'user' | 'assistant',
       content: m.content,
@@ -236,9 +191,17 @@ export async function processMessage(
       }
     }
 
-    // Load MCP servers from Claude config files so the SDK has access to
-    // user-level MCP tools, matching the desktop chat route behavior.
-    const mcpServers = loadMcpServers();
+    // Load only MCP servers needing CodePilot-specific processing (${...} env placeholders).
+    // All other MCP servers are auto-loaded by the SDK via settingSources.
+    const mcpServers = loadCodePilotMcpServers();
+
+    // Unified context assembly — adds CLI tools context (and workspace prompt if applicable)
+    const assembled = await assembleContext({
+      session: session!,
+      entryPoint: 'bridge',
+      userPrompt: text,
+      conversationHistory: historyMsgs,
+    });
 
     // Resolve a valid working directory from multiple candidates
     const effectiveCwd = resolveWorkingDirectory(
@@ -262,7 +225,7 @@ export async function processMessage(
       sessionId,
       sdkSessionId: effectiveSdkSessionId,
       model: effectiveModel,
-      systemPrompt: session?.system_prompt || undefined,
+      systemPrompt: assembled.systemPrompt,
       workingDirectory: effectiveCwd,
       abortController,
       permissionMode,
@@ -272,6 +235,12 @@ export async function processMessage(
       conversationHistory: historyMsgs,
       files,
       bypassPermissions,
+      // Bridge-specific SDK options
+      thinking: { type: 'disabled' as const },
+      effort: 'medium' as const,
+      generativeUI: false,
+      enableFileCheckpointing: false,
+      context1m: false,
       onRuntimeStatusChange: (status: string) => {
         try { setSessionRuntimeStatus(sessionId, status); } catch { /* best effort */ }
       },
