@@ -444,7 +444,7 @@ export const CodeBlockActions = ({
 );
 
 /** Resolve Shiki theme pair from the current theme family. */
-function useShikiThemes(): { light: BundledTheme; dark: BundledTheme } {
+export function useShikiThemes(): { light: BundledTheme; dark: BundledTheme } {
   const { family, families } = useThemeFamily();
   const shikiTheme = resolveShikiTheme(families, family);
   return resolveShikiThemes(shikiTheme);

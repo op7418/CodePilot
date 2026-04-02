@@ -1,12 +1,11 @@
 "use client";
 
 import { useState, useEffect, useMemo, useCallback } from "react";
-import { useTheme } from "next-themes";
 import { X, Copy, Check, SpinnerGap } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
-import { Light as SyntaxHighlighter } from "react-syntax-highlighter";
-import { useThemeFamily } from "@/lib/theme/context";
-import { resolveCodeTheme, resolveHljsStyle } from "@/lib/theme/code-themes";
+import { highlightCode, useShikiThemes } from "@/components/ai-elements/code-block";
+import type { BundledLanguage } from "shiki";
+import { bundledLanguages } from "shiki";
 import { Streamdown } from "streamdown";
 import { cjk } from "@streamdown/cjk";
 import { code } from "@streamdown/code";
@@ -64,9 +63,7 @@ const PREVIEW_MAX_WIDTH = 800;
 const PREVIEW_DEFAULT_WIDTH = 480;
 
 export function PreviewPanel() {
-  const { resolvedTheme } = useTheme();
   const { workingDirectory, sessionId, previewFile, setPreviewFile, previewViewMode, setPreviewViewMode, setPreviewOpen } = usePanel();
-  const isDark = resolvedTheme === "dark";
   const [preview, setPreview] = useState<FilePreviewType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -211,7 +208,7 @@ export function PreviewPanel() {
           previewViewMode === "rendered" && canRender ? (
             <RenderedView content={preview.content} filePath={filePath} />
           ) : (
-            <SourceView preview={preview} isDark={isDark} />
+            <SourceView preview={preview} />
           )
         ) : null}
       </div>
@@ -258,41 +255,90 @@ function ViewModeToggle({
   );
 }
 
-/** Resolve hljs style from the current theme family + mode. */
-function useDocCodeTheme(isDark: boolean) {
-  const { family, families } = useThemeFamily();
-  const codeTheme = resolveCodeTheme(families, family);
-  return resolveHljsStyle(codeTheme, isDark);
+/** Check if a language string is a known Shiki bundled language */
+const isBundledLanguage = (lang: string): lang is BundledLanguage =>
+  lang in bundledLanguages || lang === "text" || lang === "plaintext";
+
+/** Tokenized code result type */
+interface TokenizedCode {
+  tokens: import("shiki").ThemedToken[][];
+  fg: string;
+  bg: string;
 }
 
-/** Source code view using react-syntax-highlighter */
-function SourceView({ preview, isDark }: { preview: FilePreviewType; isDark: boolean }) {
-  const hljsStyle = useDocCodeTheme(isDark);
+/** Create raw (unhighlighted) tokens for immediate display */
+const createRawTokens = (code: string): TokenizedCode => ({
+  bg: "transparent",
+  fg: "inherit",
+  tokens: code.split("\n").map((line) =>
+    line === ""
+      ? []
+      : [{ color: "inherit", content: line } as import("shiki").ThemedToken]
+  ),
+});
+
+/** Source code view using Shiki syntax highlighting */
+function SourceView({ preview }: { preview: FilePreviewType }) {
+  const { light: lightTheme, dark: darkTheme } = useShikiThemes();
+  const language = isBundledLanguage(preview.language)
+    ? preview.language
+    : ("text" as BundledLanguage);
+
+  const rawTokens = useMemo(() => createRawTokens(preview.content), [preview.content]);
+
+  const syncTokenized = useMemo(
+    () => highlightCode(preview.content, language, undefined, lightTheme, darkTheme) ?? rawTokens,
+    [preview.content, language, rawTokens, lightTheme, darkTheme]
+  );
+
+  const [asyncResult, setAsyncResult] = useState<{ key: string; tokens: TokenizedCode } | null>(null);
+  const resultKey = `${preview.content}:${language}:${lightTheme}:${darkTheme}`;
+
+  useEffect(() => {
+    let cancelled = false;
+    highlightCode(preview.content, language, (result) => {
+      if (!cancelled) {
+        setAsyncResult({ key: `${preview.content}:${language}:${lightTheme}:${darkTheme}`, tokens: result });
+      }
+    }, lightTheme, darkTheme);
+    return () => { cancelled = true; };
+  }, [preview.content, language, lightTheme, darkTheme]);
+
+  const tokenized = (asyncResult && asyncResult.key === resultKey) ? asyncResult.tokens : syncTokenized;
+
   return (
-    <div className="text-xs">
-      <SyntaxHighlighter
-        language={preview.language}
-        style={hljsStyle}
-        showLineNumbers
-        customStyle={{
-          margin: 0,
-          padding: "8px",
-          borderRadius: 0,
-          fontSize: "11px",
-          lineHeight: "1.5",
-          background: "transparent",
-        }}
-        lineNumberStyle={{
-          minWidth: "2.5em",
-          paddingRight: "8px",
-          color: "var(--muted-foreground)",
-          opacity: 0.5,
-          userSelect: "none",
-        }}
-      >
-        {preview.content}
-      </SyntaxHighlighter>
-    </div>
+    <pre
+      className="m-0 px-2 py-2 text-[11px] leading-relaxed dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
+      style={{ backgroundColor: tokenized.bg === "transparent" ? undefined : tokenized.bg, color: tokenized.fg }}
+    >
+      <code className="font-mono [counter-increment:line_0] [counter-reset:line]">
+        {tokenized.tokens.map((line, lineIdx) => (
+          <span
+            key={lineIdx}
+            className="block before:content-[counter(line)] before:inline-block before:[counter-increment:line] before:w-8 before:mr-3 before:text-right before:text-muted-foreground/50 before:font-mono before:select-none"
+          >
+            {line.length === 0
+              ? "\n"
+              : line.map((token, tokenIdx) => (
+                  <span
+                    key={tokenIdx}
+                    className="dark:!bg-[var(--shiki-dark-bg)] dark:!text-[var(--shiki-dark)]"
+                    style={{
+                      backgroundColor: token.bgColor,
+                      color: token.color,
+                      fontStyle: token.fontStyle && token.fontStyle & 1 ? "italic" : undefined,
+                      fontWeight: token.fontStyle && token.fontStyle & 2 ? "bold" : undefined,
+                      textDecoration: token.fontStyle && token.fontStyle & 4 ? "underline" : undefined,
+                      ...token.htmlStyle,
+                    } as React.CSSProperties}
+                  >
+                    {token.content}
+                  </span>
+                ))}
+          </span>
+        ))}
+      </code>
+    </pre>
   );
 }
 
