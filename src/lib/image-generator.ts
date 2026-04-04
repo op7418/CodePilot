@@ -30,6 +30,32 @@ export interface GenerateSingleImageResult {
   elapsedMs: number;
 }
 
+interface GeminiImageProviderRecord {
+  api_key: string;
+  base_url?: string;
+  extra_env?: string;
+}
+
+export function resolveGeminiImageProviderConfig(provider: GeminiImageProviderRecord): {
+  apiKey: string;
+  baseURL?: string;
+  model: string;
+} {
+  let configuredModel = 'gemini-3.1-flash-image-preview';
+  try {
+    const env = JSON.parse(provider.extra_env || '{}');
+    if (env.GEMINI_IMAGE_MODEL) configuredModel = env.GEMINI_IMAGE_MODEL;
+  } catch {
+    // keep default model when extra_env is missing or invalid
+  }
+
+  return {
+    apiKey: provider.api_key,
+    baseURL: provider.base_url?.trim() || undefined,
+    model: configuredModel,
+  };
+}
+
 /**
  * Shared image generation function.
  * Handles: Provider lookup → Gemini API call → file save → project dir copy → DB record.
@@ -39,25 +65,21 @@ export async function generateSingleImage(params: GenerateSingleImageParams): Pr
 
   const db = getDb();
   const provider = db.prepare(
-    "SELECT api_key, extra_env FROM api_providers WHERE provider_type = 'gemini-image' AND api_key != '' LIMIT 1"
-  ).get() as { api_key: string; extra_env?: string } | undefined;
+    "SELECT api_key, base_url, extra_env FROM api_providers WHERE provider_type = 'gemini-image' AND api_key != '' ORDER BY sort_order ASC, created_at ASC LIMIT 1"
+  ).get() as GeminiImageProviderRecord | undefined;
 
   if (!provider) {
     throw new Error('No Gemini Image provider configured. Please add a provider with type "gemini-image" in Settings.');
   }
 
-  // Read configured model from extra_env, fall back to default
-  let configuredModel = 'gemini-3.1-flash-image-preview';
-  try {
-    const env = JSON.parse(provider.extra_env || '{}');
-    if (env.GEMINI_IMAGE_MODEL) configuredModel = env.GEMINI_IMAGE_MODEL;
-  } catch { /* use default */ }
-
-  const requestedModel = params.model || configuredModel;
+  const providerConfig = resolveGeminiImageProviderConfig(provider);
+  const requestedModel = params.model || providerConfig.model;
   const aspectRatio = (params.aspectRatio || '1:1') as `${number}:${number}`;
   const imageSize = params.imageSize || '1K';
-
-  const google = createGoogleGenerativeAI({ apiKey: provider.api_key });
+  const google = createGoogleGenerativeAI({
+    apiKey: providerConfig.apiKey,
+    baseURL: providerConfig.baseURL,
+  });
 
   // Build prompt: plain string or { text, images } for reference images
   // Combine both base64 data and file paths — both can be provided simultaneously
