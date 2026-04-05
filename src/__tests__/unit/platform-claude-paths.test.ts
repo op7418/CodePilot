@@ -23,6 +23,14 @@ describe('Claude path discovery helpers', () => {
 
     assert.ok(candidates.includes('/Users/tester/Library/pnpm/claude'));
     assert.ok(candidates.includes('/Users/tester/.claude/local/claude'));
+    assert.ok(
+      candidates.indexOf('/opt/homebrew/bin/claude') < candidates.indexOf('/Users/tester/Library/pnpm/claude'),
+      'homebrew candidates should stay ahead of npm-family shims',
+    );
+    assert.ok(
+      candidates.indexOf('/Users/tester/.claude/local/claude') < candidates.indexOf('/Users/tester/Library/pnpm/claude'),
+      'native compatibility wrappers should stay ahead of pnpm shims',
+    );
   });
 
   it('win32 search dirs include pnpm and claude local compatibility paths', () => {
@@ -47,5 +55,10 @@ describe('Claude path discovery helpers', () => {
 
     assert.ok(candidates.includes('C:\\Users\\tester\\AppData\\Local\\pnpm\\claude.cmd'));
     assert.ok(candidates.includes('C:\\Users\\tester\\.claude\\local\\claude.cmd'));
+    assert.ok(
+      candidates.indexOf('C:\\Users\\tester\\.claude\\local\\claude.cmd') <
+        candidates.indexOf('C:\\Users\\tester\\AppData\\Local\\pnpm\\claude.cmd'),
+      'native compatibility wrappers should stay ahead of pnpm shims on Windows',
+    );
   });
 });

@@ -65,23 +65,21 @@ export function getExtraPathDirs(): string[] {
   return getExtraPathDirsFor(process.platform, os.homedir(), process.env);
 }
 
-export function getExtraPathDirsFor(
+function getPathApiForPlatform(platform: NodeJS.Platform): typeof path.posix | typeof path.win32 {
+  return platform === 'win32' ? path.win32 : path.posix;
+}
+
+export function getClaudeSearchDirsFor(
   platform: NodeJS.Platform,
   home: string,
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
-  const pathApi = platform === 'win32' ? path.win32 : path.posix;
+  const pathApi = getPathApiForPlatform(platform);
   const pnpmHome = env.PNPM_HOME;
   const voltaHome = env.VOLTA_HOME ? pathApi.join(env.VOLTA_HOME, 'bin') : undefined;
 
-  const extras = platform === 'win32'
+  const dirs = platform === 'win32'
     ? [
-        pathApi.join(env.APPDATA || pathApi.join(home, 'AppData', 'Roaming'), 'npm'),
-        pathApi.join(env.LOCALAPPDATA || pathApi.join(home, 'AppData', 'Local'), 'npm'),
-        pathApi.join(env.APPDATA || pathApi.join(home, 'AppData', 'Roaming'), 'pnpm'),
-        pathApi.join(env.LOCALAPPDATA || pathApi.join(home, 'AppData', 'Local'), 'pnpm'),
-        pnpmHome,
-        pathApi.join(home, '.npm-global', 'bin'),
         pathApi.join(home, '.local', 'bin'),
         pathApi.join(home, '.claude', 'bin'),
         pathApi.join(home, '.claude', 'local'),
@@ -92,12 +90,22 @@ export function getExtraPathDirsFor(
         pathApi.join(home, '.fnm', 'current', 'bin'),
         pathApi.join(home, '.nvm', 'current', 'bin'),
         pathApi.join(home, '.asdf', 'shims'),
+        pathApi.join(env.APPDATA || pathApi.join(home, 'AppData', 'Roaming'), 'npm'),
+        pathApi.join(env.LOCALAPPDATA || pathApi.join(home, 'AppData', 'Local'), 'npm'),
+        pathApi.join(env.APPDATA || pathApi.join(home, 'AppData', 'Roaming'), 'pnpm'),
+        pathApi.join(env.LOCALAPPDATA || pathApi.join(home, 'AppData', 'Local'), 'pnpm'),
+        pnpmHome,
+        pathApi.join(home, '.npm-global', 'bin'),
       ]
     : [
         pathApi.join(home, '.local', 'bin'),
         pathApi.join(home, '.claude', 'bin'),
         pathApi.join(home, '.claude', 'local'),
         pathApi.join(home, '.bun', 'bin'),
+        '/opt/homebrew/bin',
+        '/usr/local/bin',
+        '/usr/bin',
+        '/bin',
         pathApi.join(home, '.npm-global', 'bin'),
         pathApi.join(home, '.yarn', 'bin'),
         pathApi.join(home, '.config', 'yarn', 'global', 'node_modules', '.bin'),
@@ -108,13 +116,17 @@ export function getExtraPathDirsFor(
         pnpmHome,
         pathApi.join(home, '.local', 'share', 'pnpm'),
         ...(platform === 'darwin' ? [pathApi.join(home, 'Library', 'pnpm')] : []),
-        '/usr/local/bin',
-        '/opt/homebrew/bin',
-        '/usr/bin',
-        '/bin',
       ];
 
-  return [...new Set(extras.filter((dir): dir is string => !!dir))];
+  return [...new Set(dirs.filter((dir): dir is string => !!dir))];
+}
+
+export function getExtraPathDirsFor(
+  platform: NodeJS.Platform,
+  home: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  return getClaudeSearchDirsFor(platform, home, env);
 }
 
 export function getClaudeCandidatePathsFor(
@@ -122,8 +134,8 @@ export function getClaudeCandidatePathsFor(
   home: string,
   env: NodeJS.ProcessEnv = process.env,
 ): string[] {
-  const pathApi = platform === 'win32' ? path.win32 : path.posix;
-  const dirs = getExtraPathDirsFor(platform, home, env);
+  const pathApi = getPathApiForPlatform(platform);
+  const dirs = getClaudeSearchDirsFor(platform, home, env);
   if (platform === 'win32') {
     const exts = ['.cmd', '.exe', '.bat', ''];
     const candidates: string[] = [];

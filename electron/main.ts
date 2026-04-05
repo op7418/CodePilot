@@ -484,19 +484,14 @@ function findGitBashSync(): boolean {
  */
 function getExpandedShellPath(): string {
   const home = os.homedir();
-  const shellPath = userShellEnv.PATH || process.env.PATH || '';
+  const shellEnv = { ...process.env, ...userShellEnv };
+  const shellPath = shellEnv.PATH || process.env.PATH || '';
   const sep = path.delimiter;
-  const pnpmHome = process.env.PNPM_HOME;
-  const voltaHome = process.env.VOLTA_HOME ? path.join(process.env.VOLTA_HOME, 'bin') : '';
+  const pnpmHome = shellEnv.PNPM_HOME;
+  const voltaHome = shellEnv.VOLTA_HOME ? path.join(shellEnv.VOLTA_HOME, 'bin') : '';
 
   const extraDirs = process.platform === 'win32'
     ? [
-        path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'npm'),
-        path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'npm'),
-        path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'pnpm'),
-        path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'pnpm'),
-        pnpmHome,
-        path.join(home, '.npm-global', 'bin'),
         path.join(home, '.local', 'bin'),
         path.join(home, '.claude', 'bin'),
         path.join(home, '.claude', 'local'),
@@ -507,17 +502,23 @@ function getExpandedShellPath(): string {
         path.join(home, '.fnm', 'current', 'bin'),
         path.join(home, '.nvm', 'current', 'bin'),
         path.join(home, '.asdf', 'shims'),
+        path.join(shellEnv.APPDATA || path.join(home, 'AppData', 'Roaming'), 'npm'),
+        path.join(shellEnv.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'npm'),
+        path.join(shellEnv.APPDATA || path.join(home, 'AppData', 'Roaming'), 'pnpm'),
+        path.join(shellEnv.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'pnpm'),
+        pnpmHome,
+        path.join(home, '.npm-global', 'bin'),
       ]
     : [
-        '/usr/local/bin',
-        '/opt/homebrew/bin',
-        '/usr/bin',
-        '/bin',
-        path.join(home, '.npm-global', 'bin'),
         path.join(home, '.local', 'bin'),
         path.join(home, '.claude', 'bin'),
         path.join(home, '.claude', 'local'),
         path.join(home, '.bun', 'bin'),
+        '/opt/homebrew/bin',
+        '/usr/local/bin',
+        '/usr/bin',
+        '/bin',
+        path.join(home, '.npm-global', 'bin'),
         path.join(home, '.yarn', 'bin'),
         path.join(home, '.config', 'yarn', 'global', 'node_modules', '.bin'),
         path.join(home, '.volta', 'bin'),
@@ -796,6 +797,7 @@ app.whenReady().then(async () => {
   ipcMain.handle('install:check-prerequisites', async () => {
     const expandedPath = getExpandedShellPath();
     const execEnv = { ...sanitizedProcessEnv(), ...userShellEnv, PATH: expandedPath };
+    const shellEnv = { ...process.env, ...userShellEnv };
 
     // Candidate paths — native first, then bun, then homebrew, then npm
     const home = os.homedir();
@@ -805,24 +807,26 @@ app.whenReady().then(async () => {
           path.join(home, '.claude', 'bin'),
           path.join(home, '.claude', 'local'),
           path.join(home, '.bun', 'bin'),
-          path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'npm'),
-          path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'npm'),
-          path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'pnpm'),
-          path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'pnpm'),
-          process.env.PNPM_HOME || '',
-          path.join(home, '.npm-global', 'bin'),
           path.join(home, '.yarn', 'bin'),
           path.join(home, '.config', 'yarn', 'global', 'node_modules', '.bin'),
-          process.env.VOLTA_HOME ? path.join(process.env.VOLTA_HOME, 'bin') : '',
+          shellEnv.VOLTA_HOME ? path.join(shellEnv.VOLTA_HOME, 'bin') : '',
           path.join(home, '.fnm', 'current', 'bin'),
           path.join(home, '.nvm', 'current', 'bin'),
           path.join(home, '.asdf', 'shims'),
+          path.join(shellEnv.APPDATA || path.join(home, 'AppData', 'Roaming'), 'npm'),
+          path.join(shellEnv.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'npm'),
+          path.join(shellEnv.APPDATA || path.join(home, 'AppData', 'Roaming'), 'pnpm'),
+          path.join(shellEnv.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'pnpm'),
+          shellEnv.PNPM_HOME || '',
+          path.join(home, '.npm-global', 'bin'),
         ]
       : [
           path.join(home, '.local', 'bin'),
           path.join(home, '.claude', 'bin'),
           path.join(home, '.claude', 'local'),
           path.join(home, '.bun', 'bin'),
+          '/opt/homebrew/bin',
+          '/usr/local/bin',
           path.join(home, '.npm-global', 'bin'),
           path.join(home, '.yarn', 'bin'),
           path.join(home, '.config', 'yarn', 'global', 'node_modules', '.bin'),
@@ -830,11 +834,9 @@ app.whenReady().then(async () => {
           path.join(home, '.fnm', 'current', 'bin'),
           path.join(home, '.nvm', 'current', 'bin'),
           path.join(home, '.asdf', 'shims'),
-          process.env.PNPM_HOME || '',
+          shellEnv.PNPM_HOME || '',
           path.join(home, '.local', 'share', 'pnpm'),
           ...(process.platform === 'darwin' ? [path.join(home, 'Library', 'pnpm')] : []),
-          '/opt/homebrew/bin',
-          '/usr/local/bin',
         ];
 
     const candidatePaths = process.platform === 'win32'
@@ -848,9 +850,17 @@ app.whenReady().then(async () => {
 
     function classifyPath(p: string): 'native' | 'homebrew' | 'npm' | 'bun' | 'unknown' {
       const n = p.replace(/\\/g, '/');
-      if (n.includes('/.local/bin/') || n.includes('/.claude/bin/')) return 'native';
+      if (n.includes('/.local/bin/') || n.includes('/.claude/bin/') || n.includes('/.claude/local/')) return 'native';
       if (n.includes('/.bun/bin/') || n.includes('/.bun/install/')) return 'bun';
       if (n.includes('/homebrew/') || n.includes('/Cellar/')) return 'homebrew';
+      if (n.includes('/Library/pnpm/')
+        || n.includes('/.local/share/pnpm/')
+        || n.includes('/.config/yarn/')
+        || n.includes('/.yarn/bin/')
+        || n.includes('/.volta/bin/')
+        || n.includes('/.fnm/current/bin/')
+        || n.includes('/.asdf/shims/')
+        || n.includes('/.nvm/current/bin/')) return 'npm';
       if (n.includes('/npm')) return 'npm';
       if (n === '/usr/local/bin/claude') {
         try {
@@ -860,6 +870,14 @@ app.whenReady().then(async () => {
           if (real.includes('.bun')) return 'bun';
         } catch { /* ignore */ }
         return 'unknown';
+      }
+      if (process.platform === 'win32') {
+        const appData = (shellEnv.APPDATA || '').replace(/\\/g, '/');
+        const localAppData = (shellEnv.LOCALAPPDATA || '').replace(/\\/g, '/');
+        if (appData && n.startsWith(appData + '/npm')) return 'npm';
+        if (localAppData && n.startsWith(localAppData + '/npm')) return 'npm';
+        if (appData && n.startsWith(appData + '/pnpm')) return 'npm';
+        if (localAppData && n.startsWith(localAppData + '/pnpm')) return 'npm';
       }
       return 'unknown';
     }
