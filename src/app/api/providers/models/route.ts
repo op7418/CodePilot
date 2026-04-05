@@ -2,14 +2,15 @@ import { NextResponse } from 'next/server';
 import { getAllProviders, getDefaultProviderId, setDefaultProviderId, getProvider, getModelsForProvider, getSetting } from '@/lib/db';
 import { getContextWindow } from '@/lib/model-context';
 import { getDefaultModelsForProvider, inferProtocolFromLegacy, findPresetForLegacy } from '@/lib/provider-catalog';
+import { filterVisibleProviders } from '@/lib/legacy-provider-placeholder';
 import type { Protocol } from '@/lib/provider-catalog';
 import type { ErrorResponse, ProviderModelGroup } from '@/types';
 
 // Default Claude model options (for the built-in 'env' provider)
 const DEFAULT_MODELS = [
-  { value: 'sonnet', label: 'Sonnet 4.6' },
-  { value: 'opus', label: 'Opus 4.6' },
-  { value: 'haiku', label: 'Haiku 4.5' },
+  { value: 'sonnet', label: 'Sonnet 4.6', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'max'] },
+  { value: 'opus', label: 'Opus 4.6', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'max'] },
+  { value: 'haiku', label: 'Haiku 4.5', supportsEffort: true, supportedEffortLevels: ['low', 'medium', 'high', 'max'] },
 ];
 
 interface ModelEntry {
@@ -41,7 +42,7 @@ const MEDIA_PROVIDER_TYPES = new Set(['gemini-image']);
 
 export async function GET() {
   try {
-    const providers = getAllProviders();
+    const providers = filterVisibleProviders(getAllProviders());
     const groups: ProviderModelGroup[] = [];
     const ccSwitchCompatMode = getSetting('cc_switch_compat_mode') === 'true';
 
@@ -194,10 +195,16 @@ export async function GET() {
     // Determine default provider — auto-heal stale references on read
     let defaultProviderId = getDefaultProviderId();
     const defaultIsCompatEnv = ccSwitchCompatMode && defaultProviderId === 'env';
-    if (defaultProviderId && !defaultIsCompatEnv && !getProvider(defaultProviderId)) {
+    const hasVisibleDefaultProvider = !!defaultProviderId && groups.some(g => g.provider_id === defaultProviderId);
+    if (defaultProviderId && !defaultIsCompatEnv && !hasVisibleDefaultProvider && !getProvider(defaultProviderId)) {
       // Stale default (provider was deleted). Fix it now.
       const firstValid = groups.find(g => g.provider_id !== 'env');
       defaultProviderId = firstValid?.provider_id || '';
+      setDefaultProviderId(defaultProviderId);
+    } else if (defaultProviderId && !defaultIsCompatEnv && !hasVisibleDefaultProvider) {
+      // Hidden legacy placeholder or otherwise non-selectable provider.
+      const firstValid = groups.find(g => g.provider_id !== 'env');
+      defaultProviderId = firstValid?.provider_id || 'env';
       setDefaultProviderId(defaultProviderId);
     }
     defaultProviderId = defaultProviderId || groups[0]?.provider_id || '';

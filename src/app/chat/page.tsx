@@ -18,6 +18,7 @@ import { useNativeFolderPicker } from '@/hooks/useNativeFolderPicker';
 import { useTranslation } from '@/hooks/useTranslation';
 import { usePanel } from '@/hooks/usePanel';
 import { useCcSwitchCompatMode } from '@/hooks/useCcSwitchCompatMode';
+import { buildCcSwitchCompatGlobalDefaultPayload, shouldPersistCcSwitchCompatGlobalDefault } from '@/lib/cc-switch-compat';
 
 interface ToolUseInfo {
   id: string;
@@ -129,6 +130,25 @@ export default function NewChatPage() {
       }),
     }).catch(() => {});
   }, [ccSwitchCompatMode, currentProviderId]);
+
+  const handleProviderModelChange = useCallback((pid: string, model: string) => {
+    setCurrentProviderId(pid);
+    setCurrentModel(model);
+    localStorage.setItem('codepilot:last-provider-id', pid);
+    localStorage.setItem('codepilot:last-model', model);
+
+    if (!shouldPersistCcSwitchCompatGlobalDefault(ccSwitchCompatMode, pid, model)) return;
+
+    fetch('/api/providers/options', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildCcSwitchCompatGlobalDefaultPayload(pid, model)),
+    })
+      .then(() => {
+        window.dispatchEvent(new Event('provider-changed'));
+      })
+      .catch(() => {});
+  }, [ccSwitchCompatMode]);
 
   // Validate restored model/provider against actual available providers/models.
   // For NEW conversations, the global default model takes priority
@@ -830,12 +850,7 @@ export default function NewChatPage() {
         modelName={currentModel}
         onModelChange={setCurrentModel}
         providerId={currentProviderId}
-        onProviderModelChange={(pid, model) => {
-          setCurrentProviderId(pid);
-          setCurrentModel(model);
-          localStorage.setItem('codepilot:last-provider-id', pid);
-          localStorage.setItem('codepilot:last-model', model);
-        }}
+        onProviderModelChange={handleProviderModelChange}
         workingDirectory={workingDir}
         effort={selectedEffort}
         onEffortChange={handleEffortChange}

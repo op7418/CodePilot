@@ -20,6 +20,7 @@ import { useChatCommands } from '@/hooks/useChatCommands';
 import { useAssistantTrigger } from '@/hooks/useAssistantTrigger';
 import { useStreamSubscription } from '@/hooks/useStreamSubscription';
 import { useCcSwitchCompatMode } from '@/hooks/useCcSwitchCompatMode';
+import { buildCcSwitchCompatGlobalDefaultPayload, shouldPersistCcSwitchCompatGlobalDefault } from '@/lib/cc-switch-compat';
 import {
   startStream,
   stopStream,
@@ -209,7 +210,19 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, provider_id: newProviderId }),
     }).catch(() => {});
-  }, [sessionId]);
+
+    if (!shouldPersistCcSwitchCompatGlobalDefault(ccSwitchCompatMode, newProviderId, model)) return;
+
+    fetch('/api/providers/options', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(buildCcSwitchCompatGlobalDefaultPayload(newProviderId, model)),
+    })
+      .then(() => {
+        window.dispatchEvent(new Event('provider-changed'));
+      })
+      .catch(() => {});
+  }, [ccSwitchCompatMode, sessionId]);
 
   // ── Extracted hooks ──
 

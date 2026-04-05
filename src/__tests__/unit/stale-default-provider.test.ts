@@ -170,7 +170,28 @@ describe('Stale default_provider_id cleanup', () => {
       deleteProvider(providerId);
     });
 
-    it('still auto-heals env default when compat mode is disabled', async () => {
+    it('exposes effort support metadata for built-in env models even without SDK cache', async () => {
+      setDefaultProviderId('env');
+      setSetting('cc_switch_compat_mode', 'true');
+
+      const { GET } = await import('../../app/api/providers/models/route');
+      const response = await GET();
+      const data = await response.json() as {
+        groups: Array<{
+          provider_id: string;
+          models: Array<{ value: string; supportsEffort?: boolean; supportedEffortLevels?: string[] }>;
+        }>;
+      };
+
+      const envGroup = data.groups.find(group => group.provider_id === 'env');
+      const sonnet = envGroup?.models.find(model => model.value === 'sonnet');
+
+      assert.ok(envGroup, 'env group should exist');
+      assert.equal(sonnet?.supportsEffort, true);
+      assert.deepEqual(sonnet?.supportedEffortLevels, ['low', 'medium', 'high', 'max']);
+    });
+
+    it('keeps env as the default when compat mode is disabled and env is still selectable', async () => {
       const providerId = createTestProvider('__test_real_provider');
       setDefaultProviderId('env');
       setSetting('cc_switch_compat_mode', '');
@@ -179,9 +200,8 @@ describe('Stale default_provider_id cleanup', () => {
       const response = await GET();
       const data = await response.json() as { default_provider_id: string };
 
-      assert.notEqual(data.default_provider_id, 'env');
-      assert.ok(getProvider(data.default_provider_id), 'auto-healed default should point to a real provider');
-      assert.equal(getDefaultProviderId(), data.default_provider_id);
+      assert.equal(data.default_provider_id, 'env');
+      assert.equal(getDefaultProviderId(), 'env');
 
       deleteProvider(providerId);
     });
