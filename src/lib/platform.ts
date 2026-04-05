@@ -62,31 +62,80 @@ export function getRuntimeArchitectureInfo(): RuntimeArchitectureInfo {
  * Extra PATH directories to search for Claude CLI and other tools.
  */
 export function getExtraPathDirs(): string[] {
-  const home = os.homedir();
-  if (isWindows) {
-    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
-    const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
-    return [
-      path.join(home, '.local', 'bin'),
-      path.join(home, '.claude', 'bin'),
-      path.join(home, '.bun', 'bin'),
-      path.join(appData, 'npm'),
-      path.join(localAppData, 'npm'),
-      path.join(home, '.npm-global', 'bin'),
-      path.join(home, '.nvm', 'current', 'bin'),
-    ];
+  return getExtraPathDirsFor(process.platform, os.homedir(), process.env);
+}
+
+export function getExtraPathDirsFor(
+  platform: NodeJS.Platform,
+  home: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  const pathApi = platform === 'win32' ? path.win32 : path.posix;
+  const pnpmHome = env.PNPM_HOME;
+  const voltaHome = env.VOLTA_HOME ? pathApi.join(env.VOLTA_HOME, 'bin') : undefined;
+
+  const extras = platform === 'win32'
+    ? [
+        pathApi.join(env.APPDATA || pathApi.join(home, 'AppData', 'Roaming'), 'npm'),
+        pathApi.join(env.LOCALAPPDATA || pathApi.join(home, 'AppData', 'Local'), 'npm'),
+        pathApi.join(env.APPDATA || pathApi.join(home, 'AppData', 'Roaming'), 'pnpm'),
+        pathApi.join(env.LOCALAPPDATA || pathApi.join(home, 'AppData', 'Local'), 'pnpm'),
+        pnpmHome,
+        pathApi.join(home, '.npm-global', 'bin'),
+        pathApi.join(home, '.local', 'bin'),
+        pathApi.join(home, '.claude', 'bin'),
+        pathApi.join(home, '.claude', 'local'),
+        pathApi.join(home, '.bun', 'bin'),
+        pathApi.join(home, '.yarn', 'bin'),
+        pathApi.join(home, '.config', 'yarn', 'global', 'node_modules', '.bin'),
+        voltaHome,
+        pathApi.join(home, '.fnm', 'current', 'bin'),
+        pathApi.join(home, '.nvm', 'current', 'bin'),
+        pathApi.join(home, '.asdf', 'shims'),
+      ]
+    : [
+        pathApi.join(home, '.local', 'bin'),
+        pathApi.join(home, '.claude', 'bin'),
+        pathApi.join(home, '.claude', 'local'),
+        pathApi.join(home, '.bun', 'bin'),
+        pathApi.join(home, '.npm-global', 'bin'),
+        pathApi.join(home, '.yarn', 'bin'),
+        pathApi.join(home, '.config', 'yarn', 'global', 'node_modules', '.bin'),
+        pathApi.join(home, '.volta', 'bin'),
+        pathApi.join(home, '.fnm', 'current', 'bin'),
+        pathApi.join(home, '.nvm', 'current', 'bin'),
+        pathApi.join(home, '.asdf', 'shims'),
+        pnpmHome,
+        pathApi.join(home, '.local', 'share', 'pnpm'),
+        ...(platform === 'darwin' ? [pathApi.join(home, 'Library', 'pnpm')] : []),
+        '/usr/local/bin',
+        '/opt/homebrew/bin',
+        '/usr/bin',
+        '/bin',
+      ];
+
+  return [...new Set(extras.filter((dir): dir is string => !!dir))];
+}
+
+export function getClaudeCandidatePathsFor(
+  platform: NodeJS.Platform,
+  home: string,
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
+  const pathApi = platform === 'win32' ? path.win32 : path.posix;
+  const dirs = getExtraPathDirsFor(platform, home, env);
+  if (platform === 'win32') {
+    const exts = ['.cmd', '.exe', '.bat', ''];
+    const candidates: string[] = [];
+    for (const dir of dirs) {
+      for (const ext of exts) {
+        candidates.push(pathApi.join(dir, 'claude' + ext));
+      }
+    }
+    return [...new Set(candidates)];
   }
-  return [
-    path.join(home, '.local', 'bin'),
-    path.join(home, '.claude', 'bin'),
-    path.join(home, '.bun', 'bin'),
-    '/usr/local/bin',
-    '/opt/homebrew/bin',
-    '/usr/bin',
-    '/bin',
-    path.join(home, '.npm-global', 'bin'),
-    path.join(home, '.nvm', 'current', 'bin'),
-  ];
+
+  return [...new Set(dirs.map(dir => pathApi.join(dir, 'claude')))];
 }
 
 /**
@@ -100,10 +149,22 @@ export function classifyClaudePath(binPath: string): ClaudeInstallType {
   // Native installer: ~/.local/bin/claude or ~/.claude/bin/claude
   if (normalized.includes('/.local/bin/')) return 'native';
   if (normalized.includes('/.claude/bin/')) return 'native';
+  if (normalized.includes('/.claude/local/')) return 'native';
   // Bun: ~/.bun/bin/claude
   if (normalized.includes('/.bun/bin/') || normalized.includes('/.bun/install/')) return 'bun';
   // Homebrew: /opt/homebrew/bin or /usr/local/Cellar or homebrew in path
   if (normalized.includes('/homebrew/') || normalized.includes('/Cellar/')) return 'homebrew';
+  // npm-family: npm/pnpm/yarn/Node manager shims that resolve to the same package channel
+  if (normalized.includes('/Library/pnpm/')
+    || normalized.includes('/.local/share/pnpm/')
+    || normalized.includes('/.config/yarn/')
+    || normalized.includes('/.yarn/bin/')
+    || normalized.includes('/.volta/bin/')
+    || normalized.includes('/.fnm/current/bin/')
+    || normalized.includes('/.asdf/shims/')
+    || normalized.includes('/.nvm/current/bin/')) {
+    return 'npm';
+  }
   // npm: npm-global, .npm, AppData/npm
   if (normalized.includes('/npm') || normalized.includes('npm-global')) return 'npm';
   if (normalized === '/usr/local/bin/claude') {
@@ -121,6 +182,8 @@ export function classifyClaudePath(binPath: string): ClaudeInstallType {
     const localAppData = (process.env.LOCALAPPDATA || '').replace(/\\/g, '/');
     if (appData && normalized.startsWith(appData + '/npm')) return 'npm';
     if (localAppData && normalized.startsWith(localAppData + '/npm')) return 'npm';
+    if (appData && normalized.startsWith(appData + '/pnpm')) return 'npm';
+    if (localAppData && normalized.startsWith(localAppData + '/pnpm')) return 'npm';
     if (normalized.includes(home.replace(/\\/g, '/') + '/.local/bin')) return 'native';
   }
   return 'unknown';
@@ -131,37 +194,7 @@ export function classifyClaudePath(binPath: string): ClaudeInstallType {
  * Priority: native install > homebrew > npm (deprecated).
  */
 export function getClaudeCandidatePaths(): string[] {
-  const home = os.homedir();
-  if (isWindows) {
-    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
-    const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
-    const exts = ['.cmd', '.exe', '.bat', ''];
-    // Native first, then bun, then npm paths
-    const baseDirs = [
-      path.join(home, '.local', 'bin'),
-      path.join(home, '.claude', 'bin'),
-      path.join(home, '.bun', 'bin'),
-      path.join(appData, 'npm'),
-      path.join(localAppData, 'npm'),
-      path.join(home, '.npm-global', 'bin'),
-    ];
-    const candidates: string[] = [];
-    for (const dir of baseDirs) {
-      for (const ext of exts) {
-        candidates.push(path.join(dir, 'claude' + ext));
-      }
-    }
-    return candidates;
-  }
-  // macOS/Linux: native first, then bun, then homebrew, then npm paths
-  return [
-    path.join(home, '.local', 'bin', 'claude'),      // native installer
-    path.join(home, '.claude', 'bin', 'claude'),      // native alt
-    path.join(home, '.bun', 'bin', 'claude'),         // bun global
-    '/opt/homebrew/bin/claude',                        // homebrew (Apple Silicon)
-    '/usr/local/bin/claude',                           // homebrew (Intel) or npm global
-    path.join(home, '.npm-global', 'bin', 'claude'),  // npm custom prefix
-  ];
+  return getClaudeCandidatePathsFor(process.platform, os.homedir(), process.env);
 }
 
 export interface ClaudeInstallInfo {

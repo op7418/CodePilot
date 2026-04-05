@@ -486,25 +486,51 @@ function getExpandedShellPath(): string {
   const home = os.homedir();
   const shellPath = userShellEnv.PATH || process.env.PATH || '';
   const sep = path.delimiter;
+  const pnpmHome = process.env.PNPM_HOME;
+  const voltaHome = process.env.VOLTA_HOME ? path.join(process.env.VOLTA_HOME, 'bin') : '';
 
-  if (process.platform === 'win32') {
-    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
-    const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
-    const winExtra = [
-      path.join(appData, 'npm'),
-      path.join(localAppData, 'npm'),
-      path.join(home, '.npm-global', 'bin'),
-      path.join(home, '.local', 'bin'),
-      path.join(home, '.claude', 'bin'),
-    ];
-    const allParts = [shellPath, ...winExtra].join(sep).split(sep).filter(Boolean);
-    return [...new Set(allParts)].join(sep);
-  } else {
-    const basePath = `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin`;
-    const raw = `${basePath}:${home}/.npm-global/bin:${home}/.local/bin:${home}/.claude/bin:${shellPath}`;
-    const allParts = raw.split(':').filter(Boolean);
-    return [...new Set(allParts)].join(':');
-  }
+  const extraDirs = process.platform === 'win32'
+    ? [
+        path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'npm'),
+        path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'npm'),
+        path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'pnpm'),
+        path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'pnpm'),
+        pnpmHome,
+        path.join(home, '.npm-global', 'bin'),
+        path.join(home, '.local', 'bin'),
+        path.join(home, '.claude', 'bin'),
+        path.join(home, '.claude', 'local'),
+        path.join(home, '.bun', 'bin'),
+        path.join(home, '.yarn', 'bin'),
+        path.join(home, '.config', 'yarn', 'global', 'node_modules', '.bin'),
+        voltaHome,
+        path.join(home, '.fnm', 'current', 'bin'),
+        path.join(home, '.nvm', 'current', 'bin'),
+        path.join(home, '.asdf', 'shims'),
+      ]
+    : [
+        '/usr/local/bin',
+        '/opt/homebrew/bin',
+        '/usr/bin',
+        '/bin',
+        path.join(home, '.npm-global', 'bin'),
+        path.join(home, '.local', 'bin'),
+        path.join(home, '.claude', 'bin'),
+        path.join(home, '.claude', 'local'),
+        path.join(home, '.bun', 'bin'),
+        path.join(home, '.yarn', 'bin'),
+        path.join(home, '.config', 'yarn', 'global', 'node_modules', '.bin'),
+        path.join(home, '.volta', 'bin'),
+        path.join(home, '.fnm', 'current', 'bin'),
+        path.join(home, '.nvm', 'current', 'bin'),
+        path.join(home, '.asdf', 'shims'),
+        pnpmHome,
+        path.join(home, '.local', 'share', 'pnpm'),
+        ...(process.platform === 'darwin' ? [path.join(home, 'Library', 'pnpm')] : []),
+      ];
+
+  const allParts = [shellPath, ...extraDirs].join(sep).split(sep).filter(Boolean);
+  return [...new Set(allParts)].join(sep);
 }
 
 function getPort(): Promise<number> {
@@ -773,25 +799,52 @@ app.whenReady().then(async () => {
 
     // Candidate paths — native first, then bun, then homebrew, then npm
     const home = os.homedir();
-    const candidatePaths = process.platform === 'win32'
+    const claudeSearchDirs = process.platform === 'win32'
       ? [
-          path.join(home, '.local', 'bin', 'claude.exe'),
-          path.join(home, '.local', 'bin', 'claude.cmd'),
-          path.join(home, '.claude', 'bin', 'claude.exe'),
-          path.join(home, '.claude', 'bin', 'claude.cmd'),
-          path.join(home, '.bun', 'bin', 'claude.exe'),
-          path.join(home, '.bun', 'bin', 'claude.cmd'),
-          path.join(process.env.APPDATA || '', 'npm', 'claude.cmd'),
-          path.join(process.env.LOCALAPPDATA || '', 'npm', 'claude.cmd'),
-        ].filter(p => p && !p.startsWith(path.sep))
+          path.join(home, '.local', 'bin'),
+          path.join(home, '.claude', 'bin'),
+          path.join(home, '.claude', 'local'),
+          path.join(home, '.bun', 'bin'),
+          path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'npm'),
+          path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'npm'),
+          path.join(process.env.APPDATA || path.join(home, 'AppData', 'Roaming'), 'pnpm'),
+          path.join(process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local'), 'pnpm'),
+          process.env.PNPM_HOME || '',
+          path.join(home, '.npm-global', 'bin'),
+          path.join(home, '.yarn', 'bin'),
+          path.join(home, '.config', 'yarn', 'global', 'node_modules', '.bin'),
+          process.env.VOLTA_HOME ? path.join(process.env.VOLTA_HOME, 'bin') : '',
+          path.join(home, '.fnm', 'current', 'bin'),
+          path.join(home, '.nvm', 'current', 'bin'),
+          path.join(home, '.asdf', 'shims'),
+        ]
       : [
-          path.join(home, '.local', 'bin', 'claude'),
-          path.join(home, '.claude', 'bin', 'claude'),
-          path.join(home, '.bun', 'bin', 'claude'),
-          '/opt/homebrew/bin/claude',
-          '/usr/local/bin/claude',
-          path.join(home, '.npm-global', 'bin', 'claude'),
+          path.join(home, '.local', 'bin'),
+          path.join(home, '.claude', 'bin'),
+          path.join(home, '.claude', 'local'),
+          path.join(home, '.bun', 'bin'),
+          path.join(home, '.npm-global', 'bin'),
+          path.join(home, '.yarn', 'bin'),
+          path.join(home, '.config', 'yarn', 'global', 'node_modules', '.bin'),
+          path.join(home, '.volta', 'bin'),
+          path.join(home, '.fnm', 'current', 'bin'),
+          path.join(home, '.nvm', 'current', 'bin'),
+          path.join(home, '.asdf', 'shims'),
+          process.env.PNPM_HOME || '',
+          path.join(home, '.local', 'share', 'pnpm'),
+          ...(process.platform === 'darwin' ? [path.join(home, 'Library', 'pnpm')] : []),
+          '/opt/homebrew/bin',
+          '/usr/local/bin',
         ];
+
+    const candidatePaths = process.platform === 'win32'
+      ? [...new Set(claudeSearchDirs.filter(Boolean).flatMap(dir => [
+          path.join(dir, 'claude.exe'),
+          path.join(dir, 'claude.cmd'),
+          path.join(dir, 'claude.bat'),
+          path.join(dir, 'claude'),
+        ]))]
+      : [...new Set(claudeSearchDirs.filter(Boolean).map(dir => path.join(dir, 'claude')))];
 
     function classifyPath(p: string): 'native' | 'homebrew' | 'npm' | 'bun' | 'unknown' {
       const n = p.replace(/\\/g, '/');
