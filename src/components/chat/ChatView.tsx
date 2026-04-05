@@ -19,6 +19,7 @@ import { setLastGeneratedImages, loadLastGenerated } from '@/lib/image-ref-store
 import { useChatCommands } from '@/hooks/useChatCommands';
 import { useAssistantTrigger } from '@/hooks/useAssistantTrigger';
 import { useStreamSubscription } from '@/hooks/useStreamSubscription';
+import { useCcSwitchCompatMode } from '@/hooks/useCcSwitchCompatMode';
 import {
   startStream,
   stopStream,
@@ -45,6 +46,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
   const { setStreamingSessionId, workingDirectory, setPendingApprovalSessionId, setDashboardPanelOpen, setFileTreeOpen, setIsAssistantWorkspace } = usePanel();
   const { t } = useTranslation();
   const router = useRouter();
+  const { enabled: ccSwitchCompatMode, ready: compatModeReady } = useCcSwitchCompatMode();
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [permissionProfile, setPermissionProfile] = useState<'default' | 'full_access'>(initialPermissionProfile || 'default');
 
@@ -110,6 +112,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
   const [thinkingMode, setThinkingMode] = useState<string>('adaptive');
   const [context1m, setContext1m] = useState(false);
   const [hasSummary, setHasSummary] = useState(initialHasSummary || false);
+  const [providerOptionsReady, setProviderOptionsReady] = useState(false);
 
   // Sync model/provider when session data loads
   useEffect(() => { if (modelName) setCurrentModel(modelName); }, [modelName]);
@@ -119,18 +122,40 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
   useEffect(() => {
     const pid = currentProviderId || 'env';
     const controller = new AbortController();
+    setProviderOptionsReady(false);
     fetch(`/api/providers/options?providerId=${encodeURIComponent(pid)}`, { signal: controller.signal })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!controller.signal.aborted) {
           setThinkingMode(data?.options?.thinking_mode || 'adaptive');
           setContext1m(!!data?.options?.context_1m);
+          if (ccSwitchCompatMode) {
+            setSelectedEffort(data?.options?.effort || undefined);
+          }
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setProviderOptionsReady(true);
+        }
+      });
     return () => controller.abort();
-  }, [currentProviderId]);
+  }, [currentProviderId, ccSwitchCompatMode]);
   useEffect(() => { if (initialPermissionProfile) setPermissionProfile(initialPermissionProfile); }, [initialPermissionProfile]);
+
+  const handleEffortChange = useCallback((effort: string | undefined) => {
+    setSelectedEffort(effort);
+    if (!ccSwitchCompatMode) return;
+    fetch('/api/providers/options', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: currentProviderId || 'env',
+        options: { effort: effort || '' },
+      }),
+    }).catch(() => {});
+  }, [ccSwitchCompatMode, currentProviderId]);
 
   // Restore session-scoped last-generated images from sessionStorage
   useEffect(() => { loadLastGenerated(sessionId); }, [sessionId]);
@@ -591,7 +616,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         onSend={sendMessage}
         onCommand={handleCommand}
         onStop={stopStreaming}
-        disabled={false}
+        disabled={!compatModeReady || (ccSwitchCompatMode && !providerOptionsReady)}
         isStreaming={isStreaming}
         sessionId={sessionId}
         modelName={currentModel}
@@ -601,7 +626,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         workingDirectory={workingDirectory}
         onAssistantTrigger={checkAssistantTrigger}
         effort={selectedEffort}
-        onEffortChange={setSelectedEffort}
+        onEffortChange={handleEffortChange}
         sdkInitMeta={initMetaRef.current}
         isAssistantProject={isAssistantProject}
         hasMessages={messages.length > 0}

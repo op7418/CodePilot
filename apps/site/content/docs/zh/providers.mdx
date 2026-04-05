@@ -21,6 +21,8 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 > **注意：** 通过 `claude config set` 或 Claude Code 的 `/config` 命令切换的配置**不会被 CodePilot 识别**。CodePilot 只读取 shell 环境变量，不共享 Claude Code CLI 的内部配置。如果你在 CLI 中通过 `cc switch` 或类似方式切换了账号/密钥，需要在 CodePilot 的 **设置 > 服务商** 中重新手动配置对应的密钥。
 
+> 如果你主要通过 **cc-switch** 管理 Claude Code，可以打开 **设置 > 通用 > 开启 cc-switch 兼容模式**。这样会把内置 `env` 服务商继续视为有效默认目标，并记住各服务商所选的 effort，让新对话更稳定地沿用同一套默认值。
+
 > 修改环境变量后需要**重启 CodePilot** 才能生效。
 
 ### 2. 手动添加服务商

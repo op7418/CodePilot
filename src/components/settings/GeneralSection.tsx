@@ -128,6 +128,8 @@ export function GeneralSection() {
   const [skipPermSaving, setSkipPermSaving] = useState(false);
   const [generativeUI, setGenerativeUI] = useState(true);
   const [generativeUISaving, setGenerativeUISaving] = useState(false);
+  const [ccSwitchCompatMode, setCcSwitchCompatMode] = useState(false);
+  const [ccSwitchCompatSaving, setCcSwitchCompatSaving] = useState(false);
   const [defaultPanel, setDefaultPanel] = useState('file_tree');
   const { accountInfo } = useAccountInfo();
   const { t, locale, setLocale } = useTranslation();
@@ -141,6 +143,7 @@ export function GeneralSection() {
         setSkipPermissions(appSettings.dangerously_skip_permissions === "true");
         // generative_ui_enabled defaults to true when not set
         setGenerativeUI(appSettings.generative_ui_enabled !== "false");
+        setCcSwitchCompatMode(appSettings.cc_switch_compat_mode === "true");
         // default_panel defaults to 'file_tree' when not set
         setDefaultPanel(appSettings.default_panel || 'file_tree');
       }
@@ -215,6 +218,27 @@ export function GeneralSection() {
     }
   };
 
+  const handleCcSwitchCompatToggle = async (checked: boolean) => {
+    setCcSwitchCompatSaving(true);
+    try {
+      const res = await fetch("/api/settings/app", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: { cc_switch_compat_mode: checked ? "true" : "" },
+        }),
+      });
+      if (res.ok) {
+        setCcSwitchCompatMode(checked);
+        window.dispatchEvent(new Event('app-settings-changed'));
+      }
+    } catch {
+      // ignore
+    } finally {
+      setCcSwitchCompatSaving(false);
+    }
+  };
+
   return (
     <div className="max-w-3xl space-y-6">
       <UpdateCard />
@@ -249,6 +273,18 @@ export function GeneralSection() {
             checked={generativeUI}
             onCheckedChange={handleGenerativeUIToggle}
             disabled={generativeUISaving}
+          />
+        </FieldRow>
+
+        <FieldRow
+          label={t('settings.ccSwitchCompatTitle' as TranslationKey)}
+          description={t('settings.ccSwitchCompatDesc' as TranslationKey)}
+          separator
+        >
+          <Switch
+            checked={ccSwitchCompatMode}
+            onCheckedChange={handleCcSwitchCompatToggle}
+            disabled={ccSwitchCompatSaving}
           />
         </FieldRow>
 

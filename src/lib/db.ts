@@ -1410,9 +1410,11 @@ export function getProviderOptions(providerId: string): import('@/types').Provid
   if (providerId === 'env') {
     const thinkingMode = getSetting('thinking_mode') || 'adaptive';
     const context1m = getSetting('context_1m') === 'true';
+    const effort = getSetting('effort') || undefined;
     return {
       thinking_mode: thinkingMode as 'adaptive' | 'enabled' | 'disabled',
       context_1m: context1m,
+      ...(effort ? { effort: effort as import('@/types').ProviderOptions['effort'] } : {}),
     };
   }
   const provider = getProvider(providerId);
@@ -1439,6 +1441,7 @@ export function setProviderOptions(providerId: string, options: import('@/types'
   if (providerId === 'env') {
     if (options.thinking_mode !== undefined) setSetting('thinking_mode', options.thinking_mode);
     if (options.context_1m !== undefined) setSetting('context_1m', options.context_1m ? 'true' : '');
+    if (options.effort !== undefined) setSetting('effort', options.effort || '');
     return;
   }
   const db = getDb();

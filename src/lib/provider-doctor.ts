@@ -291,6 +291,8 @@ async function runProviderProbe(): Promise<ProbeResult> {
 
   const providers = getAllProviders();
   const defaultId = getDefaultProviderId();
+  const ccSwitchCompatMode = getSetting('cc_switch_compat_mode') === 'true';
+  const defaultIsCompatEnv = ccSwitchCompatMode && defaultId === 'env';
 
   findings.push({
     severity: 'ok',
@@ -299,7 +301,16 @@ async function runProviderProbe(): Promise<ProbeResult> {
   });
 
   if (defaultId) {
-    const defaultProvider = getProvider(defaultId);
+    const defaultProvider = defaultIsCompatEnv
+      ? {
+          id: 'env',
+          name: 'Claude Code',
+          protocol: 'anthropic',
+          provider_type: 'anthropic',
+          api_key: process.env.ANTHROPIC_API_KEY || '',
+          base_url: process.env.ANTHROPIC_BASE_URL || '',
+        }
+      : getProvider(defaultId);
     if (defaultProvider) {
       findings.push({
         severity: 'ok',

@@ -17,6 +17,7 @@ import { FolderPicker } from '@/components/chat/FolderPicker';
 import { useNativeFolderPicker } from '@/hooks/useNativeFolderPicker';
 import { useTranslation } from '@/hooks/useTranslation';
 import { usePanel } from '@/hooks/usePanel';
+import { useCcSwitchCompatMode } from '@/hooks/useCcSwitchCompatMode';
 
 interface ToolUseInfo {
   id: string;
@@ -41,6 +42,7 @@ export default function NewChatPage() {
   const { setPendingApprovalSessionId } = usePanel();
   const { t } = useTranslation();
   const { isElectron, openNativePicker } = useNativeFolderPicker();
+  const { enabled: ccSwitchCompatMode, ready: compatModeReady } = useCcSwitchCompatMode();
   const [messages, setMessages] = useState<Message[]>([]);
   const [streamingContent, setStreamingContent] = useState('');
   const [isStreaming, setIsStreaming] = useState(false);
@@ -88,22 +90,45 @@ export default function NewChatPage() {
   // Provider options (thinking mode + 1M context)
   const [thinkingMode, setThinkingMode] = useState<string>('adaptive');
   const [context1m, setContext1m] = useState(false);
+  const [providerOptionsReady, setProviderOptionsReady] = useState(false);
 
   // Fetch provider-specific options (with abort to prevent stale responses on fast switch)
   useEffect(() => {
     const pid = currentProviderId || 'env';
     const controller = new AbortController();
+    setProviderOptionsReady(false);
     fetch(`/api/providers/options?providerId=${encodeURIComponent(pid)}`, { signal: controller.signal })
       .then(r => r.ok ? r.json() : null)
       .then(data => {
         if (!controller.signal.aborted) {
           setThinkingMode(data?.options?.thinking_mode || 'adaptive');
           setContext1m(!!data?.options?.context_1m);
+          if (ccSwitchCompatMode) {
+            setSelectedEffort(data?.options?.effort || undefined);
+          }
         }
       })
-      .catch(() => {});
+      .catch(() => {})
+      .finally(() => {
+        if (!controller.signal.aborted) {
+          setProviderOptionsReady(true);
+        }
+      });
     return () => controller.abort();
-  }, [currentProviderId]);
+  }, [currentProviderId, ccSwitchCompatMode]);
+
+  const handleEffortChange = useCallback((effort: string | undefined) => {
+    setSelectedEffort(effort);
+    if (!ccSwitchCompatMode) return;
+    fetch('/api/providers/options', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        providerId: currentProviderId || 'env',
+        options: { effort: effort || '' },
+      }),
+    }).catch(() => {});
+  }, [ccSwitchCompatMode, currentProviderId]);
 
   // Validate restored model/provider against actual available providers/models.
   // For NEW conversations, the global default model takes priority
@@ -431,7 +456,7 @@ export default function NewChatPage() {
       if (isStreaming) return;
 
       // Wait for model/provider to be resolved from the global default before allowing send
-      if (!modelReady) return;
+      if (!modelReady || !compatModeReady || (ccSwitchCompatMode && !providerOptionsReady)) return;
 
       // Require a project directory before sending
       if (!workingDir.trim()) {
@@ -702,7 +727,7 @@ export default function NewChatPage() {
         abortControllerRef.current = null;
       }
     },
-    [isStreaming, router, workingDir, mode, currentModel, currentProviderId, permissionProfile, selectedEffort, thinkingMode, context1m, setPendingApprovalSessionId, t, hasProvider, modelReady]
+    [isStreaming, router, workingDir, mode, currentModel, currentProviderId, permissionProfile, selectedEffort, thinkingMode, context1m, setPendingApprovalSessionId, t, hasProvider, modelReady, compatModeReady, ccSwitchCompatMode, providerOptionsReady]
   );
 
   const handleCommand = useCallback((command: string) => {
@@ -800,7 +825,7 @@ export default function NewChatPage() {
         onSend={sendFirstMessage}
         onCommand={handleCommand}
         onStop={stopStreaming}
-        disabled={!modelReady}
+        disabled={!modelReady || !compatModeReady || (ccSwitchCompatMode && !providerOptionsReady)}
         isStreaming={isStreaming}
         modelName={currentModel}
         onModelChange={setCurrentModel}
@@ -813,7 +838,7 @@ export default function NewChatPage() {
         }}
         workingDirectory={workingDir}
         effort={selectedEffort}
-        onEffortChange={setSelectedEffort}
+        onEffortChange={handleEffortChange}
         initialValue={prefillText}
       />
       <ChatComposerActionBar

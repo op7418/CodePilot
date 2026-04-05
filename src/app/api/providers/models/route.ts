@@ -43,6 +43,7 @@ export async function GET() {
   try {
     const providers = getAllProviders();
     const groups: ProviderModelGroup[] = [];
+    const ccSwitchCompatMode = getSetting('cc_switch_compat_mode') === 'true';
 
     // Always show the built-in Claude Code provider group.
     // Mark it as sdkProxyOnly if no direct API credentials exist — in that case
@@ -192,7 +193,8 @@ export async function GET() {
 
     // Determine default provider — auto-heal stale references on read
     let defaultProviderId = getDefaultProviderId();
-    if (defaultProviderId && !getProvider(defaultProviderId)) {
+    const defaultIsCompatEnv = ccSwitchCompatMode && defaultProviderId === 'env';
+    if (defaultProviderId && !defaultIsCompatEnv && !getProvider(defaultProviderId)) {
       // Stale default (provider was deleted). Fix it now.
       const firstValid = groups.find(g => g.provider_id !== 'env');
       defaultProviderId = firstValid?.provider_id || '';

@@ -4,7 +4,7 @@ import type { ProviderOptions } from '@/types';
 
 /**
  * GET /api/providers/options?providerId=xxx
- * Returns per-provider options (thinking_mode, context_1m).
+ * Returns per-provider options (thinking_mode, context_1m, effort).
  */
 export async function GET(request: NextRequest) {
   const providerId = request.nextUrl.searchParams.get('providerId') || 'env';
@@ -14,7 +14,7 @@ export async function GET(request: NextRequest) {
 
 /**
  * PUT /api/providers/options
- * Update per-provider options. Body: { providerId, options: { thinking_mode?, context_1m? } }
+ * Update per-provider options. Body: { providerId, options: { thinking_mode?, context_1m?, effort? } }
  */
 export async function PUT(request: NextRequest) {
   try {

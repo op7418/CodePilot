@@ -13,6 +13,7 @@ const ALLOWED_KEYS = [
   'generative_ui_enabled',
   'locale',
   'thinking_mode',
+  'cc_switch_compat_mode',
   'theme_mode',
   'theme_family',
   'default_panel',
