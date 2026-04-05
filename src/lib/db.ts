@@ -5,6 +5,7 @@ import fs from 'fs';
 import os from 'os';
 import type { ChatSession, Message, SettingsMap, TaskItem, TaskStatus, ApiProvider, CreateProviderRequest, UpdateProviderRequest, MediaJob, MediaJobStatus, MediaJobItem, MediaJobItemStatus, MediaContextEvent, BatchConfig, CustomCliTool, ScheduledTask } from '@/types';
 import type { ChannelType, ChannelBinding } from './bridge/types';
+import { normalizeProviderEffort, sanitizeProviderOptions } from '@/lib/provider-options';
 import { getLocalDateString, localDayStartAsUTC } from './utils';
 
 const dataDir = process.env.CLAUDE_GUI_DATA_DIR || path.join(os.homedir(), '.codepilot');
@@ -1410,7 +1411,7 @@ export function getProviderOptions(providerId: string): import('@/types').Provid
   if (providerId === 'env') {
     const thinkingMode = getSetting('thinking_mode') || 'adaptive';
     const context1m = getSetting('context_1m') === 'true';
-    const effort = getSetting('effort') || undefined;
+    const effort = normalizeProviderEffort(getSetting('effort'));
     return {
       thinking_mode: thinkingMode as 'adaptive' | 'enabled' | 'disabled',
       context_1m: context1m,
@@ -1420,7 +1421,7 @@ export function getProviderOptions(providerId: string): import('@/types').Provid
   const provider = getProvider(providerId);
   if (!provider) return {};
   try {
-    return JSON.parse(provider.options_json || '{}');
+    return sanitizeProviderOptions(JSON.parse(provider.options_json || '{}'));
   } catch { return {}; }
 }
 
@@ -1429,25 +1430,27 @@ export function getProviderOptions(providerId: string): import('@/types').Provid
  * For DB providers, writes to options_json column.
  */
 export function setProviderOptions(providerId: string, options: import('@/types').ProviderOptions): void {
+  const hasExplicitEffort = Object.prototype.hasOwnProperty.call(options, 'effort');
+  const sanitizedOptions = sanitizeProviderOptions(options);
   if (providerId === '__global__') {
-    if (options.default_model !== undefined) setSetting('global_default_model', options.default_model);
-    if (options.default_model_provider !== undefined) setSetting('global_default_model_provider', options.default_model_provider);
+    if (sanitizedOptions.default_model !== undefined) setSetting('global_default_model', sanitizedOptions.default_model);
+    if (sanitizedOptions.default_model_provider !== undefined) setSetting('global_default_model_provider', sanitizedOptions.default_model_provider);
     // Sync legacy default_provider_id so backend consumers (doctor, repair, etc.) stay consistent
-    if ((options as Record<string, unknown>).legacy_default_provider_id !== undefined) {
-      setSetting('default_provider_id', (options as Record<string, unknown>).legacy_default_provider_id as string);
+    if ((sanitizedOptions as Record<string, unknown>).legacy_default_provider_id !== undefined) {
+      setSetting('default_provider_id', (sanitizedOptions as Record<string, unknown>).legacy_default_provider_id as string);
     }
     return;
   }
   if (providerId === 'env') {
-    if (options.thinking_mode !== undefined) setSetting('thinking_mode', options.thinking_mode);
-    if (options.context_1m !== undefined) setSetting('context_1m', options.context_1m ? 'true' : '');
-    if (options.effort !== undefined) setSetting('effort', options.effort || '');
+    if (sanitizedOptions.thinking_mode !== undefined) setSetting('thinking_mode', sanitizedOptions.thinking_mode);
+    if (sanitizedOptions.context_1m !== undefined) setSetting('context_1m', sanitizedOptions.context_1m ? 'true' : '');
+    if (hasExplicitEffort) setSetting('effort', sanitizedOptions.effort || '');
     return;
   }
   const db = getDb();
   const now = new Date().toISOString().replace('T', ' ').split('.')[0];
   db.prepare('UPDATE api_providers SET options_json = ?, updated_at = ? WHERE id = ?')
-    .run(JSON.stringify(options), now, providerId);
+    .run(JSON.stringify(sanitizedOptions), now, providerId);
 }
 
 // ── Provider Models ─────────────────────────────────────────────

@@ -125,7 +125,7 @@ export default function NewChatPage() {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         providerId: currentProviderId || 'env',
-        options: { effort: effort || '' },
+        options: effort === undefined ? { effort: null } : { effort },
       }),
     }).catch(() => {});
   }, [ccSwitchCompatMode, currentProviderId]);
