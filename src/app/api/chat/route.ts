@@ -185,11 +185,6 @@ export async function POST(request: NextRequest) {
 
     const abortController = new AbortController();
 
-    // Handle client disconnect
-    request.signal.addEventListener('abort', () => {
-      abortController.abort();
-    });
-
     // Convert file attachments to the format expected by streamClaude.
     // Include filePath from the already-saved files so claude-client can
     // reference the on-disk copies instead of writing them again.

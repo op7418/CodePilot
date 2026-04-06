@@ -166,7 +166,7 @@ export function ModelSelectorDropdown({
             )}
           </CommandListItems>
           <CommandListFooter>
-            <CommandListFooterAction onClick={() => { setModelMenuOpen(false); setModelSearch(''); window.location.href = '/settings#providers'; }}>
+            <CommandListFooterAction onClick={() => { setModelMenuOpen(false); setModelSearch(''); window.location.href = '/settings'; }}>
               <Gear size={14} />
               {t('composer.manageProviders' as TranslationKey)}
             </CommandListFooterAction>

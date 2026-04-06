@@ -942,13 +942,16 @@ function attachRepairsToFindings(probes: ProbeResult[]): void {
             const targetPid = defaultProviderId || firstProvider?.id;
             if (!targetPid) continue;
             params.providerId = targetPid;
-            // Detect current auth style from preset catalog (not extra_env)
+            // Detect current auth style from the provider's extra_env and suggest the opposite
             const targetProvider = getProvider(targetPid);
             if (targetProvider) {
-              const protocol = (targetProvider.protocol || inferProtocolFromLegacy(targetProvider.provider_type, targetProvider.base_url)) as Protocol;
-              const preset = findPresetForLegacy(targetProvider.base_url, targetProvider.provider_type, protocol);
-              const currentlyUsingToken = preset?.authStyle === 'auth_token';
-              params.authStyle = currentlyUsingToken ? 'api-key' : 'auth-token';
+              try {
+                const env = JSON.parse(targetProvider.extra_env || '{}');
+                const currentlyUsingToken = 'ANTHROPIC_AUTH_TOKEN' in env;
+                params.authStyle = currentlyUsingToken ? 'api-key' : 'auth-token';
+              } catch {
+                params.authStyle = 'auth-token'; // safe default
+              }
             }
             break;
           }

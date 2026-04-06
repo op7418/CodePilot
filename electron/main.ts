@@ -1,23 +1,3 @@
-// Sentry must be initialized before all other imports to catch early crashes
-import * as Sentry from '@sentry/electron/main';
-import { existsSync, readFileSync } from 'fs';
-import { join } from 'path';
-
-// Check opt-out before init — reads a marker file that the renderer writes
-const sentryOptOutPath = join(
-  process.env.HOME || process.env.USERPROFILE || '',
-  '.codepilot',
-  'sentry-disabled',
-);
-const sentryDisabled = existsSync(sentryOptOutPath) &&
-  readFileSync(sentryOptOutPath, 'utf-8').trim() === 'true';
-
-if (!sentryDisabled) {
-  Sentry.init({
-    dsn: 'https://245dc3525425bcd8eb99dd4b9a2ca5cd@o4511161899548672.ingest.us.sentry.io/4511161904791552',
-  });
-}
-
 import { app, BrowserWindow, Notification, nativeImage, dialog, session, utilityProcess, ipcMain, shell, Tray, Menu } from 'electron';
 import path from 'path';
 import { execFileSync, spawn, ChildProcess } from 'child_process';
@@ -1259,59 +1239,6 @@ app.whenReady().then(async () => {
       properties: ['openDirectory', 'createDirectory'],
     });
     return { canceled: result.canceled, filePaths: result.filePaths };
-  });
-
-  // --- Widget export IPC handler ---
-  // Uses an isolated BrowserWindow for secure, high-fidelity widget screenshot.
-  // The window is hidden, has its own session partition, no preload, no IPC access.
-  ipcMain.handle('widget:export-png', async (_event, { html, width }: { html: string; width: number }) => {
-    const exportWindow = new BrowserWindow({
-      show: false,
-      width,
-      height: 2000,
-      webPreferences: {
-        contextIsolation: true,
-        nodeIntegration: false,
-        sandbox: true,
-        partition: `export-${Date.now()}`, // isolated session, destroyed with window
-        // No preload — no IPC access from this window
-      },
-    });
-
-    // Block all navigation and window.open — prevents data exfiltration via top-level nav
-    exportWindow.webContents.on('will-navigate', (e) => e.preventDefault());
-    exportWindow.webContents.setWindowOpenHandler(() => ({ action: 'deny' }));
-
-    try {
-      // Load the widget HTML directly
-      await exportWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`);
-
-      // Wait for widget scripts to finish (scriptsReady signal or timeout)
-      await new Promise<void>((resolve) => {
-        let resolved = false;
-        const done = () => { if (!resolved) { resolved = true; resolve(); } };
-        // Listen for console message from widget:scriptsReady
-        exportWindow.webContents.on('console-message', (_e, _level, message) => {
-          if (message === '__scriptsReady__') done();
-        });
-        // Fallback timeout for widgets without CDN/scripts
-        setTimeout(done, 6000);
-      });
-
-      // Extra delay for final paint
-      await new Promise(r => setTimeout(r, 300));
-
-      // Get actual content height and resize
-      const contentHeight = await exportWindow.webContents.executeJavaScript('document.body.scrollHeight');
-      exportWindow.setSize(width, Math.min(contentHeight + 20, 4000));
-      await new Promise(r => setTimeout(r, 100));
-
-      // Capture using Chromium's native screenshot
-      const image = await exportWindow.webContents.capturePage();
-      return image.toPNG().toString('base64');
-    } finally {
-      exportWindow.destroy();
-    }
   });
 
   // --- Terminal IPC handlers ---

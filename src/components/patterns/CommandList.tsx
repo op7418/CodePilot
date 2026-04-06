@@ -69,7 +69,7 @@ interface CommandListItemsProps {
 
 export function CommandListItems({ children, className }: CommandListItemsProps) {
   return (
-    <div className={cn("max-h-64 overflow-y-auto overflow-x-hidden py-1", className)}>
+    <div className={cn("max-h-64 overflow-y-auto py-1", className)}>
       {children}
     </div>
   );

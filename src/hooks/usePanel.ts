@@ -48,6 +48,8 @@ export interface PanelContextValue {
   setPreviewFile: (path: string | null) => void;
   previewViewMode: PreviewViewMode;
   setPreviewViewMode: (mode: PreviewViewMode) => void;
+  chatListOpen: boolean;
+  setChatListOpen: (open: boolean) => void;
 }
 
 export const PanelContext = createContext<PanelContextValue | null>(null);

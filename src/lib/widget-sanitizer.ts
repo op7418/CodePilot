@@ -134,39 +134,13 @@ ss[i].remove();
 // Update non-script content only if it differs (avoids repaint flash)
 var visualHtml=tmp.innerHTML;
 if(root.innerHTML!==visualHtml)root.innerHTML=visualHtml;
-// Append and execute scripts without disturbing existing DOM.
-// CDN scripts load first; inline scripts execute exactly once after ALL CDNs resolve.
-// This avoids let/const redeclaration errors from re-injecting inline scripts.
-var cdnScripts=scripts.filter(function(s){return !!s.src});
-var inlineScripts=scripts.filter(function(s){return !s.src&&s.text});
-function _appendInline(){
-for(var k=0;k<inlineScripts.length;k++){
-var s=document.createElement('script');
-s.textContent=inlineScripts[k].text;
-for(var j=0;j<inlineScripts[k].attrs.length;j++)s.setAttribute(inlineScripts[k].attrs[j].name,inlineScripts[k].attrs[j].value);
-root.appendChild(s);
-}
-_h();
-// Signal that all scripts (CDN + inline) have executed.
-// Chart.js init runs synchronously inside inline scripts, so canvas is painted by now.
-setTimeout(function(){parent.postMessage({type:'widget:scriptsReady'},'*')},50);
-}
-if(cdnScripts.length===0){
-_appendInline();
-}else{
-// Wait for ALL CDN scripts to load/error, then run inline once
-var _pending=cdnScripts.length;
-function _onCdnDone(){_pending--;if(_pending<=0)_appendInline()}
-for(var i=0;i<cdnScripts.length;i++){
+// Append and execute scripts without disturbing existing DOM
+for(var i=0;i<scripts.length;i++){
 var n=document.createElement('script');
-n.src=cdnScripts[i].src;
-n.onload=_onCdnDone;
-n.onerror=_onCdnDone;
-for(var j=0;j<cdnScripts[i].attrs.length;j++){
-if(cdnScripts[i].attrs[j].name!=='onload')n.setAttribute(cdnScripts[i].attrs[j].name,cdnScripts[i].attrs[j].value);
-}
+if(scripts[i].src)n.src=scripts[i].src;
+else if(scripts[i].text)n.textContent=scripts[i].text;
+for(var j=0;j<scripts[i].attrs.length;j++)n.setAttribute(scripts[i].attrs[j].name,scripts[i].attrs[j].value);
 root.appendChild(n);
-}
 }
 _h();
 }
@@ -187,44 +161,6 @@ if(v)for(var k in v)r.style.setProperty(k,v[k]);
 if(typeof e.data.isDark==='boolean')r.className=e.data.isDark?'dark':'';
 setTimeout(_h,100);
 break;
-case 'widget:crossFilter':
-// Received from parent: another widget published a filter event
-window.dispatchEvent(new CustomEvent('widget-filter',{detail:e.data.payload}));
-break;
-case 'widget:capture':
-// Send HTML + canvas snapshots back to parent for compositing.
-// Parent renders HTML in a normal div and overlays canvas images.
-// This avoids foreignObject limitations entirely.
-try{
-var rootEl=document.getElementById('__root');
-var html=rootEl?rootEl.innerHTML:'';
-var styles='';
-var styleEls=document.querySelectorAll('style');
-for(var si=0;si<styleEls.length;si++)styles+=styleEls[si].textContent;
-// Snapshot each canvas as base64 image
-var canvasSnapshots=[];
-var allCanvases=document.querySelectorAll('canvas');
-for(var ci=0;ci<allCanvases.length;ci++){
-try{
-var cvs=allCanvases[ci];
-canvasSnapshots.push({dataUrl:cvs.toDataURL('image/png'),width:cvs.offsetWidth,height:cvs.offsetHeight});
-// Replace canvas in HTML with a placeholder img
-var placeholder=document.createElement('img');
-placeholder.setAttribute('data-canvas-export',ci.toString());
-placeholder.style.cssText='width:'+cvs.offsetWidth+'px;height:'+cvs.offsetHeight+'px;display:block;';
-cvs.parentNode.insertBefore(placeholder,cvs);
-cvs.style.display='none';
-}catch(ce){canvasSnapshots.push(null)}
-}
-// Re-read HTML with placeholders
-var htmlWithPlaceholders=rootEl?rootEl.innerHTML:'';
-// Restore canvases
-var placeholders=document.querySelectorAll('[data-canvas-export]');
-for(var pi=0;pi<placeholders.length;pi++)placeholders[pi].remove();
-for(var ci=0;ci<allCanvases.length;ci++)allCanvases[ci].style.display='';
-parent.postMessage({type:'widget:captured',html:htmlWithPlaceholders,styles:styles,canvases:canvasSnapshots,bodyWidth:document.body.scrollWidth,bodyHeight:document.body.scrollHeight},'*');
-}catch(err){parent.postMessage({type:'widget:captured',html:null},'*')}
-break;
 }
 });
 
@@ -239,12 +175,6 @@ parent.postMessage({type:'widget:link',href:h},'*');
 window.__widgetSendMessage=function(t){
 if(typeof t!=='string'||t.length>500)return;
 parent.postMessage({type:'widget:sendMessage',text:t},'*');
-};
-
-// Cross-widget communication: publish filter/selection events to other widgets
-window.__widgetPublish=function(topic,data){
-if(typeof topic!=='string')return;
-parent.postMessage({type:'widget:publish',topic:topic,data:data},'*');
 };
 
 parent.postMessage({type:'widget:ready'},'*');

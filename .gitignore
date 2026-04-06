@@ -64,3 +64,6 @@ apps/site/node_modules/
 
 # claude code session data
 .claude/
+app.log
+app.pid
+AGENTS.*

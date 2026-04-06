@@ -6,10 +6,7 @@
  * - Default env overrides each vendor needs for Claude Code SDK
  * - Default model catalogs (role → upstream model id mapping)
  * - Auth key injection style (ANTHROPIC_API_KEY vs ANTHROPIC_AUTH_TOKEN)
- * - Provider meta info (API key URLs, docs, billing model, notes)
  */
-
-import { z } from 'zod';
 
 // ── Protocol types ──────────────────────────────────────────────
 
@@ -112,77 +109,7 @@ export interface VendorPreset {
    * Anthropic Messages API.
    */
   sdkProxyOnly?: boolean;
-  /** Provider meta info for user guidance and error recovery */
-  meta?: {
-    /** URL where user can obtain/manage API key */
-    apiKeyUrl?: string;
-    /** Official configuration documentation URL */
-    docsUrl?: string;
-    /** Pricing page URL */
-    pricingUrl?: string;
-    /** Service status page URL */
-    statusPageUrl?: string;
-    /** Billing model */
-    billingModel: 'pay_as_you_go' | 'coding_plan' | 'token_plan' | 'free' | 'self_hosted';
-    /** Notes/warnings shown during provider configuration */
-    notes?: string[];
-  };
 }
-
-// ── Zod Schema for preset validation ──────────────────────────────
-
-const PresetMetaSchema = z.object({
-  apiKeyUrl: z.string().optional(),
-  docsUrl: z.string().optional(),
-  pricingUrl: z.string().optional(),
-  statusPageUrl: z.string().optional(),
-  billingModel: z.enum(['pay_as_you_go', 'coding_plan', 'token_plan', 'free', 'self_hosted']),
-  notes: z.array(z.string()).optional(),
-});
-
-export const PresetSchema = z.object({
-  key: z.string().min(1),
-  name: z.string().min(1),
-  description: z.string(),
-  descriptionZh: z.string(),
-  protocol: z.enum(['anthropic', 'openai-compatible', 'openrouter', 'bedrock', 'vertex', 'google', 'gemini-image']),
-  authStyle: z.enum(['api_key', 'auth_token', 'env_only', 'custom_header']),
-  baseUrl: z.string(),
-  defaultEnvOverrides: z.record(z.string(), z.string()),
-  defaultModels: z.array(z.object({
-    modelId: z.string(),
-    upstreamModelId: z.string().optional(),
-    displayName: z.string(),
-    role: z.enum(['default', 'reasoning', 'small', 'haiku', 'sonnet', 'opus']).optional(),
-    capabilities: z.object({
-      reasoning: z.boolean().optional(),
-      toolUse: z.boolean().optional(),
-      vision: z.boolean().optional(),
-      pdf: z.boolean().optional(),
-      contextWindow: z.number().optional(),
-    }).optional(),
-  })),
-  fields: z.array(z.string()),
-  iconKey: z.string(),
-  sdkProxyOnly: z.boolean().optional(),
-  category: z.enum(['chat', 'media']).optional(),
-  defaultRoleModels: z.record(z.string(), z.string()).optional(),
-  meta: PresetMetaSchema.optional(),
-}).refine(data => {
-  // auth_token presets must NOT have ANTHROPIC_API_KEY in envOverrides
-  // (auth_token injection already clears API_KEY; envOverrides entry would be ignored by AUTH_ENV_KEYS skip)
-  if (data.authStyle === 'auth_token' && data.defaultEnvOverrides.ANTHROPIC_API_KEY !== undefined) {
-    return false;
-  }
-  // api_key presets must NOT have ANTHROPIC_AUTH_TOKEN in envOverrides
-  if (data.authStyle === 'api_key' && data.defaultEnvOverrides.ANTHROPIC_AUTH_TOKEN !== undefined) {
-    return false;
-  }
-  // Note: auth_token presets MAY have ANTHROPIC_AUTH_TOKEN with a fixed pseudo-value (e.g. Ollama uses 'ollama').
-  // This is allowed because it's a preset default, not user input — though the AUTH_ENV_KEYS skip in
-  // toClaudeCodeEnv() means it will only take effect if the user doesn't provide their own key.
-  return true;
-}, { message: 'authStyle conflicts with auth-related keys in defaultEnvOverrides' });
 
 // ── Default Anthropic models ────────────────────────────────────
 
@@ -208,11 +135,6 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     defaultModels: ANTHROPIC_DEFAULT_MODELS,
     fields: ['api_key'],
     iconKey: 'anthropic',
-    meta: {
-      apiKeyUrl: 'https://platform.claude.com/settings/keys',
-      docsUrl: 'https://platform.claude.com/docs/en/api/overview',
-      billingModel: 'pay_as_you_go',
-    },
   },
 
   // ── Anthropic Third-party (generic) ──
@@ -237,17 +159,12 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     description: 'Use OpenRouter to access multiple models',
     descriptionZh: '通过 OpenRouter 访问多种模型',
     protocol: 'openrouter',
-    authStyle: 'auth_token',
+    authStyle: 'api_key',
     baseUrl: 'https://openrouter.ai/api',
-    defaultEnvOverrides: {},
+    defaultEnvOverrides: { ANTHROPIC_API_KEY: '' },
     defaultModels: ANTHROPIC_DEFAULT_MODELS,
     fields: ['api_key'],
     iconKey: 'openrouter',
-    meta: {
-      apiKeyUrl: 'https://openrouter.ai/workspaces/default/keys',
-      docsUrl: 'https://openrouter.ai/docs/guides/coding-agents/claude-code-integration',
-      billingModel: 'pay_as_you_go',
-    },
   },
 
   // ── Zhipu GLM (China) ──
@@ -257,9 +174,9 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     description: 'Zhipu GLM Code Plan — China region',
     descriptionZh: '智谱 GLM 编程套餐 — 中国区',
     protocol: 'anthropic',
-    authStyle: 'auth_token',
+    authStyle: 'api_key',
     baseUrl: 'https://open.bigmodel.cn/api/anthropic',
-    defaultEnvOverrides: { API_TIMEOUT_MS: '3000000', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'glm-4.5-air', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5-turbo', ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5.1' },
+    defaultEnvOverrides: { API_TIMEOUT_MS: '3000000', ANTHROPIC_API_KEY: '', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'glm-4.5-air', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5-turbo', ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5.1' },
     defaultModels: [
       { modelId: 'sonnet', upstreamModelId: 'sonnet', displayName: 'GLM-5-Turbo', role: 'sonnet' },
       { modelId: 'opus', upstreamModelId: 'opus', displayName: 'GLM-5.1', role: 'opus' },
@@ -268,12 +185,6 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     fields: ['api_key'],
     iconKey: 'zhipu',
     sdkProxyOnly: true,
-    meta: {
-      apiKeyUrl: 'https://bigmodel.cn/usercenter/proj-mgmt/apikeys',
-      docsUrl: 'https://docs.bigmodel.cn/cn/coding-plan/tool/claude',
-      billingModel: 'coding_plan',
-      notes: ['高峰时段（14:00-18:00 UTC+8）消耗 3 倍积分'],
-    },
   },
 
   // ── Zhipu GLM (Global) ──
@@ -283,9 +194,9 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     description: 'Zhipu GLM Code Plan — Global region',
     descriptionZh: '智谱 GLM 编程套餐 — 国际区',
     protocol: 'anthropic',
-    authStyle: 'auth_token',
+    authStyle: 'api_key',
     baseUrl: 'https://api.z.ai/api/anthropic',
-    defaultEnvOverrides: { API_TIMEOUT_MS: '3000000', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'glm-4.5-air', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5-turbo', ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5.1' },
+    defaultEnvOverrides: { API_TIMEOUT_MS: '3000000', ANTHROPIC_API_KEY: '', ANTHROPIC_DEFAULT_HAIKU_MODEL: 'glm-4.5-air', ANTHROPIC_DEFAULT_SONNET_MODEL: 'glm-5-turbo', ANTHROPIC_DEFAULT_OPUS_MODEL: 'glm-5.1' },
     defaultModels: [
       { modelId: 'sonnet', upstreamModelId: 'sonnet', displayName: 'GLM-5-Turbo', role: 'sonnet' },
       { modelId: 'opus', upstreamModelId: 'opus', displayName: 'GLM-5.1', role: 'opus' },
@@ -294,12 +205,6 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     fields: ['api_key'],
     iconKey: 'zhipu',
     sdkProxyOnly: true,
-    meta: {
-      apiKeyUrl: 'https://z.ai/manage-apikey/apikey-list',
-      docsUrl: 'https://docs.z.ai/devpack/tool/claude',
-      billingModel: 'coding_plan',
-      notes: ['高峰时段（14:00-18:00 UTC+8）消耗 3 倍积分'],
-    },
   },
 
   // ── Kimi ──
@@ -309,21 +214,15 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     description: 'Kimi Coding Plan API',
     descriptionZh: 'Kimi 编程计划 API',
     protocol: 'anthropic',
-    authStyle: 'api_key',
+    authStyle: 'auth_token',
     baseUrl: 'https://api.kimi.com/coding/',
-    defaultEnvOverrides: { ENABLE_TOOL_SEARCH: 'false' },
+    defaultEnvOverrides: { ANTHROPIC_AUTH_TOKEN: '' },
     defaultModels: [
       { modelId: 'sonnet', displayName: 'Kimi K2.5', role: 'default' },
     ],
     fields: ['api_key'],
     iconKey: 'kimi',
     sdkProxyOnly: true,
-    meta: {
-      apiKeyUrl: 'https://www.kimi.com/code/console',
-      docsUrl: 'https://www.kimi.com/code/docs/more/third-party-agents.html',
-      billingModel: 'pay_as_you_go',
-      notes: [],
-    },
   },
 
   // ── Moonshot ──
@@ -333,21 +232,15 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     description: 'Moonshot AI API',
     descriptionZh: '月之暗面 API',
     protocol: 'anthropic',
-    authStyle: 'auth_token',
+    authStyle: 'api_key',
     baseUrl: 'https://api.moonshot.cn/anthropic',
-    defaultEnvOverrides: { ENABLE_TOOL_SEARCH: 'false' },
+    defaultEnvOverrides: { ANTHROPIC_API_KEY: '' },
     defaultModels: [
       { modelId: 'sonnet', displayName: 'Kimi K2.5', role: 'default' },
     ],
     fields: ['api_key'],
     iconKey: 'moonshot',
     sdkProxyOnly: true,
-    meta: {
-      apiKeyUrl: 'https://platform.moonshot.cn/console/api-keys',
-      docsUrl: 'https://platform.moonshot.cn/docs/guide/agent-support',
-      billingModel: 'pay_as_you_go',
-      notes: ['建议设置每日消费上限，防止 agentic 循环快速消耗 token'],
-    },
   },
 
   // ── MiniMax (China) ──
@@ -362,6 +255,7 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     defaultEnvOverrides: {
       API_TIMEOUT_MS: '3000000',
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+      ANTHROPIC_AUTH_TOKEN: '',
     },
     defaultModels: [
       { modelId: 'sonnet', upstreamModelId: 'MiniMax-M2.7', displayName: 'MiniMax-M2.7', role: 'default' },
@@ -375,11 +269,6 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     fields: ['api_key'],
     iconKey: 'minimax',
     sdkProxyOnly: true,
-    meta: {
-      apiKeyUrl: 'https://platform.minimaxi.com/user-center/payment/token-plan',
-      docsUrl: 'https://platform.minimaxi.com/docs/token-plan/claude-code',
-      billingModel: 'token_plan',
-    },
   },
 
   // ── MiniMax (Global) ──
@@ -394,6 +283,7 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     defaultEnvOverrides: {
       API_TIMEOUT_MS: '3000000',
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+      ANTHROPIC_AUTH_TOKEN: '',
     },
     defaultModels: [
       { modelId: 'sonnet', upstreamModelId: 'MiniMax-M2.7', displayName: 'MiniMax-M2.7', role: 'default' },
@@ -407,11 +297,6 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     fields: ['api_key'],
     iconKey: 'minimax',
     sdkProxyOnly: true,
-    meta: {
-      apiKeyUrl: 'https://platform.minimax.io/user-center/payment/token-plan',
-      docsUrl: 'https://platform.minimax.io/docs/token-plan/opencode',
-      billingModel: 'token_plan',
-    },
   },
 
   // ── Volcengine Ark ──
@@ -423,17 +308,11 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     protocol: 'anthropic',
     authStyle: 'auth_token',
     baseUrl: 'https://ark.cn-beijing.volces.com/api/coding',
-    defaultEnvOverrides: {},
+    defaultEnvOverrides: { ANTHROPIC_AUTH_TOKEN: '' },
     defaultModels: [],  // User must specify model_names
     fields: ['api_key', 'model_names'],
     iconKey: 'volcengine',
     sdkProxyOnly: true,
-    meta: {
-      apiKeyUrl: 'https://console.volcengine.com/ark/region:ark+cn-beijing/openManagement',
-      docsUrl: 'https://www.volcengine.com/docs/82379/1928262',
-      billingModel: 'coding_plan',
-      notes: ['需先在控制台激活 Endpoint', 'API Key 为临时凭证'],
-    },
   },
 
   // ── Xiaomi MiMo (按量付费) ──
@@ -445,7 +324,9 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     protocol: 'anthropic',
     authStyle: 'auth_token',
     baseUrl: 'https://api.xiaomimimo.com/anthropic',
-    defaultEnvOverrides: {},
+    defaultEnvOverrides: {
+      ANTHROPIC_AUTH_TOKEN: '',
+    },
     defaultModels: [
       { modelId: 'sonnet', upstreamModelId: 'mimo-v2-pro', displayName: 'MiMo-V2-Pro', role: 'default' },
     ],
@@ -458,12 +339,6 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     fields: ['api_key'],
     iconKey: 'xiaomi-mimo',
     sdkProxyOnly: true,
-    meta: {
-      apiKeyUrl: 'https://platform.xiaomimimo.com/#/console/api-keys',
-      docsUrl: 'https://platform.xiaomimimo.com/#/docs/integration/claudecode',
-      billingModel: 'pay_as_you_go',
-      notes: [],
-    },
   },
 
   // ── Xiaomi MiMo Token Plan (订阅套餐) ──
@@ -475,7 +350,9 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     protocol: 'anthropic',
     authStyle: 'auth_token',
     baseUrl: 'https://token-plan-cn.xiaomimimo.com/anthropic',
-    defaultEnvOverrides: {},
+    defaultEnvOverrides: {
+      ANTHROPIC_AUTH_TOKEN: '',
+    },
     defaultModels: [
       { modelId: 'sonnet', upstreamModelId: 'mimo-v2-pro', displayName: 'MiMo-V2-Pro', role: 'default' },
     ],
@@ -488,12 +365,6 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     fields: ['api_key'],
     iconKey: 'xiaomi-mimo',
     sdkProxyOnly: true,
-    meta: {
-      apiKeyUrl: 'https://platform.xiaomimimo.com/#/console/plan-manage',
-      docsUrl: 'https://platform.xiaomimimo.com/#/docs/integration/claudecode',
-      billingModel: 'token_plan',
-      notes: [],
-    },
   },
 
   // ── Aliyun Bailian ──
@@ -503,9 +374,9 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     description: 'Aliyun Bailian Coding Plan — Qwen, GLM, Kimi, MiniMax',
     descriptionZh: '阿里云百炼 Coding Plan — 通义千问、GLM、Kimi、MiniMax',
     protocol: 'anthropic',
-    authStyle: 'auth_token',
+    authStyle: 'api_key',
     baseUrl: 'https://coding.dashscope.aliyuncs.com/apps/anthropic',
-    defaultEnvOverrides: {},
+    defaultEnvOverrides: { ANTHROPIC_API_KEY: '' },
     defaultModels: [
       { modelId: 'qwen3.5-plus', displayName: 'Qwen 3.5 Plus', role: 'default' },
       { modelId: 'qwen3-coder-next', displayName: 'Qwen 3 Coder Next' },
@@ -518,12 +389,6 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     fields: ['api_key'],
     iconKey: 'bailian',
     sdkProxyOnly: true,
-    meta: {
-      apiKeyUrl: 'https://bailian.console.aliyun.com',
-      docsUrl: 'https://help.aliyun.com/zh/model-studio/coding-plan',
-      billingModel: 'coding_plan',
-      notes: ['必须使用 Coding Plan 专用 Key（以 sk-sp- 开头）', '普通 DashScope Key 无法使用', '禁止用于自动化脚本'],
-    },
   },
 
   // ── AWS Bedrock ──
@@ -543,12 +408,6 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     defaultModels: ANTHROPIC_DEFAULT_MODELS,
     fields: ['env_overrides'],
     iconKey: 'bedrock',
-    meta: {
-      apiKeyUrl: 'https://console.aws.amazon.com',
-      docsUrl: 'https://aws.amazon.com/cn/bedrock/anthropic/',
-      billingModel: 'pay_as_you_go',
-      notes: ['需在 AWS Console 订阅 Claude 模型'],
-    },
   },
 
   // ── Google Vertex AI ──
@@ -568,11 +427,6 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     defaultModels: ANTHROPIC_DEFAULT_MODELS,
     fields: ['env_overrides'],
     iconKey: 'google',
-    meta: {
-      docsUrl: 'https://cloud.google.com/vertex-ai/generative-ai/docs/partner-models/use-claude',
-      billingModel: 'pay_as_you_go',
-      notes: ['需启用 Vertex AI 并在 Model Garden 订阅 Claude 模型'],
-    },
   },
 
   // ── Ollama ──
@@ -585,17 +439,13 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     authStyle: 'auth_token',
     baseUrl: 'http://localhost:11434',
     defaultEnvOverrides: {
-      ANTHROPIC_AUTH_TOKEN: 'ollama',  // Fixed pseudo-token for Ollama (no real auth needed)
+      ANTHROPIC_AUTH_TOKEN: 'ollama',
+      ANTHROPIC_API_KEY: '',
     },
     defaultModels: [],  // User must specify — depends on pulled models
     fields: ['base_url', 'model_names'],
     iconKey: 'ollama',
     sdkProxyOnly: true,
-    meta: {
-      docsUrl: 'https://docs.ollama.com/integrations/claude-code',
-      billingModel: 'free',
-      notes: ['需要本地安装 Ollama 并拉取模型'],
-    },
   },
 
   // ── LiteLLM ──
@@ -611,10 +461,6 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     defaultModels: ANTHROPIC_DEFAULT_MODELS,
     fields: ['api_key', 'base_url'],
     iconKey: 'server',
-    meta: {
-      docsUrl: 'https://docs.litellm.ai/docs/',
-      billingModel: 'self_hosted',
-    },
   },
 
   // ── Google Gemini (Image) ──
@@ -635,20 +481,9 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     fields: ['api_key'],
     category: 'media',
     iconKey: 'google',
-    meta: {
-      apiKeyUrl: 'https://aistudio.google.com/api-keys',
-      docsUrl: 'https://ai.google.dev/gemini-api/docs/image-generation',
-      billingModel: 'pay_as_you_go',
-    },
   },
 
 ];
-
-// ── Runtime preset validation (fails fast on invalid presets) ───
-
-for (const p of VENDOR_PRESETS) {
-  PresetSchema.parse(p);
-}
 
 // ── Lookup helpers ──────────────────────────────────────────────
 

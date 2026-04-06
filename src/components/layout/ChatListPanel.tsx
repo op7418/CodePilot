@@ -8,6 +8,7 @@ import {
   MagnifyingGlass,
   FileArrowDown,
   Plus,
+  FolderOpen,
   FolderPlus,
   Lightning,
   Plug,
@@ -15,6 +16,7 @@ import {
   Image,
   WifiHigh,
   Gear,
+  X,
 } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -448,14 +450,37 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
   ];
 
   return (
-    <aside
-      className="hidden h-full shrink-0 flex-col overflow-hidden bg-sidebar/80 backdrop-blur-xl lg:flex"
-      style={{ width: width ?? 240 }}
-    >
-      {/* Header - extra top padding for macOS traffic lights */}
-      <div className="flex h-12 shrink-0 items-center justify-between px-3 mt-5">
-        <ConnectionStatus />
-      </div>
+    <>
+      {/* Mobile backdrop */}
+      <div
+        className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+        onClick={() => {
+          window.dispatchEvent(new CustomEvent("chatlist-close"));
+        }}
+      />
+      
+      <aside
+        className="flex h-full shrink-0 flex-col overflow-hidden bg-sidebar/80 backdrop-blur-xl fixed inset-y-0 left-0 z-50 shadow-xl lg:static lg:shadow-none"
+        style={{ width: width ?? 240 }}
+      >
+        {/* Mobile header with close button */}
+        <div className="flex lg:hidden h-12 shrink-0 items-center justify-between px-3 mt-5">
+          <ConnectionStatus />
+          <Button
+            variant="ghost"
+            size="icon"
+            className="h-8 w-8"
+            onClick={() => window.dispatchEvent(new CustomEvent("chatlist-close"))}
+            aria-label="Close sidebar"
+          >
+            <X size={16} />
+          </Button>
+        </div>
+        
+        {/* Desktop header */}
+        <div className="hidden lg:flex h-12 shrink-0 items-center justify-between px-3 mt-5">
+          <ConnectionStatus />
+        </div>
 
       {/* Top action bar: New Chat + Search */}
       <div className="flex items-center gap-2 px-3 pb-2">
@@ -762,6 +787,7 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
         onSelect={handleFolderSelect}
       />
 
-    </aside>
+      </aside>
+    </>
   );
 }
