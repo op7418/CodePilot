@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { getAllProviders, getDefaultProviderId, setDefaultProviderId, getProvider, getModelsForProvider, getSetting } from '@/lib/db';
 import { getContextWindow } from '@/lib/model-context';
+import { CLAUDE_MODELS } from '@/lib/model-ids';
 import { getDefaultModelsForProvider, inferProtocolFromLegacy, findPresetForLegacy } from '@/lib/provider-catalog';
 import type { Protocol } from '@/lib/provider-catalog';
 import type { ErrorResponse, ProviderModelGroup } from '@/types';
@@ -73,7 +74,7 @@ export async function GET() {
           const cw = getContextWindow(m.value);
           return {
             value: m.value,
-            label: m.displayName,
+            label: CLAUDE_MODELS[m.value as keyof typeof CLAUDE_MODELS]?.displayName ?? m.displayName,
             description: m.description,
             supportsEffort: m.supportsEffort,
             supportedEffortLevels: m.supportedEffortLevels,

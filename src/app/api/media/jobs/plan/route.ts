@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { streamTextFromProvider } from '@/lib/text-generator';
-import { resolveProvider } from '@/lib/provider-resolver';
+import { resolveProvider, DEFAULT_MODEL_ID } from '@/lib/provider-resolver';
 import fs from 'fs';
 import type { PlanMediaJobRequest } from '@/types';
 
@@ -62,7 +62,7 @@ export async function POST(request: NextRequest) {
     });
     // Preserve 'env' semantics (see onboarding route for rationale)
     const providerId = resolved.provider?.id || 'env';
-    const modelId = resolved.upstreamModel || resolved.model || session?.model || 'claude-sonnet-4-20250514';
+    const modelId = resolved.upstreamModel || resolved.model || session?.model || DEFAULT_MODEL_ID;
 
     // Read document content
     let docContent = body.docContent || '';

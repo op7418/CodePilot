@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server';
 import { getActiveProvider, getSetting } from '@/lib/db';
+import { CLAUDE_MODELS } from '@/lib/provider-resolver';
 
 interface SkillInfo {
   name: string;
@@ -12,12 +13,10 @@ interface SearchRequest {
   model?: string;
 }
 
-// Model alias -> full model ID
-const MODEL_MAP: Record<string, string> = {
-  sonnet: 'claude-sonnet-4-20250514',
-  opus: 'claude-opus-4-20250514',
-  haiku: 'claude-haiku-4-20250414',
-};
+// Model alias -> full model ID (derived from central CLAUDE_MODELS)
+const MODEL_MAP: Record<string, string> = Object.fromEntries(
+  Object.entries(CLAUDE_MODELS).map(([alias, m]) => [alias, m.id])
+);
 
 interface ApiConfig {
   supported: boolean;

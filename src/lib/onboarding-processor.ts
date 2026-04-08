@@ -6,7 +6,7 @@
 import fs from 'fs';
 import path from 'path';
 import { getSetting, getSession } from '@/lib/db';
-import { resolveProvider } from '@/lib/provider-resolver';
+import { resolveProvider, DEFAULT_MODEL_ID } from '@/lib/provider-resolver';
 import { loadState, saveState, ensureDailyDir, generateRootDocs } from '@/lib/assistant-workspace';
 import { getLocalDateString } from '@/lib/utils';
 import { generateTextFromProvider } from '@/lib/text-generator';
@@ -58,7 +58,7 @@ export async function processOnboarding(
       sessionModel: session?.model || undefined,
     });
     const providerId = resolved.provider?.id || 'env';
-    const model = resolved.upstreamModel || resolved.model || getSetting('default_model') || 'claude-sonnet-4-20250514';
+    const model = resolved.upstreamModel || resolved.model || getSetting('default_model') || DEFAULT_MODEL_ID;
 
     const soulPrompt = `Based on the following conversation summary, generate a soul.md file for an AI assistant.
 
