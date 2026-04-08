@@ -64,12 +64,15 @@ export async function GET() {
       }),
     });
 
-    // If SDK has discovered models, use them for the env group
+    // If SDK has discovered models, merge them into the default list.
+    // SDK models carry richer metadata (supportsEffort, etc.) so they take
+    // precedence, but default models missing from the SDK response are kept
+    // to avoid models disappearing when supportedModels() returns a partial list.
     try {
       const { getCachedModels } = await import('@/lib/agent-sdk-capabilities');
       const sdkModels = getCachedModels('env');
       if (sdkModels.length > 0) {
-        groups[0].models = sdkModels.map(m => {
+        const sdkEntries = sdkModels.map(m => {
           const cw = getContextWindow(m.value);
           return {
             value: m.value,
@@ -81,6 +84,10 @@ export async function GET() {
             ...(cw != null ? { contextWindow: cw } : {}),
           };
         });
+        // Append default models that the SDK didn't return
+        const sdkIds = new Set(sdkEntries.map(m => m.value));
+        const missing = groups[0].models.filter(m => !sdkIds.has(m.value));
+        groups[0].models = [...sdkEntries, ...missing];
       }
     } catch {
       // SDK capabilities not available, keep defaults
