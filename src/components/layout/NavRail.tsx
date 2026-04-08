@@ -10,6 +10,7 @@ import {
   Gear,
   WifiHigh,
   Terminal,
+  Clock,
 } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,6 +36,7 @@ const navItems = [
   { href: "/skills", label: "Skills", icon: Lightning },
   { href: "/mcp", label: "MCP", icon: Plug },
   { href: "/cli-tools", label: "CLI Tools", icon: Terminal },
+  { href: "/scheduled-tasks", label: "Scheduled Tasks", icon: Clock },
   { href: "/gallery", label: "Gallery", icon: Image },
   { href: "/bridge", label: "Bridge", icon: WifiHigh },
 ] as const;
@@ -50,6 +52,7 @@ export function NavRail({ onToggleChatList, hasUpdate, readyToInstall, skipPermi
     'Gallery': 'gallery.title',
     'Bridge': 'nav.bridge',
     'CLI Tools': 'nav.cliTools',
+    'Scheduled Tasks': 'nav.scheduledTasks',
   };
   const isChatRoute = pathname === "/chat" || pathname.startsWith("/chat/");
   const isSettingsActive = pathname === "/settings" || pathname.startsWith("/settings/");

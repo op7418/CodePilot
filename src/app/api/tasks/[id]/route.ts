@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { updateTask, deleteTask, getTask, getScheduledTask, deleteScheduledTask } from '@/lib/db';
+import { updateTask, deleteTask, getTask, getScheduledTask, deleteScheduledTask, updateScheduledTask } from '@/lib/db';
 import type { TaskResponse, ErrorResponse, UpdateTaskRequest } from '@/types';
+import type { ScheduledTask } from '@/types';
 
 interface RouteContext {
   params: Promise<{ id: string }>;
@@ -37,9 +38,17 @@ export async function PATCH(request: NextRequest, context: RouteContext) {
   const { id } = await context.params;
 
   try {
-    const body: UpdateTaskRequest = await request.json();
-    const existing = getTask(id);
+    const body: UpdateTaskRequest & Partial<ScheduledTask> = await request.json();
 
+    // Try scheduled task first
+    const scheduledTask = getScheduledTask(id);
+    if (scheduledTask) {
+      const updated = updateScheduledTask(id, body);
+      return NextResponse.json({ task: scheduledTask });
+    }
+
+    // Fall back to regular task
+    const existing = getTask(id);
     if (!existing) {
       return NextResponse.json<ErrorResponse>(
         { error: 'Task not found' },
