@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getAllProviders, createProvider, getSetting } from '@/lib/db';
+import { filterVisibleProviders } from '@/lib/legacy-provider-placeholder';
 import type { ProviderResponse, ErrorResponse, CreateProviderRequest, ApiProvider } from '@/types';
 
 function maskApiKey(provider: ApiProvider): ApiProvider {
@@ -36,7 +37,7 @@ function detectEnvVars(): Record<string, string> {
 
 export async function GET() {
   try {
-    const providers = getAllProviders().map(maskApiKey);
+    const providers = filterVisibleProviders(getAllProviders()).map(maskApiKey);
     const envDetected = detectEnvVars();
     return NextResponse.json({
       providers,

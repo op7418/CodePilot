@@ -268,6 +268,7 @@ export interface UpdateProviderRequest {
 export interface ProviderOptions {
   thinking_mode?: 'adaptive' | 'enabled' | 'disabled';
   context_1m?: boolean;
+  effort?: 'low' | 'medium' | 'high' | 'max';
   /** Global default model ID — used for new sessions */
   default_model?: string;
   /** Global default model's provider ID — which provider the default model belongs to */

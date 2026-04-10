@@ -62,12 +62,15 @@ describe('Stale default_provider_id cleanup', () => {
   // Save and restore original default + global default model provider
   let originalDefault: string | undefined;
   let originalGlobalProvider: string | undefined;
+  let originalCompatMode: string | undefined;
 
   beforeEach(() => {
     originalDefault = getDefaultProviderId();
     originalGlobalProvider = getSetting('global_default_model_provider') || undefined;
+    originalCompatMode = getSetting('cc_switch_compat_mode') || undefined;
     // Clear global_default_model_provider so these tests exercise the legacy path
     setSetting('global_default_model_provider', '');
+    setSetting('cc_switch_compat_mode', '');
     cleanupTestProviders();
   });
 
@@ -75,6 +78,7 @@ describe('Stale default_provider_id cleanup', () => {
     cleanupTestProviders();
     // Restore originals
     setSetting('global_default_model_provider', originalGlobalProvider || '');
+    setSetting('cc_switch_compat_mode', originalCompatMode || '');
     if (originalDefault) {
       setDefaultProviderId(originalDefault);
     }
@@ -159,6 +163,59 @@ describe('Stale default_provider_id cleanup', () => {
 
       // The stale ID should still be there — resolver is read-only
       assert.equal(getDefaultProviderId(), staleId, 'resolver should not modify settings');
+    });
+  });
+
+  describe('providers/models route with cc-switch compat mode', () => {
+    it('keeps env as default_provider_id when compat mode is enabled', async () => {
+      const providerId = createTestProvider('__test_real_provider');
+      setDefaultProviderId('env');
+      setSetting('cc_switch_compat_mode', 'true');
+
+      const { GET } = await import('../../app/api/providers/models/route');
+      const response = await GET();
+      const data = await response.json() as { default_provider_id: string };
+
+      assert.equal(data.default_provider_id, 'env');
+      assert.equal(getDefaultProviderId(), 'env');
+
+      deleteProvider(providerId);
+    });
+
+    it('exposes effort support metadata for built-in env models even without SDK cache', async () => {
+      setDefaultProviderId('env');
+      setSetting('cc_switch_compat_mode', 'true');
+
+      const { GET } = await import('../../app/api/providers/models/route');
+      const response = await GET();
+      const data = await response.json() as {
+        groups: Array<{
+          provider_id: string;
+          models: Array<{ value: string; supportsEffort?: boolean; supportedEffortLevels?: string[] }>;
+        }>;
+      };
+
+      const envGroup = data.groups.find(group => group.provider_id === 'env');
+      const sonnet = envGroup?.models.find(model => model.value === 'sonnet');
+
+      assert.ok(envGroup, 'env group should exist');
+      assert.equal(sonnet?.supportsEffort, true);
+      assert.deepEqual(sonnet?.supportedEffortLevels, ['low', 'medium', 'high', 'max']);
+    });
+
+    it('keeps env as the default when compat mode is disabled and env is still selectable', async () => {
+      const providerId = createTestProvider('__test_real_provider');
+      setDefaultProviderId('env');
+      setSetting('cc_switch_compat_mode', '');
+
+      const { GET } = await import('../../app/api/providers/models/route');
+      const response = await GET();
+      const data = await response.json() as { default_provider_id: string };
+
+      assert.equal(data.default_provider_id, 'env');
+      assert.equal(getDefaultProviderId(), 'env');
+
+      deleteProvider(providerId);
     });
   });
 

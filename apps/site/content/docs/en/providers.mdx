@@ -21,6 +21,8 @@ export ANTHROPIC_API_KEY="sk-ant-..."
 
 > **Note:** Configurations changed via `claude config set` or Claude Code's `/config` command are **not recognized by CodePilot**. CodePilot only reads shell environment variables and does not share Claude Code CLI's internal configuration. If you switched accounts/keys in the CLI via `cc switch` or similar methods, you need to manually reconfigure the corresponding key in CodePilot's **Settings > Providers**.
 
+> If you mainly manage Claude Code through **cc-switch**, you can enable **Settings > General > Enable cc-switch Compatibility Mode**. This keeps the built-in `env` provider as a valid default target and remembers the selected effort level for each provider, so new chats start with the same defaults more reliably.
+
 > After modifying environment variables, you need to **restart CodePilot** for changes to take effect.
 
 ### 2. Manually Adding Providers

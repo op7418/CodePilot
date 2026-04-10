@@ -100,6 +100,8 @@ const en = {
   'settings.errorReportingDesc': 'Help improve CodePilot by anonymously reporting errors. No conversation content or API keys are included. Restart the app for the change to fully take effect.',
   'settings.generativeUITitle': 'Generative UI',
   'settings.generativeUIDesc': 'Enable interactive visualizations (charts, diagrams, mockups) in chat responses. Disabling saves tokens but removes visual generation capability.',
+  'settings.ccSwitchCompatTitle': 'Enable cc-switch Compatibility Mode',
+  'settings.ccSwitchCompatDesc': 'Keep the env-provider default model and remember the selected effort level for the current provider, so new conversations start with the same cc-switch-style defaults.',
   'settings.defaultPanelTitle': 'Default Side Panel',
   'settings.defaultPanelDesc': 'Side panel to auto-open when starting a new conversation',
   'settings.defaultPanelNone': 'None',

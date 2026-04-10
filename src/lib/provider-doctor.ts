@@ -313,6 +313,13 @@ async function runProviderProbe(): Promise<ProbeResult> {
 
   const providers = getAllProviders();
   const defaultId = getDefaultProviderId();
+  const ccSwitchCompatMode = getSetting('cc_switch_compat_mode') === 'true';
+  const defaultIsCompatEnv = ccSwitchCompatMode && defaultId === 'env';
+  const compatEnvHasCredentials = !!(
+    process.env.ANTHROPIC_API_KEY ||
+    process.env.ANTHROPIC_AUTH_TOKEN ||
+    getSetting('anthropic_auth_token')
+  );
 
   findings.push({
     severity: 'ok',
@@ -321,7 +328,16 @@ async function runProviderProbe(): Promise<ProbeResult> {
   });
 
   if (defaultId) {
-    const defaultProvider = getProvider(defaultId);
+    const defaultProvider = defaultIsCompatEnv
+      ? {
+          id: 'env',
+          name: 'Claude Code',
+          protocol: 'anthropic',
+          provider_type: 'anthropic',
+          api_key: process.env.ANTHROPIC_API_KEY || '',
+          base_url: process.env.ANTHROPIC_BASE_URL || '',
+        }
+      : getProvider(defaultId);
     if (defaultProvider) {
       findings.push({
         severity: 'ok',
@@ -330,12 +346,19 @@ async function runProviderProbe(): Promise<ProbeResult> {
       });
 
       // Check if default provider has a key
-      if (!defaultProvider.api_key) {
+      const defaultHasCredentials = defaultIsCompatEnv
+        ? compatEnvHasCredentials
+        : !!defaultProvider.api_key;
+      if (!defaultHasCredentials) {
         findings.push({
           severity: 'warn',
           code: 'provider.default-no-key',
-          message: `Default provider "${defaultProvider.name}" has no API key`,
-          detail: JSON.stringify(maskKey(defaultProvider.api_key)),
+          message: defaultIsCompatEnv
+            ? `Default provider "${defaultProvider.name}" has no environment credentials`
+            : `Default provider "${defaultProvider.name}" has no API key`,
+          detail: defaultIsCompatEnv
+            ? 'Set ANTHROPIC_API_KEY, ANTHROPIC_AUTH_TOKEN, or the app auth token before using the env default provider.'
+            : JSON.stringify(maskKey(defaultProvider.api_key)),
         });
       }
     } else {

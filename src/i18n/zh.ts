@@ -97,6 +97,8 @@ const zh: Record<TranslationKey, string> = {
   'settings.errorReportingDesc': '帮助改进 CodePilot：匿名上报错误信息，不包含对话内容和 API Key。更改后需重启应用才能完全生效。',
   'settings.generativeUITitle': '生成式 UI',
   'settings.generativeUIDesc': '启用聊天中的交互式可视化功能（图表、流程图、原型图等）。关闭后可节省 token，但将无法生成可视化内容。',
+  'settings.ccSwitchCompatTitle': '开启 cc-switch 兼容模式',
+  'settings.ccSwitchCompatDesc': '保留 env 提供商的默认模型，并记住当前提供商所选的 effort，让新对话从一开始就使用与 cc-switch 一致的默认状态。',
   'settings.defaultPanelTitle': '默认侧边面板',
   'settings.defaultPanelDesc': '打开新对话时自动展开的侧边面板',
   'settings.defaultPanelNone': '全关',
