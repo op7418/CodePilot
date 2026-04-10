@@ -1,6 +1,6 @@
 'use client';
 
-import { X, CheckCircle, XCircle, Warning, Info, ArrowClockwise } from '@/components/ui/icon';
+import { X, CheckCircle, XCircle, Warning, Info } from '@/components/ui/icon';
 import { Button } from '@/components/ui/button';
 import { useToastState, type Toast } from '@/hooks/useToast';
 import { cn } from '@/lib/utils';
@@ -10,7 +10,6 @@ const ICON_MAP = {
   error: XCircle,
   warning: Warning,
   info: Info,
-  loading: ArrowClockwise,
 };
 
 const STYLE_MAP = {
@@ -18,7 +17,6 @@ const STYLE_MAP = {
   error: 'border-destructive/30 bg-destructive/10 text-destructive',
   warning: 'border-status-warning/30 bg-status-warning-muted text-status-warning-foreground',
   info: 'border-border bg-muted text-foreground',
-  loading: 'border-border bg-muted text-foreground',
 };
 
 function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }) {
@@ -30,7 +28,7 @@ function ToastItem({ toast, onDismiss }: { toast: Toast; onDismiss: () => void }
         STYLE_MAP[toast.type]
       )}
     >
-      <Icon size={16} className={cn("shrink-0", toast.type === 'loading' && "animate-spin")} />
+      <Icon size={16} className="shrink-0" />
       <span className="flex-1 min-w-0 truncate">{toast.message}</span>
       {toast.action && (
         <Button

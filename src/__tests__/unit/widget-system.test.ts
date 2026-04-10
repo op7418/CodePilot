@@ -23,6 +23,7 @@ import {
   parseAllShowWidgets,
   parseShowWidget,
   computePartialWidgetKey,
+  type WidgetSegment,
 } from '../../components/chat/MessageItem';
 
 import { WIDGET_CSS_BRIDGE } from '../../lib/widget-css-bridge';
@@ -253,69 +254,6 @@ describe('buildReceiverSrcdoc', () => {
   });
 });
 
-// ── CDN finalize script execution ────────────────────────────────────────
-
-describe('finalizeHtml CDN script handling', () => {
-  const srcdoc = buildReceiverSrcdoc(':root{}', false);
-
-  it('separates CDN and inline scripts in finalize', () => {
-    // The receiver script must filter scripts into cdn (has src) vs inline (has text)
-    assert.ok(srcdoc.includes('cdnScripts=scripts.filter'), 'should separate CDN scripts');
-    assert.ok(srcdoc.includes('inlineScripts=scripts.filter'), 'should separate inline scripts');
-  });
-
-  it('waits for all CDN scripts before executing inline', () => {
-    // When CDN scripts exist, inline must only run after all CDN onload/onerror fire
-    assert.ok(srcdoc.includes('_pending=cdnScripts.length'), 'should track pending CDN count');
-    assert.ok(srcdoc.includes('_pending--'), 'should decrement on each CDN completion');
-    assert.ok(srcdoc.includes('_pending<=0'), 'should run inline only when all CDN done');
-  });
-
-  it('runs inline immediately when no CDN scripts', () => {
-    assert.ok(srcdoc.includes('cdnScripts.length===0'), 'should check for zero CDN scripts');
-    // _appendInline is called directly in the no-CDN branch
-    assert.ok(srcdoc.includes('_appendInline()'), 'should call _appendInline');
-  });
-
-  it('does NOT re-inject inline scripts on CDN load (no duplicate execution)', () => {
-    // _appendInline should only be called once — no _runInline on every onload
-    // The function is named _appendInline (not _runInline) and called via _onCdnDone counter
-    assert.ok(srcdoc.includes('function _onCdnDone'), 'should use counter-based callback');
-    assert.ok(srcdoc.includes('n.onload=_onCdnDone'), 'onload should use counter, not direct _appendInline');
-    assert.ok(srcdoc.includes('n.onerror=_onCdnDone'), 'onerror should use counter, not direct _appendInline');
-  });
-
-  it('does NOT have a timeout fallback that could race with CDN load', () => {
-    // Previous bugs: setTimeout(3000) set _inlineRan=true before CDN arrived
-    // The finalizeHtml script section should not use setTimeout for inline execution
-    assert.ok(!srcdoc.includes('setTimeout(function(){_appendInline'), 'should not have timeout calling _appendInline');
-    assert.ok(!srcdoc.includes('setTimeout(function(){_runInline'), 'should not have timeout calling _runInline');
-  });
-
-  it('does NOT have a once-flag that could lock out late CDN arrivals', () => {
-    // Previous bug: _inlineRan flag prevented init after slow CDN load
-    assert.ok(!srcdoc.includes('_inlineRan'), 'should not have _inlineRan flag');
-  });
-
-  it('strips model-provided onload to avoid double init', () => {
-    // CDN scripts with model-provided onload="init()" should have it stripped
-    // since our _onCdnDone callback handles execution timing
-    assert.ok(srcdoc.includes("!=='onload'"), 'should skip onload attribute when setting attrs');
-  });
-
-  it('emits widget:scriptsReady after inline scripts execute', () => {
-    // Export relies on this signal to know when Chart.js etc. have finished drawing
-    assert.ok(srcdoc.includes("widget:scriptsReady"), 'should emit scriptsReady after _appendInline');
-  });
-
-  it('handles widget:capture message for PNG export', () => {
-    assert.ok(srcdoc.includes("widget:capture"), 'should handle capture message');
-    assert.ok(srcdoc.includes("widget:captured"), 'should respond with captured dataUrl');
-    // Must convert live canvas to img before serialization
-    assert.ok(srcdoc.includes("toDataURL"), 'should convert canvas elements to images');
-  });
-});
-
 // ── CDN whitelist ───────────────────────────────────────────────────────
 
 describe('CDN_WHITELIST', () => {
@@ -376,7 +314,7 @@ describe('WIDGET_SYSTEM_PROMPT', () => {
 
   it('is smaller than the original full prompt but includes core rules', () => {
     assert.ok(WIDGET_SYSTEM_PROMPT.length > 500, 'should include core hard constraints');
-    assert.ok(WIDGET_SYSTEM_PROMPT.length < 2000, 'should be smaller than original ~2500 char full prompt');
+    assert.ok(WIDGET_SYSTEM_PROMPT.length < 1500, 'should be smaller than original ~2500 char full prompt');
   });
 
   it('includes critical hard constraints for valid widget output', () => {

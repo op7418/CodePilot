@@ -9,6 +9,7 @@ import {
   DotOutline,
   ChartBar,
   Brain,
+  SidebarSimple,
 } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -40,6 +41,8 @@ export function UnifiedTopBar() {
     isAssistantWorkspace,
     currentBranch,
     gitDirtyCount,
+    chatListOpen,
+    setChatListOpen,
   } = usePanel();
   const { t } = useTranslation();
   const { isWindows } = useClientPlatform();
@@ -114,12 +117,22 @@ export function UnifiedTopBar() {
 
   // On non-chat routes, render only a thin drag region (no visible bar)
   if (!isChatRoute) {
-    // Thin drag region for macOS window dragging — just enough for traffic light area
     return (
       <div
-        className="h-3 shrink-0"
+        className="flex h-10 shrink-0 items-center px-3 lg:h-3"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
-      />
+      >
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          className="shrink-0 text-muted-foreground hover:text-foreground lg:hidden"
+          style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
+          onClick={() => setChatListOpen(!chatListOpen)}
+          aria-label="Toggle sidebar"
+        >
+          <SidebarSimple size={18} />
+        </Button>
+      </div>
     );
   }
 
@@ -129,11 +142,20 @@ export function UnifiedTopBar() {
         className="flex h-12 shrink-0 items-center gap-2 bg-background px-3"
         style={{ WebkitAppRegion: 'drag' } as React.CSSProperties}
       >
-        {/* Left: chat title + project folder */}
+        {/* Left: sidebar toggle (mobile) + chat title + project folder */}
         <div
           className="flex items-center gap-1.5 min-w-0 shrink"
           style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}
         >
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            className={`shrink-0 text-muted-foreground hover:text-foreground ${chatListOpen ? 'lg:hidden' : ''}`}
+            onClick={() => setChatListOpen(!chatListOpen)}
+            aria-label="Toggle sidebar"
+          >
+            <SidebarSimple size={18} />
+          </Button>
           {isChatRoute && sessionTitle && (
             isEditingTitle ? (
               <div style={{ WebkitAppRegion: 'no-drag' } as React.CSSProperties}>

@@ -13,7 +13,7 @@ import type { PermissionUpdate } from '@anthropic-ai/claude-agent-sdk';
 import type { ChannelAddress, OutboundMessage } from './types';
 import type { BaseChannelAdapter } from './channel-adapter';
 import { deliver } from './delivery-layer';
-import { insertPermissionLink, getPermissionLink, markPermissionLinkResolved, getSession, getDb } from '../db';
+import { insertPermissionLink, getPermissionLink, markPermissionLinkResolved, getSession, getDb, getSetting } from '../db';
 import { resolvePendingPermission } from '../permission-registry';
 import { escapeHtml } from './adapters/telegram-utils';
 
@@ -36,6 +36,14 @@ export async function forwardPermissionRequest(
   suggestions?: unknown[],
   replyToMessageId?: string,
 ): Promise<void> {
+  // Check if auto-approval is enabled globally — auto-approve without IM notification
+  const globalAutoApprove = getSetting('dangerously_skip_permissions') === 'true';
+  if (globalAutoApprove) {
+    console.log(`[bridge] Auto-approved permission ${permissionRequestId} (tool=${toolName}) due to global auto-approval setting`);
+    resolvePendingPermission(permissionRequestId, { behavior: 'allow' });
+    return;
+  }
+
   // Check if this session uses full_access permission profile — auto-approve without IM notification
   if (sessionId) {
     const session = getSession(sessionId);

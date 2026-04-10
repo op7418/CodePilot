@@ -60,24 +60,18 @@ Connect to third-party endpoints compatible with the Anthropic API format.
 
 CodePilot includes built-in configuration presets for major Chinese providers. After selecting one, the Base URL and default model are auto-filled:
 
-| Provider | Description | Billing Model |
-|----------|-------------|---------------|
-| **智谱 GLM (Domestic/International)** | Zhipu AI GLM series | Coding Plan (credit-based) |
-| **Kimi Coding Plan** | Moonshot Kimi coding edition | Pay-as-you-go |
-| **Moonshot** | Moonshot API | Pay-as-you-go |
-| **MiniMax (Domestic/International)** | MiniMax M2.7 | Token Plan |
-| **火山引擎 Ark** | ByteDance Volcengine (Doubao, GLM, DeepSeek, Kimi) | Coding Plan |
-| **小米 MiMo** | Xiaomi MiMo-V2-Pro (pay-as-you-go or Token Plan) | Pay-as-you-go / Token Plan |
-| **阿里云百炼 Coding Plan** | Alibaba Cloud (Qwen, GLM, Kimi, MiniMax) | Coding Plan |
+| Provider | Description | Auth Method |
+|----------|-------------|-------------|
+| **智谱 GLM (Domestic)** | 智谱 AI GLM series | API Key |
+| **智谱 GLM (International)** | 智谱 AI international endpoint | API Key |
+| **Kimi Coding Plan** | Moonshot Kimi coding edition | Auth Token |
+| **Moonshot** | Moonshot API | API Key |
+| **MiniMax (Domestic)** | MiniMax abab series | API Key |
+| **MiniMax (International)** | MiniMax international endpoint | API Key |
+| **火山引擎 Ark** | ByteDance Volcengine | Auth Token |
+| **阿里云百炼 Coding Plan** | Alibaba Cloud Tongyi series | API Key |
 
-When adding a Chinese provider in CodePilot, the system automatically handles the authentication method — you just need to enter the key provided by the respective platform. Each provider card shows a direct link to obtain your API key.
-
-> **Important notes for specific providers:**
-> - **智谱 GLM**: Peak hours (14:00–18:00 UTC+8) consume 3x credits
-> - **Kimi / Moonshot**: `tool_search` is automatically disabled to prevent 400 errors
-> - **小米 MiMo**: Does not support Thinking mode
-> - **阿里云百炼**: Must use Coding Plan key (starts with `sk-sp-`); standard DashScope keys will not work
-> - **火山引擎 Ark**: Endpoint must be activated in the console before use
+> **Auth Token type**: Kimi Coding Plan and 火山引擎 Ark use `ANTHROPIC_AUTH_TOKEN` rather than `ANTHROPIC_API_KEY` for authentication. When adding them in CodePilot, the system automatically handles the authentication method — you just need to enter the key provided by the respective platform.
 
 ### OpenRouter
 

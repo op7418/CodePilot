@@ -19,7 +19,6 @@ import { BatchImageGenContext, useBatchImageGenState } from "@/hooks/useBatchIma
 import { SplitContext, type SplitSession } from "@/hooks/useSplit";
 import { SplitChatContainer } from "./SplitChatContainer";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { SentryInit } from "./SentryInit";
 import { getActiveSessionIds, getSnapshot } from "@/lib/stream-session-manager";
 import { useGitStatus } from "@/hooks/useGitStatus";
 import { SetupCenter } from '@/components/setup/SetupCenter';
@@ -109,6 +108,13 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     setChatListOpenRaw(window.matchMedia(`(min-width: ${LG_BREAKPOINT}px)`).matches);
   }, []);
   /* eslint-enable react-hooks/set-state-in-effect */
+
+  // Listen for mobile close events
+  useEffect(() => {
+    const handler = () => setChatListOpenRaw(false);
+    window.addEventListener("chatlist-close", handler);
+    return () => window.removeEventListener("chatlist-close", handler);
+  }, []);
 
   // Panel width state with localStorage persistence
   const [chatListWidth, setChatListWidth] = useState(240);
@@ -416,8 +422,10 @@ export function AppShell({ children }: { children: React.ReactNode }) {
       setPreviewFile,
       previewViewMode,
       setPreviewViewMode,
+      chatListOpen,
+      setChatListOpen,
     }),
-    [fileTreeOpen, gitPanelOpen, previewOpen, terminalOpen, dashboardPanelOpen, assistantPanelOpen, isAssistantWorkspace, currentBranch, gitDirtyCount, currentWorktreeLabel, workingDirectory, sessionId, sessionTitle, streamingSessionId, pendingApprovalSessionId, activeStreamingSessions, pendingApprovalSessionIds, previewFile, setPreviewFile, previewViewMode]
+    [fileTreeOpen, gitPanelOpen, previewOpen, terminalOpen, dashboardPanelOpen, assistantPanelOpen, isAssistantWorkspace, currentBranch, gitDirtyCount, currentWorktreeLabel, workingDirectory, sessionId, sessionTitle, streamingSessionId, pendingApprovalSessionId, activeStreamingSessions, pendingApprovalSessionIds, previewFile, setPreviewFile, previewViewMode, chatListOpen, setChatListOpen]
   );
 
   const imageGenValue = useImageGenState();
@@ -425,7 +433,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <UpdateContext.Provider value={updateContextValue}>
-      <SentryInit />
       <PanelContext.Provider value={panelContextValue}>
         <SplitContext.Provider value={splitContextValue}>
         <ImageGenContext.Provider value={imageGenValue}>

@@ -3,8 +3,6 @@
 import type { ReactNode } from "react";
 import { HardDrives } from "@/components/ui/icon";
 import type { ApiProvider } from "@/types";
-import { VENDOR_PRESETS } from "@/lib/provider-catalog";
-import type { VendorPreset } from "@/lib/provider-catalog";
 import Anthropic from "@lobehub/icons/es/Anthropic";
 import OpenRouter from "@lobehub/icons/es/OpenRouter";
 import Zhipu from "@lobehub/icons/es/Zhipu";
@@ -50,71 +48,251 @@ export function getProviderIcon(name: string, baseUrl: string): ReactNode {
 }
 
 // ---------------------------------------------------------------------------
-// Quick-add preset definitions — generated from VENDOR_PRESETS (single source of truth)
+// Quick-add preset definitions
 // ---------------------------------------------------------------------------
 
 export interface QuickPreset {
-  key: string;
+  key: string;           // unique key
   name: string;
   description: string;
   descriptionZh: string;
   icon: ReactNode;
+  // Pre-filled provider data
   provider_type: string;
+  /** Wire protocol — determines how the provider is dispatched at runtime */
   protocol: string;
-  /** Auth style from catalog — frontend should use this instead of inferring from extra_env */
-  authStyle: string;
   base_url: string;
   extra_env: string;
+  // Which fields user must fill
   fields: ("name" | "api_key" | "base_url" | "extra_env" | "model_names" | "model_mapping")[];
+  // Category: 'chat' (default) or 'media'
   category?: "chat" | "media";
-  /** Provider meta info from catalog (for user guidance) */
-  meta?: VendorPreset['meta'];
 }
 
-/** Map iconKey from VENDOR_PRESETS to React icon component */
-function resolveIcon(iconKey: string): ReactNode {
-  const ICON_MAP: Record<string, ReactNode> = {
-    anthropic: <Anthropic size={18} />,
-    openrouter: <OpenRouter size={18} />,
-    zhipu: <Zhipu size={18} />,
-    kimi: <Kimi size={18} />,
-    moonshot: <Moonshot size={18} />,
-    minimax: <Minimax size={18} />,
-    bedrock: <Bedrock size={18} />,
-    google: <Google size={18} />,
-    volcengine: <Volcengine size={18} />,
-    bailian: <Bailian size={18} />,
-    'xiaomi-mimo': <XiaomiMiMo size={18} />,
-    ollama: <Ollama size={18} />,
-    server: <HardDrives size={18} className="text-muted-foreground" />,
-  };
-  return ICON_MAP[iconKey] || <HardDrives size={18} className="text-muted-foreground" />;
-}
-
-/** Convert a VendorPreset to the frontend QuickPreset format */
-function toQuickPreset(vp: VendorPreset): QuickPreset {
-  return {
-    key: vp.key,
-    name: vp.name,
-    description: vp.description,
-    descriptionZh: vp.descriptionZh,
-    icon: resolveIcon(vp.iconKey),
-    provider_type: vp.protocol === 'openrouter' ? 'openrouter'
-      : vp.protocol === 'bedrock' ? 'bedrock'
-      : vp.protocol === 'vertex' ? 'vertex'
-      : vp.protocol === 'gemini-image' ? 'gemini-image'
-      : 'anthropic',
-    protocol: vp.protocol,
-    authStyle: vp.authStyle,
-    base_url: vp.baseUrl,
-    extra_env: JSON.stringify(vp.defaultEnvOverrides),
-    fields: vp.fields as QuickPreset['fields'],
-    category: vp.category,
-    meta: vp.meta,
-  };
-}
-
-export const QUICK_PRESETS: QuickPreset[] = VENDOR_PRESETS.map(toQuickPreset);
+export const QUICK_PRESETS: QuickPreset[] = [
+  // ── Anthropic-compatible services ──
+  {
+    key: "anthropic-thirdparty",
+    name: "Anthropic Third-party API",
+    description: "Anthropic-compatible API — provide URL and Key",
+    descriptionZh: "Anthropic 兼容第三方 API — 填写地址和密钥",
+    icon: <Anthropic size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "",
+    extra_env: '{"ANTHROPIC_API_KEY":""}',
+    fields: ["name", "api_key", "base_url", "model_mapping"],
+  },
+  {
+    key: "anthropic-official",
+    name: "Anthropic",
+    description: "Official Anthropic API",
+    descriptionZh: "Anthropic 官方 API",
+    icon: <Anthropic size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "https://api.anthropic.com",
+    extra_env: "{}",
+    fields: ["api_key"],
+  },
+  {
+    key: "openrouter",
+    name: "OpenRouter",
+    description: "Use OpenRouter to access multiple models",
+    descriptionZh: "通过 OpenRouter 访问多种模型",
+    icon: <OpenRouter size={18} />,
+    provider_type: "openrouter",
+    protocol: "openrouter",
+    base_url: "https://openrouter.ai/api",
+    extra_env: '{"ANTHROPIC_API_KEY":""}',
+    fields: ["api_key"],
+  },
+  {
+    key: "glm-cn",
+    name: "GLM (CN)",
+    description: "Zhipu GLM Code Plan — China region",
+    descriptionZh: "智谱 GLM 编程套餐 — 中国区",
+    icon: <Zhipu size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "https://open.bigmodel.cn/api/anthropic",
+    extra_env: '{"API_TIMEOUT_MS":"3000000","ANTHROPIC_API_KEY":""}',
+    fields: ["api_key"],
+  },
+  {
+    key: "glm-global",
+    name: "GLM (Global)",
+    description: "Zhipu GLM Code Plan — Global region",
+    descriptionZh: "智谱 GLM 编程套餐 — 国际区",
+    icon: <Zhipu size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "https://api.z.ai/api/anthropic",
+    extra_env: '{"API_TIMEOUT_MS":"3000000","ANTHROPIC_API_KEY":""}',
+    fields: ["api_key"],
+  },
+  {
+    key: "kimi",
+    name: "Kimi Coding Plan",
+    description: "Kimi Coding Plan API",
+    descriptionZh: "Kimi 编程计划 API",
+    icon: <Kimi size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "https://api.kimi.com/coding/",
+    extra_env: '{"ANTHROPIC_AUTH_TOKEN":""}',
+    fields: ["api_key"],
+  },
+  {
+    key: "moonshot",
+    name: "Moonshot",
+    description: "Moonshot AI API",
+    descriptionZh: "月之暗面 API",
+    icon: <Moonshot size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "https://api.moonshot.cn/anthropic",
+    extra_env: '{"ANTHROPIC_API_KEY":""}',
+    fields: ["api_key"],
+  },
+  {
+    key: "minimax-cn",
+    name: "MiniMax (CN)",
+    description: "MiniMax Code Plan — China region",
+    descriptionZh: "MiniMax 编程套餐 — 中国区",
+    icon: <Minimax size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "https://api.minimaxi.com/anthropic",
+    extra_env: '{"API_TIMEOUT_MS":"3000000","CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"1","ANTHROPIC_AUTH_TOKEN":""}',
+    fields: ["api_key"],
+  },
+  {
+    key: "minimax-global",
+    name: "MiniMax (Global)",
+    description: "MiniMax Code Plan — Global region",
+    descriptionZh: "MiniMax 编程套餐 — 国际区",
+    icon: <Minimax size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "https://api.minimax.io/anthropic",
+    extra_env: '{"API_TIMEOUT_MS":"3000000","CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC":"1","ANTHROPIC_AUTH_TOKEN":""}',
+    fields: ["api_key"],
+  },
+  {
+    key: "volcengine",
+    name: "Volcengine Ark",
+    description: "Volcengine Ark Coding Plan — Doubao, GLM, DeepSeek, Kimi",
+    descriptionZh: "字节火山方舟 Coding Plan — 豆包、GLM、DeepSeek、Kimi",
+    icon: <Volcengine size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "https://ark.cn-beijing.volces.com/api/coding",
+    extra_env: '{"ANTHROPIC_AUTH_TOKEN":""}',
+    fields: ["api_key", "model_names"],
+  },
+  {
+    key: "xiaomi-mimo",
+    name: "Xiaomi MiMo",
+    description: "Xiaomi MiMo Pay-as-you-go API — MiMo-V2-Pro",
+    descriptionZh: "小米 MiMo 按量付费 — MiMo-V2-Pro",
+    icon: <XiaomiMiMo size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "https://api.xiaomimimo.com/anthropic",
+    extra_env: '{"ANTHROPIC_AUTH_TOKEN":""}',
+    fields: ["api_key"],
+  },
+  {
+    key: "xiaomi-mimo-token-plan",
+    name: "Xiaomi MiMo Token Plan",
+    description: "Xiaomi MiMo Token Plan subscription — MiMo-V2-Pro",
+    descriptionZh: "小米 MiMo Token Plan 订阅套餐 — MiMo-V2-Pro",
+    icon: <XiaomiMiMo size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "https://token-plan-cn.xiaomimimo.com/anthropic",
+    extra_env: '{"ANTHROPIC_AUTH_TOKEN":""}',
+    fields: ["api_key"],
+  },
+  {
+    key: "bailian",
+    name: "Aliyun Bailian",
+    description: "Aliyun Bailian Coding Plan — Qwen, GLM, Kimi, MiniMax",
+    descriptionZh: "阿里云百炼 Coding Plan — 通义千问、GLM、Kimi、MiniMax",
+    icon: <Bailian size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "https://coding.dashscope.aliyuncs.com/apps/anthropic",
+    extra_env: '{"ANTHROPIC_API_KEY":""}',
+    fields: ["api_key"],
+  },
+  // ── Cloud platform providers ──
+  {
+    key: "bedrock",
+    name: "AWS Bedrock",
+    description: "Amazon Bedrock — requires AWS credentials",
+    descriptionZh: "Amazon Bedrock — 需要 AWS 凭证",
+    icon: <Bedrock size={18} />,
+    provider_type: "bedrock",
+    protocol: "bedrock",
+    base_url: "",
+    extra_env: '{"CLAUDE_CODE_USE_BEDROCK":"1","AWS_REGION":"us-east-1","CLAUDE_CODE_SKIP_BEDROCK_AUTH":"1"}',
+    fields: ["extra_env"],
+  },
+  {
+    key: "vertex",
+    name: "Google Vertex",
+    description: "Google Vertex AI — requires GCP credentials",
+    descriptionZh: "Google Vertex AI — 需要 GCP 凭证",
+    icon: <Google size={18} />,
+    provider_type: "vertex",
+    protocol: "vertex",
+    base_url: "",
+    extra_env: '{"CLAUDE_CODE_USE_VERTEX":"1","CLOUD_ML_REGION":"us-east5","CLAUDE_CODE_SKIP_VERTEX_AUTH":"1"}',
+    fields: ["extra_env"],
+  },
+  // ── Local / self-hosted ──
+  {
+    key: "ollama",
+    name: "Ollama",
+    description: "Ollama — run local models with Anthropic-compatible API",
+    descriptionZh: "Ollama — 本地运行模型，Anthropic 兼容 API",
+    icon: <Ollama size={18} />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "http://localhost:11434",
+    extra_env: '{"ANTHROPIC_AUTH_TOKEN":"ollama","ANTHROPIC_API_KEY":""}',
+    fields: ["base_url", "model_names"],
+  },
+  // ── Proxy / gateway ──
+  {
+    key: "litellm",
+    name: "LiteLLM",
+    description: "LiteLLM proxy — local or remote",
+    descriptionZh: "LiteLLM 代理 — 本地或远程",
+    icon: <HardDrives size={18} className="text-muted-foreground" />,
+    provider_type: "anthropic",
+    protocol: "anthropic",
+    base_url: "http://localhost:4000",
+    extra_env: "{}",
+    fields: ["api_key", "base_url"],
+  },
+  // ── Media providers ──
+  {
+    key: "gemini-image",
+    name: "Google Gemini (Image)",
+    description: "Nano Banana Pro — AI image generation by Google Gemini",
+    descriptionZh: "Nano Banana Pro — Google Gemini AI 图片生成",
+    icon: <Google size={18} />,
+    provider_type: "gemini-image",
+    protocol: "gemini-image",
+    base_url: "https://generativelanguage.googleapis.com/v1beta",
+    extra_env: '{"GEMINI_API_KEY":""}',
+    fields: ["api_key"],
+    category: "media",
+  },
+];
 
 // ---------------------------------------------------------------------------
 // Gemini image model definitions

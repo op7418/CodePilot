@@ -229,10 +229,7 @@ export function toClaudeCodeEnv(
           break;
         case 'api_key':
         default:
-          // Only set ANTHROPIC_API_KEY (X-Api-Key header).
-          // Do NOT set ANTHROPIC_AUTH_TOKEN — upstream Claude Code adds
-          // Authorization: Bearer when it sees AUTH_TOKEN, which conflicts
-          // with providers that expect API-key-only auth (e.g. Kimi).
+          env.ANTHROPIC_AUTH_TOKEN = apiKey;
           env.ANTHROPIC_API_KEY = apiKey;
           break;
       }
@@ -294,12 +291,6 @@ export function toClaudeCodeEnv(
     if (appToken) env.ANTHROPIC_AUTH_TOKEN = appToken;
     if (appBaseUrl) env.ANTHROPIC_BASE_URL = appBaseUrl;
   }
-
-  // Prevent ~/.claude/settings.json from overriding CodePilot's provider configuration.
-  // When set, Claude Code CLI's withoutHostManagedProviderVars() strips all provider-routing
-  // variables from the user's settings file (see upstream managedEnv.ts / managedEnvConstants.ts).
-  // Placed AFTER all env cleanup to ensure it's never accidentally deleted.
-  env.CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST = '1';
 
   return env;
 }

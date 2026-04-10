@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useEffect, useSyncExternalStore } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -305,9 +305,6 @@ export function GeneralSection() {
           </Button>
         </FieldRow>
 
-        {/* Error Reporting — right after Setup Center */}
-        <SentryToggle locale={locale} t={t} />
-
       </SettingsCard>
 
       {/* Appearance */}
@@ -368,46 +365,6 @@ export function GeneralSection() {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
-
     </div>
-  );
-}
-
-/* ── Sentry opt-out toggle (isolated state) ──────────────────── */
-
-const sentrySubscribe = (cb: () => void) => {
-  window.addEventListener('storage', cb);
-  return () => window.removeEventListener('storage', cb);
-};
-const getSentryEnabled = () => {
-  try { return localStorage.getItem('codepilot:sentry-disabled') !== 'true'; } catch { return true; }
-};
-const getSentryEnabledServer = () => true; // SSR default
-
-function SentryToggle({ locale, t }: { locale: string; t: (key: TranslationKey) => string }) {
-  const enabled = useSyncExternalStore(sentrySubscribe, getSentryEnabled, getSentryEnabledServer);
-
-  return (
-    <FieldRow
-      label={t('settings.errorReporting' as TranslationKey)}
-      description={t('settings.errorReportingDesc' as TranslationKey)}
-      separator
-    >
-      <Switch
-        checked={enabled}
-        onCheckedChange={(checked) => {
-          const disabled = !checked;
-          try {
-            localStorage.setItem('codepilot:sentry-disabled', disabled ? 'true' : 'false');
-            window.dispatchEvent(new StorageEvent('storage'));
-          } catch { /* ignore */ }
-          fetch('/api/settings/sentry', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ disabled }),
-          }).catch(() => { /* ignore */ });
-        }}
-      />
-    </FieldRow>
   );
 }

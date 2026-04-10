@@ -39,11 +39,11 @@ describe('Provider Catalog', () => {
       }
     });
 
-    it('Kimi preset uses anthropic protocol with api_key auth', () => {
+    it('Kimi preset uses anthropic protocol', () => {
       const kimi = VENDOR_PRESETS.find(p => p.key === 'kimi');
       assert.ok(kimi, 'Kimi preset not found');
       assert.equal(kimi.protocol, 'anthropic');
-      assert.equal(kimi.authStyle, 'api_key');
+      assert.equal(kimi.authStyle, 'auth_token');
     });
 
     it('MiniMax presets use anthropic protocol', () => {
@@ -300,9 +300,7 @@ describe('Provider Resolver', () => {
 
       const env = toClaudeCodeEnv({ PATH: '/usr/bin' }, resolved);
       assert.equal(env.ANTHROPIC_API_KEY, 'sk-test-key');
-      // api_key mode must NOT set ANTHROPIC_AUTH_TOKEN — upstream adds Bearer header
-      // when AUTH_TOKEN is present, which conflicts with API-key-only providers (Kimi)
-      assert.equal(env.ANTHROPIC_AUTH_TOKEN, undefined);
+      assert.equal(env.ANTHROPIC_AUTH_TOKEN, 'sk-test-key');
       assert.equal(env.ANTHROPIC_BASE_URL, 'https://api.anthropic.com');
     });
 

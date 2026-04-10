@@ -21,6 +21,7 @@ import { captureCapabilities, isCacheFresh, setCachedPlugins } from './agent-sdk
 import { normalizeMessageContent, microCompactMessage } from './message-normalizer';
 import { roughTokenEstimate } from './context-estimator';
 import { getSetting, updateSdkSessionId, createPermissionRequest } from './db';
+// Auto-approval is now handled at the CodePilot level, not via SDK bypassPermissions
 import { resolveForClaudeCode, toClaudeCodeEnv } from './provider-resolver';
 import { findClaudeBinary, findGitBash, getExpandedPath, invalidateClaudePathCache } from './platform';
 import { notifyPermissionRequest, notifyGeneric } from './telegram-bot';
@@ -352,13 +353,25 @@ export async function generateTextViaSdk(params: {
   const queryOptions: Options = {
     cwd: os.homedir(),
     abortController,
-    permissionMode: 'bypassPermissions',
-    allowDangerouslySkipPermissions: true,
+    permissionMode: 'acceptEdits',
     env: sanitizeEnv(sdkEnv),
     settingSources: resolved.settingSources as Options['settingSources'],
     systemPrompt: params.system,
     maxTurns: 1,
   };
+
+  // Add auto-approval handler for this simple query
+  const globalAutoApprove = getSetting('dangerously_skip_permissions') === 'true';
+  if (globalAutoApprove) {
+    queryOptions.canUseTool = async (toolName, _input, opts) => {
+      console.log(`[claude-client] Auto-approved ${toolName} (auto-approval enabled)`);
+      return {
+        behavior: 'allow',
+        updatedInput: _input,
+        ...(opts.suggestions ? { updatedPermissions: opts.suggestions } : {}),
+      };
+    };
+  }
 
   if (params.model) {
     queryOptions.model = params.model;
@@ -584,18 +597,15 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
           console.warn('[claude-client] No API key found: no active provider, no legacy settings, and no ANTHROPIC_API_KEY/ANTHROPIC_AUTH_TOKEN in environment');
         }
 
-
-        // Check if dangerously_skip_permissions is enabled globally or per-session
-        const globalSkip = getSetting('dangerously_skip_permissions') === 'true';
-        const skipPermissions = globalSkip || !!sessionBypassPermissions;
+        // Check if auto-approval is enabled globally or per-session
+        const globalAutoApprove = getSetting('dangerously_skip_permissions') === 'true';
+        const shouldAutoApprove = globalAutoApprove || !!sessionBypassPermissions;
 
         const queryOptions: Options = {
           cwd: resolvedWorkingDirectory.path,
           abortController,
           includePartialMessages: true,
-          permissionMode: skipPermissions
-            ? 'bypassPermissions'
-            : ((permissionMode as Options['permissionMode']) || 'acceptEdits'),
+          permissionMode: (permissionMode as Options['permissionMode']) || 'acceptEdits',
           env: sanitizeEnv(sdkEnv),
           // Load settings so the SDK behaves like the CLI (tool permissions,
           // CLAUDE.md, etc.). When an active provider is configured in
@@ -604,10 +614,6 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
           // etc.) that would conflict with the provider's configuration.
           settingSources: resolved.settingSources as Options['settingSources'],
         };
-
-        if (skipPermissions) {
-          queryOptions.allowDangerouslySkipPermissions = true;
-        }
 
         // Find claude binary for packaged app where PATH is limited.
         // On Windows, npm installs Claude CLI as a .cmd wrapper which cannot
@@ -755,25 +761,6 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
           }
         }
 
-        // Dashboard MCP: widget management capabilities (keyword-gated).
-        const needsDashboardMcp = (() => {
-          const dashboardKeywords = /dashboard|仪表盘|看板|pin.*widget|pinned.*widget|refresh.*widget|固定.*组件|刷新.*组件|codepilot_dashboard/i;
-          if (dashboardKeywords.test(prompt)) return true;
-          if (conversationHistory?.some(m => dashboardKeywords.test(m.content))) return true;
-          return false;
-        })();
-
-        if (needsDashboardMcp) {
-          const { createDashboardMcpServer, DASHBOARD_MCP_SYSTEM_PROMPT } = await import('@/lib/dashboard-mcp');
-          queryOptions.mcpServers = {
-            ...(queryOptions.mcpServers || {}),
-            'codepilot-dashboard': createDashboardMcpServer(sessionId, resolvedWorkingDirectory.path),
-          };
-          if (queryOptions.systemPrompt && typeof queryOptions.systemPrompt === 'object' && 'append' in queryOptions.systemPrompt) {
-            queryOptions.systemPrompt.append = (queryOptions.systemPrompt.append || '') + '\n\n' + DASHBOARD_MCP_SYSTEM_PROMPT;
-          }
-        }
-
         // Pass through SDK-specific options from ClaudeStreamOptions
         if (thinking) {
           queryOptions.thinking = thinking;
@@ -842,7 +829,7 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
           queryOptions.resume = sdkSessionId;
         }
 
-        // Permission handler: sends SSE event and waits for user response
+        // Permission handler: auto-approve if enabled, or sends SSE event and waits for user response
         queryOptions.canUseTool = async (toolName, input, opts) => {
           // Auto-approve CodePilot's own in-process MCP tools — they are internal
           // and the user has already opted in by enabling the relevant mode.
@@ -858,17 +845,22 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
             'codepilot_cli_tools_add',
             'codepilot_cli_tools_remove',
             'codepilot_cli_tools_check_updates',
-            'codepilot_dashboard_pin',
-            'codepilot_dashboard_list',
-            'codepilot_dashboard_refresh',
-            'codepilot_dashboard_update',
-            'codepilot_dashboard_remove',
           ];
           if (autoApprovedTools.some(t => toolName === t || toolName.endsWith(`__${t}`))) {
             return { behavior: 'allow' as const, updatedInput: input };
           }
 
           const permissionRequestId = `perm-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+
+          // If auto-approval is enabled, approve immediately without user interaction
+          if (shouldAutoApprove) {
+            console.log(`[claude-client] Auto-approved ${toolName} (auto-approval enabled)`);
+            return {
+              behavior: 'allow',
+              updatedInput: input,
+              ...(opts.suggestions ? { updatedPermissions: opts.suggestions } : {}),
+            };
+          }
 
           const permEvent: PermissionRequestEvent = {
             permissionRequestId,
@@ -1239,6 +1231,9 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
                       type: 'tool_result',
                       data: JSON.stringify(ssePayload),
                     }));
+                    if (block.is_error) {
+                      console.warn(`[claude-client] Tool ${block.tool_use_id} failed: ${resultContent}`);
+                    }
 
                     // Deferred TodoWrite sync: only emit task_update after successful execution
                     if (!block.is_error && pendingTodoWrites.has(block.tool_use_id)) {
@@ -1432,11 +1427,6 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
           code: error instanceof Error ? (error as NodeJS.ErrnoException).code : undefined,
         });
 
-        // Look up preset meta for recovery action URLs
-        const presetForMeta = resolved.provider?.base_url
-          ? (await import('./provider-catalog')).findPresetForLegacy(resolved.provider.base_url, resolved.provider.provider_type, resolved.protocol)
-          : undefined;
-
         // Classify the error using structured pattern matching
         const classified = classifyError({
           error,
@@ -1447,11 +1437,6 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
           thinkingEnabled: !!thinking,
           context1mEnabled: !!context1m,
           effortSet: !!effort,
-          providerMeta: presetForMeta?.meta ? {
-            apiKeyUrl: presetForMeta.meta.apiKeyUrl,
-            docsUrl: presetForMeta.meta.docsUrl,
-            pricingUrl: presetForMeta.meta.pricingUrl,
-          } : undefined,
         });
 
         // ── Reactive compact: auto-compress and retry on CONTEXT_TOO_LONG ──
@@ -1629,7 +1614,6 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
             providerName: classified.providerName,
             details: classified.details,
             rawMessage: classified.rawMessage,
-            recoveryActions: classified.recoveryActions,
             // Include formatted text for backward compatibility
             _formattedMessage: errorMessage,
           }),
@@ -1659,142 +1643,4 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
       abortController?.abort();
     },
   });
-}
-
-// ── Provider Connection Test ─────────────────────────────────────
-
-export interface ConnectionTestResult {
-  success: boolean;
-  error?: {
-    code: string;
-    message: string;
-    suggestion: string;
-    recoveryActions?: Array<{ label: string; url?: string; action?: string }>;
-  };
-}
-
-/**
- * Test a provider connection by sending a direct HTTP request to the API endpoint.
- * Bypasses the Claude Code SDK subprocess entirely to avoid false positives
- * from keychain/OAuth credentials leaking into the test.
- */
-export async function testProviderConnection(config: {
-  apiKey: string;
-  baseUrl: string;
-  protocol: string;
-  authStyle: string;
-  envOverrides?: Record<string, string>;
-  modelName?: string;
-  presetKey?: string;
-  providerName?: string;
-  providerMeta?: { apiKeyUrl?: string; docsUrl?: string; pricingUrl?: string };
-}): Promise<ConnectionTestResult> {
-  const { getPreset, findPresetForLegacy } = await import('./provider-catalog');
-
-  // Look up preset for default model
-  const preset = config.presetKey
-    ? getPreset(config.presetKey)
-    : (config.baseUrl ? findPresetForLegacy(config.baseUrl, 'custom', config.protocol as import('./provider-catalog').Protocol) : undefined);
-
-  // Determine model to use in test request
-  const model = config.modelName
-    || preset?.defaultRoleModels?.default
-    || (preset?.defaultModels?.[0]?.upstreamModelId || preset?.defaultModels?.[0]?.modelId)
-    || 'sonnet';
-
-  // For bedrock/vertex/env_only protocols, we can't do a simple HTTP test
-  if (config.protocol === 'bedrock' || config.protocol === 'vertex' || config.authStyle === 'env_only') {
-    return {
-      success: false,
-      error: { code: 'SKIPPED', message: 'Cloud providers (Bedrock/Vertex) require IAM or OAuth credentials — connection test is not available for this provider type', suggestion: 'Save the configuration and send a message to verify' },
-    };
-  }
-
-  // Build the API URL — Anthropic-compatible endpoint
-  let apiUrl = config.baseUrl || 'https://api.anthropic.com';
-  // Ensure URL ends with /v1/messages for Anthropic-compatible providers
-  if (!apiUrl.endsWith('/v1/messages')) {
-    apiUrl = apiUrl.replace(/\/+$/, '');
-    if (!apiUrl.endsWith('/v1')) {
-      apiUrl += '/v1';
-    }
-    apiUrl += '/messages';
-  }
-
-  // Build headers based on auth style
-  const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
-    'anthropic-version': '2023-06-01',
-  };
-  if (config.authStyle === 'auth_token') {
-    headers['Authorization'] = `Bearer ${config.apiKey}`;
-  } else {
-    headers['x-api-key'] = config.apiKey;
-  }
-
-  // Minimal request body — just enough to verify auth + endpoint
-  const body = JSON.stringify({
-    model,
-    max_tokens: 1,
-    messages: [{ role: 'user', content: 'ping' }],
-  });
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 15_000);
-
-  try {
-    const response = await fetch(apiUrl, {
-      method: 'POST',
-      headers,
-      body,
-      signal: controller.signal,
-    });
-    clearTimeout(timeoutId);
-
-    // 2xx = success (even if model returns an error in body, auth works)
-    if (response.ok) {
-      return { success: true };
-    }
-
-    // Parse error response
-    let errorBody = '';
-    try { errorBody = await response.text(); } catch { /* ignore */ }
-
-    const classified = classifyError({
-      error: new Error(`HTTP ${response.status}: ${errorBody.slice(0, 500)}`),
-      providerName: config.providerName,
-      baseUrl: config.baseUrl,
-      providerMeta: config.providerMeta,
-    });
-
-    return {
-      success: false,
-      error: {
-        code: classified.category,
-        message: classified.userMessage,
-        suggestion: classified.actionHint,
-        recoveryActions: classified.recoveryActions,
-      },
-    };
-  } catch (err) {
-    clearTimeout(timeoutId);
-
-    // Network errors (ECONNREFUSED, ENOTFOUND, timeout, etc.)
-    const classified = classifyError({
-      error: err,
-      providerName: config.providerName,
-      baseUrl: config.baseUrl,
-      providerMeta: config.providerMeta,
-    });
-
-    return {
-      success: false,
-      error: {
-        code: classified.category,
-        message: classified.userMessage,
-        suggestion: classified.actionHint,
-        recoveryActions: classified.recoveryActions,
-      },
-    };
-  }
 }

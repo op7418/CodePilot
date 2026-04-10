@@ -211,22 +211,15 @@ function handleSSEEvent(
           if (parsed.details) {
             errorDisplay += `\n\nDetails: ${parsed.details}`;
           }
-          // Render recovery actions as markdown links
-          if (parsed.recoveryActions && parsed.recoveryActions.length > 0) {
-            const links: string[] = [];
-            for (const a of parsed.recoveryActions as Array<{ label: string; url?: string; action?: string }>) {
-              if (a.url) {
-                links.push(`[${a.label}](${a.url})`);
-              } else if (a.action === 'open_settings') {
-                links.push(`[${a.label}](/settings#providers)`);
-              } else if (a.action === 'new_conversation') {
-                links.push(`[${a.label}](/chat)`);
-              }
-              // 'retry' is handled by the retryable flag, not as a link
-            }
-            if (links.length > 0) {
-              errorDisplay += '\n\n' + links.join(' · ');
-            }
+          // Add diagnostic guidance for provider/auth related errors
+          const diagCategories = new Set([
+            'AUTH_REJECTED', 'AUTH_FORBIDDEN', 'AUTH_STYLE_MISMATCH',
+            'NO_CREDENTIALS', 'PROVIDER_NOT_APPLIED', 'MODEL_NOT_AVAILABLE',
+            'NETWORK_UNREACHABLE', 'ENDPOINT_NOT_FOUND', 'PROCESS_CRASH',
+            'CLI_NOT_FOUND', 'UNSUPPORTED_FEATURE',
+          ]);
+          if (diagCategories.has(parsed.category)) {
+            errorDisplay += '\n\n💡 [Run Provider Diagnostics](/settings#providers) to troubleshoot, or check the [Provider Setup Guide](https://www.codepilot.sh/docs/providers).';
           }
         } else {
           errorDisplay = event.data;
