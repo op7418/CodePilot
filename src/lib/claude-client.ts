@@ -300,7 +300,7 @@ function buildFallbackContext(params: {
   }
 
   lines.push('<conversation_history>');
-  lines.push('(This is a summary of earlier conversation turns for context. Tool calls shown here were already executed — do not repeat them or output their markers as text.)');
+  lines.push('(This is a summary of earlier conversation turns for context. Tool calls shown here were already executed — do not repeat them or output their markers as text. NEVER output "[Tool call: ...]" brackets as text. Use the actual tool API to execute tools.)');
   for (const msg of selected) {
     lines.push(`${msg.role === 'user' ? 'Human' : 'Assistant'}: ${msg.content}`);
   }
@@ -1181,9 +1181,9 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
                     let resultContent = typeof block.content === 'string'
                       ? block.content
                       : Array.isArray(block.content)
-                        ? block.content
-                            .filter((c: { type: string }) => c.type === 'text')
-                            .map((c: { text?: string }) => c.text)
+                        ? (block.content as Array<{ type: string; text?: string }>)
+                            .filter((c) => c.type === 'text')
+                            .map((c) => c.text)
                             .join('\n')
                         : String(block.content ?? '');
 

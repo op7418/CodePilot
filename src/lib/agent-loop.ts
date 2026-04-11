@@ -15,7 +15,7 @@ import type { SSEEvent, TokenUsage } from '@/types';
 import { createModel } from './ai-provider';
 import { assembleTools, READ_ONLY_TOOLS } from './agent-tools';
 import { reportNativeError } from './error-classifier';
-import { pruneOldToolResults } from './context-pruner';
+import { pruneOldToolResults, estimateTokens } from './context-pruner';
 import { emit as emitEvent } from './runtime/event-bus';
 import { createCheckpoint } from './file-checkpoint';
 import type { PermissionMode } from './permission-checker';
@@ -168,9 +168,25 @@ export function runAgentLoop(options: AgentLoopOptions): ReadableStream<string> 
           sessionModel,
         });
 
-        // 2. Load conversation history from DB
-        const { messages: dbMessages } = getMessages(sessionId, { limit: 200, excludeHeartbeatAck: true });
-        const historyMessages = buildCoreMessages(dbMessages);
+        // 2. Load conversation history from DB with token-aware limiting.
+        // Start with 200 messages, then reduce if the context exceeds the model's window.
+        // This prevents context overflow that causes the model to degrade and output
+        // tool calls as text instead of using the tool API.
+        const contextWindowTokens = context1m ? 1_000_000 : 200_000;
+        const maxContextTokens = Math.floor(contextWindowTokens * 0.75); // Reserve 25% for response
+        let msgLimit = 200;
+        const { messages: dbMessages } = getMessages(sessionId, { limit: msgLimit, excludeHeartbeatAck: true });
+        let historyMessages = buildCoreMessages(dbMessages);
+        {
+          let estimatedTokens = estimateTokens(historyMessages);
+          while (estimatedTokens > maxContextTokens && msgLimit > 20) {
+            msgLimit = Math.max(20, Math.floor(msgLimit * 0.6));
+            console.log(`[agent-loop] Context too large (${estimatedTokens} tokens est.), reducing to ${msgLimit} messages`);
+            const { messages: reducedMsgs } = getMessages(sessionId, { limit: msgLimit, excludeHeartbeatAck: true });
+            historyMessages = buildCoreMessages(reducedMsgs);
+            estimatedTokens = estimateTokens(historyMessages);
+          }
+        }
 
         // The chat route persists the user message to DB BEFORE calling us,
         // so for normal messages it's already the last entry in historyMessages.
@@ -219,7 +235,8 @@ export function runAgentLoop(options: AgentLoopOptions): ReadableStream<string> 
         onRuntimeStatusChange?.('streaming');
         let step = 0;
         const totalUsage: TokenUsage = { input_tokens: 0, output_tokens: 0 };
-        let lastToolNames: string[] = []; // for doom loop detection
+        let lastToolKey = ''; // for doom loop detection
+        let doomLoopCount = 0;
         let messages = historyMessages;
 
         while (step < maxSteps) {
@@ -419,15 +436,25 @@ export function runAgentLoop(options: AgentLoopOptions): ReadableStream<string> 
             break;
           }
 
-          // Doom loop detection: same tool(s) called 3 times in a row
+          // Doom loop detection: same tool(s) called N times in a row → break
           const toolKey = stepToolNames.sort().join(',');
-          const lastKey = lastToolNames.sort().join(',');
-          if (toolKey === lastKey) {
-            const repeatCount = (step > 1) ? DOOM_LOOP_THRESHOLD : 1;
-            // Simple heuristic: track repeats via a counter we'd need to add
-            // For now, just detect immediate repeats and break after threshold
+          if (toolKey === lastToolKey) {
+            doomLoopCount++;
+            if (doomLoopCount >= DOOM_LOOP_THRESHOLD) {
+              console.warn(`[agent-loop] Doom loop detected: "${toolKey}" called ${doomLoopCount + 1} times in a row — breaking`);
+              controller.enqueue(formatSSE({
+                type: 'error',
+                data: JSON.stringify({
+                  category: 'DOOM_LOOP',
+                  userMessage: `Agent stopped: tool "${toolKey}" was called ${doomLoopCount + 1} times in a row with no progress.`,
+                }),
+              }));
+              break;
+            }
+          } else {
+            doomLoopCount = 0;
           }
-          lastToolNames = stepToolNames;
+          lastToolKey = toolKey;
 
           // Update messages for next iteration.
           // streamText returns the full message list including our input + model response.
