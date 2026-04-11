@@ -1926,6 +1926,38 @@ export function releaseSessionLock(sessionId: string, lockId: string): boolean {
 }
 
 /**
+ * Clean up all expired or stale session locks.
+ * Call on startup to recover from crashes that left locks behind.
+ */
+export function cleanupStaleLocks(): number {
+  const db = getDb();
+  const now = new Date().toISOString().replace('T', ' ').split('.')[0];
+  const result = db.prepare('DELETE FROM session_runtime_locks WHERE expires_at < ?').run(now);
+  if (result.changes > 0) {
+    // Reset runtime status for sessions that were left in 'running' state
+    db.prepare(
+      "UPDATE chat_sessions SET runtime_status = 'idle', runtime_error = 'Recovered from stale lock' WHERE runtime_status = 'running'"
+    ).run();
+  }
+  return result.changes;
+}
+
+/**
+ * Force-release a session lock regardless of lock_id.
+ * Use when the UI needs to break a stuck session.
+ */
+export function forceReleaseSessionLock(sessionId: string): boolean {
+  const db = getDb();
+  const result = db.prepare(
+    'DELETE FROM session_runtime_locks WHERE session_id = ?'
+  ).run(sessionId);
+  if (result.changes > 0) {
+    setSessionRuntimeStatus(sessionId, 'idle', 'Force-released by user');
+  }
+  return result.changes > 0;
+}
+
+/**
  * Update the runtime status of a session.
  */
 export function setSessionRuntimeStatus(

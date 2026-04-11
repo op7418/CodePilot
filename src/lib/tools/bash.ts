@@ -5,6 +5,7 @@
 import { tool } from 'ai';
 import { z } from 'zod';
 import { spawn } from 'child_process';
+import fs from 'fs';
 import type { ToolContext } from './index';
 
 const MAX_OUTPUT_BYTES = 1024 * 1024; // 1MB
@@ -24,14 +25,21 @@ export function createBashTool(ctx: ToolContext) {
     }),
     execute: async ({ command, timeout }, { abortSignal }) => {
       const timeoutMs = timeout ?? DEFAULT_TIMEOUT_MS;
+      const cwd = ctx.workingDirectory;
+
+      // Validate working directory exists before spawning
+      if (!fs.existsSync(cwd)) {
+        return `Error: working directory does not exist: ${cwd}`;
+      }
 
       return new Promise<string>((resolve) => {
         const chunks: Buffer[] = [];
         let totalBytes = 0;
         let truncated = false;
+        let killTimer: ReturnType<typeof setTimeout> | null = null;
 
         const proc = spawn('bash', ['-c', command], {
-          cwd: ctx.workingDirectory,
+          cwd,
           env: { ...process.env, TERM: 'dumb' },
           stdio: ['ignore', 'pipe', 'pipe'],
           timeout: timeoutMs,
@@ -48,22 +56,41 @@ export function createBashTool(ctx: ToolContext) {
           }
         };
 
-        proc.stdout?.on('data', collect);
-        proc.stderr?.on('data', collect);
+        // Stream tool output to the client as it arrives
+        const streamOutput = (data: Buffer) => {
+          if (ctx.emitSSE) {
+            try {
+              ctx.emitSSE({ type: 'tool_output', data: data.toString('utf-8') });
+            } catch { /* stream closed */ }
+          }
+        };
+
+        proc.stdout?.on('data', (data: Buffer) => {
+          collect(data);
+          streamOutput(data);
+        });
+        proc.stderr?.on('data', (data: Buffer) => {
+          collect(data);
+          streamOutput(data);
+        });
 
         // Handle abort
         const onAbort = () => {
           proc.kill('SIGTERM');
-          setTimeout(() => proc.kill('SIGKILL'), 3000);
+          killTimer = setTimeout(() => {
+            try { proc.kill('SIGKILL'); } catch { /* already dead */ }
+          }, 3000);
         };
         abortSignal?.addEventListener('abort', onAbort, { once: true });
 
         proc.on('close', (code, signal) => {
           abortSignal?.removeEventListener('abort', onAbort);
+          if (killTimer) clearTimeout(killTimer);
 
           let output = Buffer.concat(chunks).toString('utf-8');
           if (truncated) {
-            output += '\n\n[Output truncated — exceeded 1MB limit]';
+            const droppedBytes = totalBytes - MAX_OUTPUT_BYTES;
+            output += `\n\n[Output truncated at 1MB — ${droppedBytes} bytes dropped]`;
           }
 
           if (signal === 'SIGTERM' || signal === 'SIGKILL') {
@@ -78,6 +105,7 @@ export function createBashTool(ctx: ToolContext) {
         });
 
         proc.on('error', (err) => {
+          if (killTimer) clearTimeout(killTimer);
           resolve(`Error executing command: ${err.message}`);
         });
       });

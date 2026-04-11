@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { streamClaude } from '@/lib/claude-client';
-import { addMessage, getMessages, getSession, getSessionSummary, updateSessionTitle, updateSdkSessionId, updateSessionModel, updateSessionProvider, updateSessionProviderId, getSetting, acquireSessionLock, renewSessionLock, releaseSessionLock, setSessionRuntimeStatus, syncSdkTasks } from '@/lib/db';
+import { addMessage, getMessages, getSession, getSessionSummary, updateSessionTitle, updateSdkSessionId, updateSessionModel, updateSessionProvider, updateSessionProviderId, getSetting, acquireSessionLock, renewSessionLock, releaseSessionLock, setSessionRuntimeStatus, syncSdkTasks, cleanupStaleLocks } from '@/lib/db';
 import { resolveProvider as resolveProviderUnified } from '@/lib/provider-resolver';
 import { notifySessionStart, notifySessionComplete, notifySessionError } from '@/lib/telegram-bot';
 import { extractCompletion } from '@/lib/onboarding-completion';
@@ -12,6 +12,8 @@ import { ensureSchedulerRunning } from '@/lib/task-scheduler';
 
 // Start the task scheduler on first API call
 ensureSchedulerRunning();
+// Clean up any session locks left behind by crashes
+try { const cleaned = cleanupStaleLocks(); if (cleaned > 0) console.log(`[chat API] Cleaned up ${cleaned} stale session lock(s)`); } catch { /* best effort */ }
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -351,13 +353,25 @@ export async function POST(request: NextRequest) {
       systemPromptLength: finalSystemPrompt?.length || 0,
       systemPromptFirst200: finalSystemPrompt?.slice(0, 200) || 'none',
     });
+    // Validate working directory exists — stale sessions may reference deleted directories
+    const sessionCwd = session.sdk_cwd || session.working_directory || undefined;
+    if (sessionCwd && !fs.existsSync(sessionCwd)) {
+      console.warn(`[chat API] Working directory does not exist: ${sessionCwd}`);
+      releaseSessionLock(session_id, lockId);
+      setSessionRuntimeStatus(session_id, 'idle');
+      return new Response(
+        JSON.stringify({ error: `Working directory no longer exists: ${sessionCwd}`, code: 'INVALID_CWD' }),
+        { status: 400, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+
     const stream = streamClaude({
       prompt: content,
       sessionId: session_id,
       sdkSessionId: session.sdk_session_id || undefined,
       model: resolved.upstreamModel || resolved.model || effectiveModel,
       systemPrompt: finalSystemPrompt,
-      workingDirectory: session.sdk_cwd || session.working_directory || undefined,
+      workingDirectory: sessionCwd,
       abortController,
       permissionMode,
       files: fileAttachments,

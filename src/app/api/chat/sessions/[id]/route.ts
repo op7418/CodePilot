@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import { deleteSession, getSession, updateSessionWorkingDirectory, updateSessionTitle, updateSessionMode, updateSessionModel, updateSessionProviderId, clearSessionMessages, updateSdkSessionId, updateSessionPermissionProfile } from '@/lib/db';
+import { deleteSession, getSession, updateSessionWorkingDirectory, updateSessionTitle, updateSessionMode, updateSessionModel, updateSessionProviderId, clearSessionMessages, updateSdkSessionId, updateSessionPermissionProfile, forceReleaseSessionLock } from '@/lib/db';
 import { autoApprovePendingForSession } from '@/lib/bridge/permission-broker';
 
 export async function GET(
@@ -87,6 +87,9 @@ export async function PATCH(
     }
     if (body.clear_messages) {
       clearSessionMessages(id);
+    }
+    if (body.force_unlock) {
+      forceReleaseSessionLock(id);
     }
 
     const updated = getSession(id);

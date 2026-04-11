@@ -9,8 +9,7 @@
 
 import type { ModelMessage } from 'ai';
 
-const RECENT_TURNS_TO_KEEP = 6; // Keep last N messages fully intact
-const TRUNCATED_RESULT_MARKER = '[Tool result truncated — see earlier in conversation]';
+const RECENT_TURNS_TO_KEEP = 16; // Keep last N messages fully intact (~8 exchanges)
 
 /**
  * Prune old tool results from message history to reduce token usage.
@@ -37,9 +36,14 @@ export function pruneOldToolResults(messages: ModelMessage[]): ModelMessage[] {
         ...msg,
         content: (msg.content as Array<{ type: string; [k: string]: unknown }>).map((part) => {
           if (part.type === 'tool-result') {
+            const toolName = ('toolName' in part && typeof part.toolName === 'string') ? part.toolName : 'unknown';
+            const original = ('output' in part && part.output && typeof part.output === 'object' && 'value' in (part.output as Record<string, unknown>))
+              ? String((part.output as Record<string, string>).value) : '';
+            const excerpt = original.slice(0, 200);
+            const marker = `[Pruned ${toolName} result${excerpt ? ': ' + excerpt + (original.length > 200 ? '...' : '') : ''}]`;
             return {
               ...part,
-              output: { type: 'text' as const, value: TRUNCATED_RESULT_MARKER },
+              output: { type: 'text' as const, value: marker },
             };
           }
           return part;

@@ -67,7 +67,8 @@ export function buildCoreMessages(dbMessages: Message[]): ModelMessage[] {
 
 /**
  * Ensure messages alternate between user and assistant/tool roles.
- * Consecutive user messages are merged. Consecutive assistant messages keep the last.
+ * Consecutive user messages are merged. Consecutive assistant messages are merged
+ * (preserving all content parts) to avoid silently dropping tool call history.
  */
 function enforceAlternation(messages: ModelMessage[]): ModelMessage[] {
   if (messages.length <= 1) return messages;
@@ -79,17 +80,63 @@ function enforceAlternation(messages: ModelMessage[]): ModelMessage[] {
     const curr = messages[i];
 
     if (curr.role === prev.role && curr.role === 'user') {
-      // Merge consecutive user messages, preserving multi-part content
       result[result.length - 1] = { role: 'user', content: mergeUserContent(prev.content, curr.content) };
     } else if (curr.role === prev.role && curr.role === 'assistant') {
-      // Keep the later assistant message (more recent)
-      result[result.length - 1] = curr;
+      result[result.length - 1] = {
+        role: 'assistant',
+        content: mergeAssistantContent(prev.content, curr.content),
+      } as AssistantModelMessage;
     } else {
       result.push(curr);
     }
   }
 
   return result;
+}
+
+// ── Sanitization ────────────────────────────────────────────────
+
+/**
+ * Detect and clean assistant text blocks that contain fake tool call syntax.
+ * When the model outputs "(used Bash: {...})" as text instead of making a real
+ * tool_use API call, those patterns pollute the conversation history and cause
+ * the model to imitate them on future turns (feedback loop).
+ *
+ * Also strips leaked thinking tags like "(antml:thinking>..." which indicate
+ * protocol confusion from context overload.
+ */
+function sanitizeAssistantText(text: string): string {
+  // Strip fake tool call patterns: (used ToolName: {json...}) and [Tool call: Name — ...]
+  let cleaned = text.replace(/\(used\s+\w+:\s*\{[^}]*\}[^)]*\)/g, '');
+  cleaned = cleaned.replace(/\[Tool call:\s+\w+\s*—[^\]]*\]/g, '');
+  // Strip leaked thinking tags: (antml:thinking>...) or </thinking>
+  cleaned = cleaned.replace(/\(antml:thinking>[\s\S]*?(?:<\/antml:thinking>|\))/g, '');
+  cleaned = cleaned.replace(/<\/?antml:thinking>/g, '');
+  // Collapse multiple blank lines left by stripping
+  cleaned = cleaned.replace(/\n{3,}/g, '\n\n').trim();
+  return cleaned;
+}
+
+/**
+ * Check if a text block consists entirely (or almost entirely) of fake tool calls.
+ * If so, replace with a brief marker instead of sending garbage to the model.
+ * Only sanitize if >80% of the content appears to be fake tool calls.
+ */
+function cleanAssistantTextBlock(text: string): string {
+  const originalLength = text.trim().length;
+  if (originalLength < 50) return text; // Don't sanitize short texts
+
+  const sanitized = sanitizeAssistantText(text);
+  const removedLength = originalLength - sanitized.length;
+  const removalRatio = removedLength / originalLength;
+
+  // Only apply sanitization if >80% was fake tool calls
+  if (removalRatio > 0.8) {
+    return sanitized || '[Tool calls in this turn were not executed]';
+  }
+
+  // Otherwise return original text untouched
+  return text;
 }
 
 // ── Internal ────────────────────────────────────────────────────
@@ -109,6 +156,19 @@ function mergeUserContent(a: any, b: any): any {
     return merged.map((p: { text?: string }) => p.text || '').join('\n\n').trim();
   }
   return merged;
+}
+
+/**
+ * Merge two assistant message contents, preserving all content parts (text, tool-call, etc.).
+ */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function mergeAssistantContent(a: any, b: any): Exclude<AssistantContent, string> {
+  const toArray = (c: unknown): Exclude<AssistantContent, string> => {
+    if (typeof c === 'string') return c.trim() ? [{ type: 'text' as const, text: c }] : [];
+    if (Array.isArray(c)) return c as Exclude<AssistantContent, string>;
+    return [];
+  };
+  return [...toArray(a), ...toArray(b)];
 }
 
 /**
@@ -229,7 +289,8 @@ function convertAssistantBlocks(blocks: MessageContentBlock[]): ModelMessage[] {
           flushToolResults();
         }
         if (block.text.trim()) {
-          assistantParts.push({ type: 'text', text: block.text });
+          const cleaned = cleanAssistantTextBlock(block.text);
+          assistantParts.push({ type: 'text', text: cleaned });
         }
         break;
 
