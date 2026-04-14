@@ -6,7 +6,6 @@
  */
 
 import {
-  findClaudeBinary,
   getClaudeVersion,
   findAllClaudeBinaries,
   isWindows,
@@ -686,30 +685,7 @@ function sanitizeEnvForProbe(env: Record<string, string>): Record<string, string
   return clean;
 }
 
-/**
- * On Windows, resolve .cmd wrapper to the underlying .js script.
- */
-function resolveScriptFromCmd(cmdPath: string): string | undefined {
-  try {
-    const content = fs.readFileSync(cmdPath, 'utf-8');
-    const cmdDir = path.dirname(cmdPath);
-    const patterns = [
-      /"%~dp0\\([^"]*claude[^"]*\.js)"/i,
-      /%~dp0\\(\S*claude\S*\.js)/i,
-      /"%dp0%\\([^"]*claude[^"]*\.js)"/i,
-    ];
-    for (const re of patterns) {
-      const m = content.match(re);
-      if (m) {
-        const resolved = path.normalize(path.join(cmdDir, m[1]));
-        if (fs.existsSync(resolved)) return resolved;
-      }
-    }
-  } catch {
-    // ignore read errors
-  }
-  return undefined;
-}
+// Removed resolveScriptFromCmd() — let SDK use built-in cli.js with expanded PATH
 
 /**
  * Live probe — spawns a minimal Claude Code process to verify the
@@ -793,14 +769,7 @@ async function runLiveProbe(): Promise<ProbeResult> {
     stderr: stderrCallback,
   };
 
-  // Resolve executable path (handle Windows .cmd wrappers)
-  const ext = path.extname(claudePath).toLowerCase();
-  if (ext === '.cmd' || ext === '.bat') {
-    const scriptPath = resolveScriptFromCmd(claudePath);
-    if (scriptPath) queryOptions.pathToClaudeCodeExecutable = scriptPath;
-  } else {
-    queryOptions.pathToClaudeCodeExecutable = claudePath;
-  }
+  // Let SDK use its built-in cli.js with expanded PATH from getExpandedPath()
 
   // 6. Run the probe
   try {

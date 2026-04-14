@@ -22,7 +22,7 @@ import { normalizeMessageContent, microCompactMessage } from './message-normaliz
 import { roughTokenEstimate } from './context-estimator';
 import { getSetting, updateSdkSessionId, createPermissionRequest } from './db';
 import { resolveForClaudeCode, toClaudeCodeEnv } from './provider-resolver';
-import { findClaudeBinary, findGitBash, getExpandedPath, invalidateClaudePathCache } from './platform';
+import { findGitBash, getExpandedPath } from './platform';
 import { notifyPermissionRequest, notifyGeneric } from './telegram-bot';
 import { classifyError, formatClassifiedError } from './error-classifier';
 import { resolveWorkingDirectory } from './working-directory';
@@ -55,49 +55,8 @@ function sanitizeEnv(env: Record<string, string>): Record<string, string> {
   return clean;
 }
 
-/**
- * On Windows, npm installs CLI tools as .cmd wrappers that can't be
- * spawned without shell:true. Parse the wrapper to extract the real
- * .js script path so we can pass it to the SDK directly.
- */
-function resolveScriptFromCmd(cmdPath: string): string | undefined {
-  try {
-    const content = fs.readFileSync(cmdPath, 'utf-8');
-    const cmdDir = path.dirname(cmdPath);
-
-    // npm .cmd wrappers typically contain a line like:
-    //   "%~dp0\node_modules\@anthropic-ai\claude-code\cli.js" %*
-    // Match paths containing claude-code or claude-agent and ending in .js
-    const patterns = [
-      // Quoted: "%~dp0\...\cli.js"
-      /"%~dp0\\([^"]*claude[^"]*\.js)"/i,
-      // Unquoted: %~dp0\...\cli.js
-      /%~dp0\\(\S*claude\S*\.js)/i,
-      // Quoted with %dp0%: "%dp0%\...\cli.js"
-      /"%dp0%\\([^"]*claude[^"]*\.js)"/i,
-    ];
-
-    for (const re of patterns) {
-      const m = content.match(re);
-      if (m) {
-        const resolved = path.normalize(path.join(cmdDir, m[1]));
-        if (fs.existsSync(resolved)) return resolved;
-      }
-    }
-  } catch {
-    // ignore read errors
-  }
-  return undefined;
-}
-
-let cachedClaudePath: string | null | undefined;
-
-function findClaudePath(): string | undefined {
-  if (cachedClaudePath !== undefined) return cachedClaudePath || undefined;
-  const found = findClaudeBinary();
-  cachedClaudePath = found ?? null;
-  return found;
-}
+// Removed resolveScriptFromCmd() and findClaudePath() — let SDK use its built-in cli.js
+// with expanded PATH from getExpandedPath() which includes all Claude installation paths.
 
 /**
  * Invalidate the cached Claude binary path in this module AND in platform.ts.
@@ -364,16 +323,7 @@ export async function generateTextViaSdk(params: {
     queryOptions.model = params.model;
   }
 
-  const claudePath = findClaudePath();
-  if (claudePath) {
-    const ext = path.extname(claudePath).toLowerCase();
-    if (ext === '.cmd' || ext === '.bat') {
-      const scriptPath = resolveScriptFromCmd(claudePath);
-      if (scriptPath) queryOptions.pathToClaudeCodeExecutable = scriptPath;
-    } else {
-      queryOptions.pathToClaudeCodeExecutable = claudePath;
-    }
-  }
+  // Let SDK use its built-in cli.js with expanded PATH from getExpandedPath()
 
   const conversation = query({
     prompt: params.prompt,
@@ -609,24 +559,7 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
           queryOptions.allowDangerouslySkipPermissions = true;
         }
 
-        // Find claude binary for packaged app where PATH is limited.
-        // On Windows, npm installs Claude CLI as a .cmd wrapper which cannot
-        // be spawned directly without shell:true. Parse the wrapper to
-        // extract the real .js script path and pass that to the SDK instead.
-        const claudePath = findClaudePath();
-        if (claudePath) {
-          const ext = path.extname(claudePath).toLowerCase();
-          if (ext === '.cmd' || ext === '.bat') {
-            const scriptPath = resolveScriptFromCmd(claudePath);
-            if (scriptPath) {
-              queryOptions.pathToClaudeCodeExecutable = scriptPath;
-            } else {
-              console.warn('[claude-client] Could not resolve .js path from .cmd wrapper, falling back to SDK resolution:', claudePath);
-            }
-          } else {
-            queryOptions.pathToClaudeCodeExecutable = claudePath;
-          }
-        }
+        // Let SDK use its built-in cli.js with expanded PATH from getExpandedPath()
 
         if (model) {
           queryOptions.model = model;
