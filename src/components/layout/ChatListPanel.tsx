@@ -17,12 +17,7 @@ import {
   Gear,
 } from "@/components/ui/icon";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
-import {
-  Dialog,
-  DialogContent,
-} from "@/components/ui/dialog";
 import {
   Tooltip,
   TooltipContent,
@@ -68,8 +63,6 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
   const [sessions, setSessions] = useState<ChatSession[]>([]);
   const [hoveredSession, setHoveredSession] = useState<string | null>(null);
   const [deletingSession, setDeletingSession] = useState<string | null>(null);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [searchDialogOpen, setSearchDialogOpen] = useState(false);
   const [expandedSessionGroups, setExpandedSessionGroups] = useState<Set<string>>(new Set());
   const SESSION_TRUNCATE_LIMIT = 10;
   // importDialogOpen removed — Import CLI moved to Settings
@@ -376,29 +369,18 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
     }
   };
 
-  const isSearching = searchQuery.length > 0;
-
   const splitSessionIds = useMemo(
     () => new Set(splitSessions.map((s) => s.sessionId)),
     [splitSessions]
   );
 
   const filteredSessions = useMemo(() => {
-    let result = sessions;
-    if (searchQuery) {
-      result = result.filter(
-        (s) =>
-          s.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-          (s.project_name &&
-            s.project_name.toLowerCase().includes(searchQuery.toLowerCase()))
-      );
-    }
     // Exclude sessions in split group (they are shown in the split section)
     if (isSplitActive) {
-      result = result.filter((s) => !splitSessionIds.has(s.id));
+      return sessions.filter((s) => !splitSessionIds.has(s.id));
     }
-    return result;
-  }, [sessions, searchQuery, isSplitActive, splitSessionIds]);
+    return sessions;
+  }, [sessions, isSplitActive, splitSessionIds]);
 
   const projectGroups = useMemo(() => {
     const groups = groupSessionsByProject(filteredSessions);
@@ -473,7 +455,7 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
               variant="outline"
               size="icon-sm"
               className="h-8 w-8 shrink-0"
-              onClick={() => setSearchDialogOpen(true)}
+              onClick={() => window.dispatchEvent(new CustomEvent('open-global-search'))}
             >
               <MagnifyingGlass size={14} />
               <span className="sr-only">{t('chatList.searchSessions')}</span>
@@ -556,12 +538,12 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
 
           {filteredSessions.length === 0 && (!isSplitActive || splitSessions.length === 0) ? (
             <p className="px-2.5 py-3 text-[11px] text-muted-foreground/60">
-              {searchQuery ? "No matching threads" : t('chatList.noSessions')}
+              {t('chatList.noSessions')}
             </p>
           ) : (
             projectGroups.map((group) => {
               const isCollapsed =
-                !isSearching && collapsedProjects.has(group.workingDirectory);
+                collapsedProjects.has(group.workingDirectory);
               const isFolderHovered =
                 hoveredFolder === group.workingDirectory;
 
@@ -697,61 +679,6 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
           </Button>
         </Link>
       </div>
-
-      {/* Search Dialog */}
-      <Dialog open={searchDialogOpen} onOpenChange={(open) => { setSearchDialogOpen(open); if (!open) setSearchQuery(""); }}>
-        <DialogContent className="sm:max-w-md p-0 max-h-[60vh] flex flex-col overflow-hidden" showCloseButton={false}>
-          <div className="p-3 shrink-0">
-            <div className="relative">
-              <MagnifyingGlass
-                size={14}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground"
-              />
-              <Input
-                placeholder={t('chatList.searchSessions')}
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pl-9"
-                autoFocus
-              />
-            </div>
-          </div>
-          {searchQuery && (
-            <div className="overflow-y-auto px-3 pb-3 flex-1 min-h-0">
-              {filteredSessions.length === 0 ? (
-                <p className="text-sm text-muted-foreground py-3 text-center">
-                  {t('chatList.noSessions')}
-                </p>
-              ) : (
-                <div className="flex flex-col gap-0.5">
-                  {filteredSessions.slice(0, 20).map((session) => (
-                    <button
-                      key={session.id}
-                      className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left text-sm hover:bg-accent transition-colors"
-                      onClick={() => {
-                        router.push(`/chat/${session.id}`);
-                        setSearchDialogOpen(false);
-                        setSearchQuery("");
-                      }}
-                    >
-                      <div className="flex-1 min-w-0">
-                        <p className="truncate text-sm">{session.title}</p>
-                        {session.project_name && (
-                          <p className="truncate text-xs text-muted-foreground">{session.project_name}</p>
-                        )}
-                      </div>
-                      <span className="text-xs text-muted-foreground shrink-0">
-                        {formatRelativeTime(session.updated_at, t)}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              )}
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
-
 
       {/* Folder Picker Dialog */}
       <FolderPicker
