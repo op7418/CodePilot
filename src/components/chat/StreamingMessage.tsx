@@ -106,6 +106,7 @@ interface StreamingMessageProps {
   content: string;
   isStreaming: boolean;
   sessionId?: string;
+  startedAt?: number;
   toolUses?: ToolUseInfo[];
   toolResults?: ToolResultInfo[];
   streamingToolOutput?: string;
@@ -196,17 +197,15 @@ function ThinkingPhaseLabel() {
   return <Shimmer>{text}</Shimmer>;
 }
 
-function ElapsedTimer() {
-  const [elapsed, setElapsed] = useState(0);
-  const startRef = useRef(0);
+function ElapsedTimer({ startedAt }: { startedAt: number }) {
+  const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - startedAt) / 1000));
 
   useEffect(() => {
-    startRef.current = Date.now();
     const interval = setInterval(() => {
-      setElapsed(Math.floor((Date.now() - startRef.current) / 1000));
+      setElapsed(Math.floor((Date.now() - startedAt) / 1000));
     }, 1000);
     return () => clearInterval(interval);
-  }, []);
+  }, [startedAt]);
 
   const mins = Math.floor(elapsed / 60);
   const secs = elapsed % 60;
@@ -218,7 +217,7 @@ function ElapsedTimer() {
   );
 }
 
-function StreamingStatusBar({ statusText, onForceStop }: { statusText?: string; onForceStop?: () => void }) {
+function StreamingStatusBar({ statusText, onForceStop, startedAt }: { statusText?: string; onForceStop?: () => void; startedAt?: number }) {
   const displayText = statusText || 'Thinking';
 
   // Parse elapsed seconds from statusText like "Running bash... (45s)"
@@ -241,7 +240,7 @@ function StreamingStatusBar({ statusText, onForceStop }: { statusText?: string; 
         )}
       </div>
       <span className="text-muted-foreground/50">|</span>
-      <ElapsedTimer />
+      <ElapsedTimer startedAt={startedAt ?? Date.now()} />
       {isCritical && onForceStop && (
         <Button
           variant="outline"
@@ -260,6 +259,7 @@ export function StreamingMessage({
   content,
   isStreaming,
   sessionId,
+  startedAt,
   toolUses = [],
   toolResults = [],
   streamingToolOutput,
@@ -542,7 +542,7 @@ export function StreamingMessage({
             return t('widget.streaming');
           })() : undefined)
           || (content && content.length > 0 ? t('streaming.generating') : undefined)
-        } onForceStop={onForceStop} />}
+        } onForceStop={onForceStop} startedAt={startedAt} />}
       </MessageContent>
     </AIMessage>
   );
