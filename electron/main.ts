@@ -1385,7 +1385,8 @@ app.whenReady().then(async () => {
     let port: number;
 
     if (isDev) {
-      port = process.env.PORT ? parseInt(process.env.PORT, 10) : 3000;
+      const envPort = process.env.PORT ? parseInt(process.env.PORT, 10) : NaN;
+      port = Number.isNaN(envPort) ? 3000 : envPort;
       console.log(`Dev mode: connecting to http://127.0.0.1:${port}`);
       serverPort = port;
       createWindow(`http://127.0.0.1:${port}`);
