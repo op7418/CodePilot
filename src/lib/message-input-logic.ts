@@ -100,8 +100,11 @@ export function resolveItemSelection(
     return { action: 'immediate_command', commandValue: item.value };
   }
 
-  // Non-immediate commands: show as badge
+  // Non-immediate commands: show as badge, preserving any text outside the trigger
   if (popoverMode === 'skill') {
+    const before = inputValue.slice(0, triggerPos);
+    const cursorEnd = triggerPos + popoverFilter.length + 1;
+    const after = inputValue.slice(cursorEnd);
     return {
       action: 'set_badge',
       badge: {
@@ -111,6 +114,7 @@ export function resolveItemSelection(
         kind: item.kind || 'slash_command',
         installedSource: item.installedSource,
       },
+      newInputValue: before + after,
     };
   }
 

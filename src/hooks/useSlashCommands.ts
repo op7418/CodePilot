@@ -196,7 +196,7 @@ export function useSlashCommands(opts: {
         // Block during streaming — badges dispatch as slash/skill prompts, not queueable
         if (isStreaming) { closePopover(); return; }
         setBadge(result.badge!);
-        setInputValue('');
+        setInputValue(result.newInputValue ?? '');
         closePopover();
         setTimeout(() => textareaRef.current?.focus(), 0);
         return;
