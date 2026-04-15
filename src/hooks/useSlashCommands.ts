@@ -198,7 +198,13 @@ export function useSlashCommands(opts: {
         setBadge(result.badge!);
         setInputValue(result.newInputValue ?? '');
         closePopover();
-        setTimeout(() => textareaRef.current?.focus(), 0);
+        setTimeout(() => {
+          const el = textareaRef.current;
+          if (!el) return;
+          el.focus();
+          const pos = el.value.length;
+          el.setSelectionRange(pos, pos);
+        }, 0);
         return;
 
       case 'insert_file_mention':
