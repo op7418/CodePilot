@@ -106,7 +106,7 @@ interface StreamingMessageProps {
   content: string;
   isStreaming: boolean;
   sessionId?: string;
-  startedAt?: number;
+  startedAt: number;
   toolUses?: ToolUseInfo[];
   toolResults?: ToolResultInfo[];
   streamingToolOutput?: string;
@@ -200,6 +200,11 @@ function ThinkingPhaseLabel() {
 function ElapsedTimer({ startedAt }: { startedAt: number }) {
   const [elapsed, setElapsed] = useState(() => Math.floor((Date.now() - startedAt) / 1000));
 
+  // Reset elapsed when the stream start time changes (e.g. new turn or session switch)
+  useEffect(() => {
+    setElapsed(Math.floor((Date.now() - startedAt) / 1000));
+  }, [startedAt]);
+
   useEffect(() => {
     const interval = setInterval(() => {
       setElapsed(Math.floor((Date.now() - startedAt) / 1000));
@@ -217,7 +222,7 @@ function ElapsedTimer({ startedAt }: { startedAt: number }) {
   );
 }
 
-function StreamingStatusBar({ statusText, onForceStop, startedAt }: { statusText?: string; onForceStop?: () => void; startedAt?: number }) {
+function StreamingStatusBar({ statusText, onForceStop, startedAt }: { statusText?: string; onForceStop?: () => void; startedAt: number }) {
   const displayText = statusText || 'Thinking';
 
   // Parse elapsed seconds from statusText like "Running bash... (45s)"
@@ -240,7 +245,7 @@ function StreamingStatusBar({ statusText, onForceStop, startedAt }: { statusText
         )}
       </div>
       <span className="text-muted-foreground/50">|</span>
-      <ElapsedTimer startedAt={startedAt ?? Date.now()} />
+      <ElapsedTimer startedAt={startedAt} />
       {isCritical && onForceStop && (
         <Button
           variant="outline"

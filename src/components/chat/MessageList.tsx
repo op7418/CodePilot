@@ -317,7 +317,7 @@ export function MessageList({
             content={streamingContent}
             isStreaming={isStreaming}
             sessionId={sessionId}
-            startedAt={startedAt}
+            startedAt={startedAt!}
             toolUses={toolUses}
             toolResults={toolResults}
             streamingToolOutput={streamingToolOutput}
