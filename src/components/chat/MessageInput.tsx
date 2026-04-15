@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useState, useCallback, useEffect, type KeyboardEvent, type FormEvent } from 'react';
+import { useRef, useState, useCallback, useEffect, type KeyboardEvent, type FormEvent, type DragEvent as ReactDragEvent } from 'react';
 import { Terminal } from "@/components/ui/icon";
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
@@ -35,6 +35,8 @@ import { useCliToolsFetch } from '@/hooks/useCliToolsFetch';
 import { useSlashCommands } from '@/hooks/useSlashCommands';
 import { resolveKeyAction, cycleIndex, resolveDirectSlash, dispatchBadge, buildCliAppend } from '@/lib/message-input-logic';
 import { QuickActions } from './QuickActions';
+import { appendPathMention, hasFileTreeDragType, readFileTreeDragPayload } from '@/lib/file-tree-dnd';
+import { cn } from '@/lib/utils';
 
 interface MessageInputProps {
   onSend: (content: string, files?: FileAttachment[], systemPromptAppend?: string, displayOverride?: string) => void;
@@ -87,6 +89,7 @@ export function MessageInput({
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const cliSearchRef = useRef<HTMLInputElement>(null);
+  const [isFileTreeDragOver, setIsFileTreeDragOver] = useState(false);
   // Persist draft per session so switching chats doesn't lose typed text.
   const draftKey = `codepilot:draft:${sessionId || 'new'}`;
   const [inputValue, setInputValueRaw] = useState(() => {
@@ -165,21 +168,46 @@ export function MessageInput({
     }
   }, [onAssistantTrigger]);
 
+  const handleInsertPathMention = useCallback((filePath: string) => {
+    if (!filePath) return;
+    setInputValue((prev) => appendPathMention(prev, filePath));
+    setTimeout(() => textareaRef.current?.focus(), 0);
+  }, [setInputValue]);
+
   // Listen for file tree "+" button: insert @filepath into textarea
   useEffect(() => {
     const handler = (e: Event) => {
       const filePath = (e as CustomEvent<{ path: string }>).detail?.path;
-      if (!filePath) return;
-      const mention = `@${filePath} `;
-      setInputValue((prev) => {
-        const needsSpace = prev.length > 0 && !prev.endsWith(' ') && !prev.endsWith('\n');
-        return prev + (needsSpace ? ' ' : '') + mention;
-      });
-      setTimeout(() => textareaRef.current?.focus(), 0);
+      handleInsertPathMention(filePath);
     };
     window.addEventListener('insert-file-mention', handler);
     return () => window.removeEventListener('insert-file-mention', handler);
-  }, [setInputValue]);
+  }, [handleInsertPathMention]);
+
+  const handleFileTreeDragOver = useCallback((e: ReactDragEvent<HTMLDivElement>) => {
+    if (!hasFileTreeDragType(e.dataTransfer)) return;
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'copy';
+    setIsFileTreeDragOver(true);
+  }, []);
+
+  const handleFileTreeDragLeave = useCallback((e: ReactDragEvent<HTMLDivElement>) => {
+    if (e.currentTarget.contains(e.relatedTarget as Node | null)) return;
+    setIsFileTreeDragOver(false);
+  }, []);
+
+  const handleFileTreeDrop = useCallback((e: ReactDragEvent<HTMLDivElement>) => {
+    const payload = readFileTreeDragPayload(e.dataTransfer);
+    if (!payload) return;
+
+    e.preventDefault();
+    setIsFileTreeDragOver(false);
+    handleInsertPathMention(payload.path);
+
+    if (payload.type === 'file') {
+      window.dispatchEvent(new CustomEvent('attach-file-to-chat', { detail: { path: payload.path } }));
+    }
+  }, [handleInsertPathMention]);
 
   const handleSubmit = useCallback(async (msg: { text: string; files: Array<{ type: string; url: string; filename?: string; mediaType?: string }> }, e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -367,7 +395,15 @@ export function MessageInput({
   return (
     <div className="bg-background/80 backdrop-blur-lg px-4 pt-2 pb-1">
       <div className="mx-auto">
-        <div className="relative">
+        <div
+          className={cn(
+            "relative",
+            isFileTreeDragOver && "rounded-xl ring-2 ring-primary/40 ring-offset-2 ring-offset-background",
+          )}
+          onDragLeave={handleFileTreeDragLeave}
+          onDragOver={handleFileTreeDragOver}
+          onDrop={handleFileTreeDrop}
+        >
           {/* Slash Command / File Popover */}
           <SlashCommandPopover
             popoverMode={popover.popoverMode}

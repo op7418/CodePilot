@@ -22,6 +22,11 @@ import {
   useMemo,
   useState,
 } from "react";
+import {
+  FILE_TREE_DRAG_FALLBACK_MIME,
+  FILE_TREE_DRAG_MIME,
+  serializeFileTreeDragPayload,
+} from "@/lib/file-tree-dnd";
 
 interface FileTreeContextType {
   expandedPaths: Set<string>;
@@ -131,6 +136,17 @@ export const FileTreeFolder = ({
     togglePath(path);
   }, [togglePath, path]);
 
+  const handleDragStart = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      const payload = serializeFileTreeDragPayload({ path, name, type: "directory" });
+      e.dataTransfer.setData(FILE_TREE_DRAG_MIME, payload);
+      e.dataTransfer.setData(FILE_TREE_DRAG_FALLBACK_MIME, payload);
+      e.dataTransfer.setData("text/plain", path);
+      e.dataTransfer.effectAllowed = "copy";
+    },
+    [name, path]
+  );
+
   const folderContextValue = useMemo(
     () => ({ isExpanded, name, path }),
     [isExpanded, name, path]
@@ -147,6 +163,8 @@ export const FileTreeFolder = ({
           <CollapsibleTrigger asChild>
             <div
               className="flex w-full cursor-pointer items-center gap-1 rounded px-2 py-1 text-left transition-colors hover:bg-muted/50"
+              draggable
+              onDragStart={handleDragStart}
               role="button"
               tabIndex={0}
               onKeyDown={(e) => {
@@ -232,6 +250,17 @@ export const FileTreeFile = ({
     [onAdd, path]
   );
 
+  const handleDragStart = useCallback(
+    (e: React.DragEvent<HTMLDivElement>) => {
+      const payload = serializeFileTreeDragPayload({ path, name, type: "file" });
+      e.dataTransfer.setData(FILE_TREE_DRAG_MIME, payload);
+      e.dataTransfer.setData(FILE_TREE_DRAG_FALLBACK_MIME, payload);
+      e.dataTransfer.setData("text/plain", path);
+      e.dataTransfer.effectAllowed = "copy";
+    },
+    [name, path]
+  );
+
   const fileContextValue = useMemo(() => ({ name, path }), [name, path]);
 
   return (
@@ -243,7 +272,9 @@ export const FileTreeFile = ({
           className
         )}
         onClick={handleClick}
+        onDragStart={handleDragStart}
         onKeyDown={handleKeyDown}
+        draggable
         role="treeitem"
         tabIndex={0}
         {...props}
