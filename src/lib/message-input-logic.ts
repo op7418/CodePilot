@@ -85,6 +85,21 @@ export function filterItems(items: PopoverItem[], filter: string): PopoverItem[]
 }
 
 /**
+ * Splits input text around a popover trigger, removing the trigger character
+ * and any filter text that was typed after it.
+ */
+function splitAroundTrigger(
+  inputValue: string,
+  triggerPos: number,
+  popoverFilter: string,
+): { before: string; after: string } {
+  const before = inputValue.slice(0, triggerPos);
+  const cursorEnd = triggerPos + popoverFilter.length + 1; // +1 to consume the trigger character
+  const after = inputValue.slice(cursorEnd);
+  return { before, after };
+}
+
+/**
  * Determines what happens when an item is selected from the popover.
  * Used by insertItem in useSlashCommands.
  */
@@ -102,9 +117,7 @@ export function resolveItemSelection(
 
   // Non-immediate commands: show as badge, preserving any text outside the trigger
   if (popoverMode === 'skill') {
-    const before = inputValue.slice(0, triggerPos);
-    const cursorEnd = triggerPos + popoverFilter.length + 1;
-    const after = inputValue.slice(cursorEnd);
+    const { before, after } = splitAroundTrigger(inputValue, triggerPos, popoverFilter);
     return {
       action: 'set_badge',
       badge: {
@@ -119,9 +132,7 @@ export function resolveItemSelection(
   }
 
   // File mention: insert into text
-  const before = inputValue.slice(0, triggerPos);
-  const cursorEnd = triggerPos + popoverFilter.length + 1;
-  const after = inputValue.slice(cursorEnd);
+  const { before, after } = splitAroundTrigger(inputValue, triggerPos, popoverFilter);
   const insertText = `@${item.value} `;
   return {
     action: 'insert_file_mention',
