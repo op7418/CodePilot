@@ -651,6 +651,7 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         onLoadMore={loadEarlierMessages}
         rewindPoints={rewindPoints}
         sessionId={sessionId}
+        startedAt={streamSnapshot?.startedAt}
         isAssistantProject={isAssistantProject}
         assistantName={assistantName}
       />
