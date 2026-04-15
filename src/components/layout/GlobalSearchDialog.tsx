@@ -52,15 +52,15 @@ interface GlobalSearchDialogProps {
 }
 
 const TYPE_ICONS: Record<string, IconComponent> = {
-  session: ChatCircleText,
-  message: NotePencil,
-  file: Folder,
+  sessions: ChatCircleText,
+  messages: NotePencil,
+  files: Folder,
 };
 
 const TYPE_LABELS: Record<string, string> = {
-  session: 'Sessions',
-  message: 'Messages',
-  file: 'Files',
+  sessions: 'Sessions',
+  messages: 'Messages',
+  files: 'Files',
 };
 
 export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogProps) {
