@@ -115,6 +115,44 @@ async function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
 }
 
+function stringifyUnknown(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value === null || value === undefined) return '';
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function extractOAuthErrorMessage(rawBody: string, fallbackErr?: unknown): string {
+  if (!rawBody) {
+    return fallbackErr instanceof Error ? fallbackErr.message : 'unknown';
+  }
+  try {
+    const parsed = JSON.parse(rawBody) as Record<string, unknown>;
+    const candidates: unknown[] = [
+      parsed.error_description,
+      typeof parsed.error === 'object' && parsed.error !== null
+        ? (parsed.error as Record<string, unknown>).message
+        : undefined,
+      typeof parsed.error === 'object' && parsed.error !== null
+        ? (parsed.error as Record<string, unknown>).code
+        : undefined,
+      parsed.error,
+      parsed.message,
+      parsed,
+    ];
+    for (const item of candidates) {
+      const text = stringifyUnknown(item).trim();
+      if (text) return text;
+    }
+    return rawBody;
+  } catch {
+    return rawBody;
+  }
+}
+
 export async function exchangeCodeForTokens(
   code: string,
   codeVerifier: string,
@@ -190,13 +228,7 @@ export async function exchangeCodeForTokens(
   // Out of retries — produce a useful error. JSON.stringify the body when
   // possible so users (and Sentry) see structured fields instead of the
   // legacy "[object Object]" placeholder that issue #464 complained about.
-  let msg: string;
-  try {
-    const j = JSON.parse(lastBody);
-    msg = j.error_description || j.error || JSON.stringify(j);
-  } catch {
-    msg = lastBody || (lastErr instanceof Error ? lastErr.message : 'unknown');
-  }
+  const msg = extractOAuthErrorMessage(lastBody, lastErr);
   throw new Error(`Token exchange failed after ${MAX_ATTEMPTS} attempts: ${lastStatus ?? 'network'} - ${msg}`);
 }
 
@@ -220,11 +252,7 @@ export async function refreshTokens(refreshToken: string): Promise<OAuthTokens> 
 
   if (!response.ok) {
     const text = await response.text();
-    let msg: string;
-    try {
-      const j = JSON.parse(text);
-      msg = j.error_description || j.error || text;
-    } catch { msg = text; }
+    const msg = extractOAuthErrorMessage(text);
     throw new Error(`Token refresh failed: ${response.status} - ${msg}`);
   }
 

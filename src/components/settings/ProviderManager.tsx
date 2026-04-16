@@ -54,6 +54,20 @@ export function ProviderManager() {
   const [envDetected, setEnvDetected] = useState<Record<string, string>>({});
   const { t } = useTranslation();
   const isZh = t('nav.chats') === '对话';
+  const mapOpenAIOAuthError = useCallback((raw: string): string => {
+    const lower = raw.toLowerCase();
+    if (lower.includes('country, region, or territory not supported')) {
+      return isZh
+        ? 'OpenAI OAuth 当前在你所在地区不可用。可改用兼容 OpenAI 协议的第三方服务（在 Provider 中配置 Base URL + API Key）。'
+        : 'OpenAI OAuth is unavailable in your current country/region. You can use an OpenAI-compatible third-party endpoint via Provider settings (Base URL + API key).';
+    }
+    if (lower.includes('invalid or expired state')) {
+      return isZh
+        ? '登录会话已过期，请重新点击 OpenAI 登录并在新打开的页面中完成授权。'
+        : 'The login session has expired. Please click OpenAI Login again and complete authorization in the newly opened page.';
+    }
+    return raw;
+  }, [isZh]);
 
   // Edit dialog state — fallback ProviderForm for providers that don't match any preset
   const [formOpen, setFormOpen] = useState(false);
@@ -69,7 +83,7 @@ export function ProviderManager() {
   const [deleting, setDeleting] = useState(false);
 
   // OpenAI OAuth state
-  const [openaiAuth, setOpenaiAuth] = useState<{ authenticated: boolean; email?: string; plan?: string } | null>(null);
+  const [openaiAuth, setOpenaiAuth] = useState<{ authenticated: boolean; email?: string; plan?: string; oauthError?: string } | null>(null);
   const [openaiLoggingIn, setOpenaiLoggingIn] = useState(false);
   const [openaiError, setOpenaiError] = useState<string | null>(null);
 
@@ -135,9 +149,15 @@ export function ProviderManager() {
   useEffect(() => {
     fetch('/api/openai-oauth/status')
       .then(r => r.ok ? r.json() : null)
-      .then(data => { if (data) setOpenaiAuth(data); })
+      .then(data => {
+        if (!data) return;
+        setOpenaiAuth(data);
+        if (!data.authenticated && data.oauthError) {
+          setOpenaiError(mapOpenAIOAuthError(data.oauthError));
+        }
+      })
       .catch(() => {});
-  }, []);
+  }, [mapOpenAIOAuthError]);
 
   // Fetch all provider models for the global default model selector
   const fetchModels = useCallback(() => {
@@ -335,6 +355,11 @@ export function ProviderManager() {
               // counts; broadcast so listeners (SetupCenter's ProviderCard,
               // anywhere reading provider presence) re-evaluate.
               window.dispatchEvent(new Event('provider-changed'));
+            } else if (status.oauthError) {
+              clearInterval(poll);
+              setOpenaiAuth(status);
+              setOpenaiLoggingIn(false);
+              setOpenaiError(mapOpenAIOAuthError(status.oauthError));
             }
           }
         } catch { /* keep polling */ }

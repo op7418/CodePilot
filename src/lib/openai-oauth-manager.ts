@@ -27,6 +27,7 @@ const KEYS = {
   email: 'openai_oauth_email',
   plan: 'openai_oauth_plan',
   accountId: 'openai_oauth_account_id',
+  lastError: 'openai_oauth_last_error',
 } as const;
 
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -40,11 +41,17 @@ export interface OpenAIOAuthStatus {
   accountId?: string;
   /** True when token is near/past expiry but a refresh token exists */
   needsRefresh?: boolean;
+  oauthError?: string;
 }
 
 export function getOAuthStatus(): OpenAIOAuthStatus {
   const accessToken = getSetting(KEYS.accessToken);
-  if (!accessToken) return { authenticated: false };
+  if (!accessToken) {
+    return {
+      authenticated: false,
+      oauthError: getSetting(KEYS.lastError) || undefined,
+    };
+  }
 
   // Check if token is expired and no refresh token available
   const expiresAt = Number(getSetting(KEYS.expiresAt) || '0');
@@ -65,6 +72,7 @@ export function getOAuthStatus(): OpenAIOAuthStatus {
     plan: getSetting(KEYS.plan),
     accountId: getSetting(KEYS.accountId),
     needsRefresh,
+    oauthError: undefined,
   };
 }
 
@@ -132,6 +140,7 @@ function saveTokens(tokens: OAuthTokens): void {
   setSetting(KEYS.idToken, tokens.idToken);
   if (tokens.refreshToken) setSetting(KEYS.refreshToken, tokens.refreshToken);
   if (tokens.expiresAt) setSetting(KEYS.expiresAt, String(tokens.expiresAt));
+  setSetting(KEYS.lastError, '');
 
   const claims = parseIdTokenClaims(tokens.idToken);
   if (claims.email) setSetting(KEYS.email, claims.email);
@@ -154,11 +163,12 @@ export function clearOAuthTokens(): void {
  * Safe to call even when no flow is pending.
  */
 export async function cancelOAuthFlow(): Promise<void> {
-  const pending = getPendingOAuth();
-  if (pending) {
+  const pendingEntries = Object.values(getPendingOAuthMap());
+  for (const pending of pendingEntries) {
+    clearTimeout(pending.timeout);
     pending.reject(new Error('OAuth flow cancelled by user'));
-    setPendingOAuth(undefined);
   }
+  oauthState.pendingOAuthByState = {};
   await stopOAuthServer();
 }
 
@@ -169,13 +179,14 @@ interface PendingOAuth {
   state: string;
   resolve: (accessToken: string) => void;
   reject: (err: Error) => void;
+  timeout: ReturnType<typeof setTimeout>;
 }
 
 // Use globalThis to survive Next.js HMR / module re-evaluation in dev mode.
 // Without this, hot reload would orphan the callback server and lose pending state.
 interface OAuthGlobalState {
   oauthServer?: Server;
-  pendingOAuth?: PendingOAuth;
+  pendingOAuthByState?: Record<string, PendingOAuth>;
 }
 const GLOBAL_KEY = '__codepilot_openai_oauth__' as const;
 const g = globalThis as unknown as Record<string, OAuthGlobalState>;
@@ -185,39 +196,53 @@ const oauthState = g[GLOBAL_KEY];
 // Convenience accessors — all reads/writes go through oauthState
 function getOAuthServer(): Server | undefined { return oauthState.oauthServer; }
 function setOAuthServer(s: Server | undefined) { oauthState.oauthServer = s; }
-function getPendingOAuth(): PendingOAuth | undefined { return oauthState.pendingOAuth; }
-function setPendingOAuth(p: PendingOAuth | undefined) { oauthState.pendingOAuth = p; }
+function getPendingOAuthMap(): Record<string, PendingOAuth> {
+  if (!oauthState.pendingOAuthByState) oauthState.pendingOAuthByState = {};
+  return oauthState.pendingOAuthByState;
+}
+function getPendingOAuthCount(): number {
+  return Object.keys(getPendingOAuthMap()).length;
+}
+function getPendingOAuthByState(state: string): PendingOAuth | undefined {
+  return getPendingOAuthMap()[state];
+}
+function setPendingOAuth(state: string, pending: PendingOAuth): void {
+  getPendingOAuthMap()[state] = pending;
+}
+function clearPendingOAuth(state: string): PendingOAuth | undefined {
+  const pendingMap = getPendingOAuthMap();
+  const pending = pendingMap[state];
+  if (!pending) return undefined;
+  delete pendingMap[state];
+  return pending;
+}
 
 /**
  * Start the OAuth flow: prepare PKCE, start callback server, return auth URL.
  * MUST be awaited — the server needs to be listening before opening the browser.
  */
 export async function startOAuthFlow(): Promise<{ authUrl: string; completion: Promise<string> }> {
-  // Clean up any stale state from previous attempts
-  await stopOAuthServer();
-  const prevPending = getPendingOAuth();
-  if (prevPending) {
-    prevPending.reject(new Error('Superseded by new login attempt'));
-    setPendingOAuth(undefined);
-  }
-
   const flow = prepareOAuthFlow();
+  setSetting(KEYS.lastError, '');
 
   // Start callback server and WAIT for it to be listening
   await startOAuthServer();
 
   const completion = new Promise<string>((resolve, reject) => {
     const timeout = setTimeout(() => {
-      if (getPendingOAuth()) {
-        setPendingOAuth(undefined);
+      const pending = clearPendingOAuth(flow.state);
+      if (pending) {
         reject(new Error('OAuth callback timeout'));
-        stopOAuthServer();
+        if (getPendingOAuthCount() === 0) {
+          stopOAuthServer();
+        }
       }
     }, 5 * 60 * 1000);
 
-    setPendingOAuth({
+    setPendingOAuth(flow.state, {
       codeVerifier: flow.codeVerifier,
       state: flow.state,
+      timeout,
       resolve: (token) => { clearTimeout(timeout); resolve(token); },
       reject: (err) => { clearTimeout(timeout); reject(err); },
     });
@@ -247,43 +272,51 @@ async function startOAuthServer(): Promise<void> {
 
     if (error) {
       const msg = errorDesc || error;
+      setSetting(KEYS.lastError, msg);
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(errorHtml(msg));
-      getPendingOAuth()?.reject(new Error(msg));
-      setPendingOAuth(undefined);
-      stopOAuthServer();
+      if (state) {
+        const pending = clearPendingOAuth(state);
+        pending?.reject(new Error(msg));
+      }
+      if (getPendingOAuthCount() === 0) {
+        stopOAuthServer();
+      }
       return;
     }
 
-    const pending = getPendingOAuth();
-    if (!code || !pending || state !== pending.state) {
-      const msg = !code ? 'Missing authorization code' : 'Invalid state';
+    const pending = state ? getPendingOAuthByState(state) : undefined;
+    if (!code || !state || !pending) {
+      const msg = !code ? 'Missing authorization code' : 'Invalid or expired state';
+      setSetting(KEYS.lastError, msg);
       res.writeHead(400, { 'Content-Type': 'text/html' });
       res.end(errorHtml(msg));
-      getPendingOAuth()?.reject(new Error(msg));
-      setPendingOAuth(undefined);
-      stopOAuthServer();
+      if (getPendingOAuthCount() === 0) {
+        stopOAuthServer();
+      }
       return;
     }
 
-    const current = pending;
-    setPendingOAuth(undefined);
+    clearPendingOAuth(state);
 
     // Exchange code for tokens FIRST, then show result to user
     try {
-      const tokens = await exchangeCodeForTokens(code, current.codeVerifier);
+      const tokens = await exchangeCodeForTokens(code, pending.codeVerifier);
       saveTokens(tokens);
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(successHtml());
-      current.resolve(tokens.accessToken);
+      pending.resolve(tokens.accessToken);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      setSetting(KEYS.lastError, `Token exchange failed: ${message}`);
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(errorHtml(`Token exchange failed: ${message}`));
-      current.reject(err instanceof Error ? err : new Error(message));
+      pending.reject(err instanceof Error ? err : new Error(message));
     }
 
-    stopOAuthServer();
+    if (getPendingOAuthCount() === 0) {
+      stopOAuthServer();
+    }
   });
 
   setOAuthServer(server);
