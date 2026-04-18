@@ -97,6 +97,47 @@ function probeSeverity(findings: Finding[]): Severity {
   return sev;
 }
 
+function readFirstEnv(keys: string[]): string | undefined {
+  for (const key of keys) {
+    const value = process.env[key];
+    if (typeof value === 'string' && value.trim().length > 0) {
+      return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function describeProxy(value: string): string {
+  try {
+    const u = new URL(value);
+    return `${u.protocol}//${u.hostname}${u.port ? `:${u.port}` : ''}`;
+  } catch {
+    return '<invalid-proxy-url>';
+  }
+}
+
+function parseNoProxy(value: string | undefined): string[] {
+  if (!value) return [];
+  return value
+    .split(',')
+    .map(item => item.trim().toLowerCase())
+    .filter(Boolean);
+}
+
+function noProxyBypassesLoopback(entries: string[]): boolean {
+  if (entries.includes('*')) return true;
+  for (const raw of entries) {
+    const entry = raw.replace(/^\./, '');
+    if (entry === 'localhost' || entry === '127.0.0.1' || entry === '::1' || entry === '[::1]') {
+      return true;
+    }
+    if (entry.endsWith('.localhost')) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // ── CLI Probe ───────────────────────────────────────────────────
 
 async function runCliProbe(): Promise<ProbeResult> {
@@ -615,8 +656,85 @@ async function runNetworkProbe(): Promise<ProbeResult> {
   const findings: Finding[] = [];
   const start = Date.now();
 
-  // Collect unique base URLs to check
-  const urlsToCheck = new Map<string, string>(); // url -> label
+  // Proxy diagnostics
+  const httpsProxy = readFirstEnv(['HTTPS_PROXY', 'https_proxy']);
+  const httpProxy = readFirstEnv(['HTTP_PROXY', 'http_proxy']);
+  const noProxyRaw = readFirstEnv(['NO_PROXY', 'no_proxy']);
+  const noProxyEntries = parseNoProxy(noProxyRaw);
+  const hasProxy = !!httpsProxy || !!httpProxy;
+  if (hasProxy) {
+    const proxyParts: string[] = [];
+    if (httpsProxy) proxyParts.push(`HTTPS_PROXY=${describeProxy(httpsProxy)}`);
+    if (httpProxy) proxyParts.push(`HTTP_PROXY=${describeProxy(httpProxy)}`);
+    findings.push({
+      severity: 'ok',
+      code: 'network.proxy.configured',
+      message: 'Proxy environment variables detected',
+      detail: proxyParts.join(', '),
+    });
+
+    const bypassesLoopback = noProxyBypassesLoopback(noProxyEntries);
+    findings.push({
+      severity: bypassesLoopback ? 'ok' : 'warn',
+      code: bypassesLoopback ? 'network.proxy.loopback-bypassed' : 'network.proxy.loopback-not-bypassed',
+      message: bypassesLoopback
+        ? 'NO_PROXY bypasses localhost/loopback'
+        : 'NO_PROXY does not clearly bypass localhost/loopback',
+      detail: noProxyRaw
+        ? `NO_PROXY=${noProxyRaw}`
+        : 'NO_PROXY is not set while proxy is enabled',
+    });
+  } else {
+    findings.push({
+      severity: 'ok',
+      code: 'network.proxy.not-configured',
+      message: 'No HTTP(S) proxy environment variables detected',
+    });
+  }
+
+  // Enterprise CA diagnostics
+  const extraCaCerts = readFirstEnv(['NODE_EXTRA_CA_CERTS']);
+  if (!extraCaCerts) {
+    findings.push({
+      severity: 'ok',
+      code: 'network.ca.not-configured',
+      message: 'NODE_EXTRA_CA_CERTS is not configured',
+    });
+  } else if (!fs.existsSync(extraCaCerts)) {
+    findings.push({
+      severity: 'warn',
+      code: 'network.ca.missing',
+      message: 'NODE_EXTRA_CA_CERTS points to a missing file',
+      detail: extraCaCerts,
+    });
+  } else {
+    try {
+      fs.accessSync(extraCaCerts, fs.constants.R_OK);
+      findings.push({
+        severity: 'ok',
+        code: 'network.ca.readable',
+        message: 'NODE_EXTRA_CA_CERTS file exists and is readable',
+        detail: extraCaCerts,
+      });
+    } catch (err) {
+      findings.push({
+        severity: 'warn',
+        code: 'network.ca.unreadable',
+        message: 'NODE_EXTRA_CA_CERTS file exists but is not readable',
+        detail: err instanceof Error ? err.message : String(err),
+      });
+    }
+  }
+
+  // Collect base URLs to check
+  type NetworkTarget = {
+    url: string;
+    label: string;
+    source: 'anthropic' | 'provider';
+    providerName?: string;
+    providerId?: string;
+  };
+  const targets: NetworkTarget[] = [];
 
   // Only check Anthropic API if the current resolution actually uses it
   // (env mode with no providers, or provider with anthropic base_url).
@@ -624,7 +742,11 @@ async function runNetworkProbe(): Promise<ProbeResult> {
   const resolved = resolveProvider();
   const isEnvMode = !resolved.provider;
   if (isEnvMode) {
-    urlsToCheck.set('https://api.anthropic.com', 'Anthropic API');
+    targets.push({
+      url: 'https://api.anthropic.com',
+      label: 'Anthropic API',
+      source: 'anthropic',
+    });
   }
 
   // Provider-specific URLs
@@ -633,7 +755,19 @@ async function runNetworkProbe(): Promise<ProbeResult> {
     if (p.base_url) {
       try {
         const u = new URL(p.base_url);
-        urlsToCheck.set(u.origin, `Provider "${p.name}"`);
+        findings.push({
+          severity: 'ok',
+          code: 'gateway.base-url-valid',
+          message: `Gateway base_url for provider "${p.name}" is valid`,
+          detail: `Provider ID: ${p.id}. Origin: ${u.origin}`,
+        });
+        targets.push({
+          url: u.origin,
+          label: `Provider "${p.name}"`,
+          source: 'provider',
+          providerName: p.name,
+          providerId: p.id,
+        });
       } catch {
         findings.push({
           severity: 'warn',
@@ -641,17 +775,23 @@ async function runNetworkProbe(): Promise<ProbeResult> {
           message: `Provider "${p.name}" has invalid base_url`,
           detail: p.base_url,
         });
+        findings.push({
+          severity: 'warn',
+          code: 'gateway.invalid-base-url',
+          message: `Gateway base_url for provider "${p.name}" is invalid`,
+          detail: `Provider ID: ${p.id}. base_url=${p.base_url}`,
+        });
       }
     }
   }
 
   // HEAD request each URL (no API key sent)
   const TIMEOUT = 5000;
-  const checks = Array.from(urlsToCheck.entries()).map(async ([url, label]) => {
+  const checks = targets.map(async (target) => {
     try {
       const controller = new AbortController();
       const timer = setTimeout(() => controller.abort(), TIMEOUT);
-      const resp = await fetch(url, {
+      const resp = await fetch(target.url, {
         method: 'HEAD',
         signal: controller.signal,
         headers: { 'User-Agent': 'CodePilot-ProviderDoctor/1.0' },
@@ -661,18 +801,34 @@ async function runNetworkProbe(): Promise<ProbeResult> {
       findings.push({
         severity: 'ok',
         code: 'network.reachable',
-        message: `${label} (${url}) is reachable`,
+        message: `${target.label} (${target.url}) is reachable`,
         detail: `Status: ${resp.status}`,
       });
+      if (target.source === 'provider' && target.providerName) {
+        findings.push({
+          severity: 'ok',
+          code: 'gateway.reachable',
+          message: `Gateway for provider "${target.providerName}" is reachable`,
+          detail: `Provider ID: ${target.providerId}. URL: ${target.url}. Status: ${resp.status}`,
+        });
+      }
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       const isTimeout = message.includes('abort');
       findings.push({
         severity: 'warn',
         code: isTimeout ? 'network.timeout' : 'network.unreachable',
-        message: `${label} (${url}) ${isTimeout ? 'timed out' : 'is unreachable'}`,
+        message: `${target.label} (${target.url}) ${isTimeout ? 'timed out' : 'is unreachable'}`,
         detail: message,
       });
+      if (target.source === 'provider' && target.providerName) {
+        findings.push({
+          severity: 'warn',
+          code: isTimeout ? 'gateway.timeout' : 'gateway.unreachable',
+          message: `Gateway for provider "${target.providerName}" ${isTimeout ? 'timed out' : 'is unreachable'}`,
+          detail: `Provider ID: ${target.providerId}. URL: ${target.url}. ${message}`,
+        });
+      }
     }
   });
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { getRuntimeArchitectureInfo } from "@/lib/platform";
 import { selectRecommendedReleaseAsset, type ReleaseAsset } from "@/lib/update-release";
+import { getJson } from "@/lib/http/client";
 
 const GITHUB_REPO = "op7418/CodePilot";
 
@@ -37,19 +38,24 @@ export async function GET() {
     const currentVersion = process.env.NEXT_PUBLIC_APP_VERSION || "0.0.0";
     const runtimeInfo = getRuntimeArchitectureInfo();
 
-    const res = await fetch(
+    const { data: release } = await getJson<{
+      tag_name?: string;
+      name?: string;
+      body?: string;
+      published_at?: string;
+      html_url?: string;
+      assets?: ReleaseAsset[];
+    }>(
       `https://api.github.com/repos/${GITHUB_REPO}/releases/latest`,
       {
         headers: { Accept: "application/vnd.github.v3+json" },
+        timeoutMs: 8000,
+        retries: 2,
+        retryDelayMs: 250,
+        retryJitterMs: 50,
         next: { revalidate: 300 },
       }
     );
-
-    if (!res.ok) {
-      return NextResponse.json(noUpdatePayload(currentVersion, runtimeInfo));
-    }
-
-    const release = await res.json();
     const latestVersion = (release.tag_name || "").replace(/^v/, "");
     const updateAvailable = compareSemver(latestVersion, currentVersion) > 0;
     const recommendedAsset = selectRecommendedReleaseAsset(
