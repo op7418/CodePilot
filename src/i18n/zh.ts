@@ -129,6 +129,15 @@ const zh: Record<TranslationKey, string> = {
   'settings.defaultPanelGit': 'Git',
   'settings.language': '语言',
   'settings.languageDesc': '选择界面显示语言',
+  'settings.networkProxyTitle': '网络代理',
+  'settings.networkProxyDesc': '为应用网络请求配置 HTTP/HTTPS 代理。保存后立即生效。',
+  'settings.networkProxyEnabled': '启用代理',
+  'settings.networkProxyUrlLabel': '代理地址',
+  'settings.networkProxyUrlPlaceholder': '代理地址（例如 http://127.0.0.1:7890）',
+  'settings.networkNoProxyLabel': 'NO_PROXY',
+  'settings.networkNoProxyPlaceholder': 'NO_PROXY（可选，逗号分隔）',
+  'settings.networkProxyCaPathLabel': 'CA 路径',
+  'settings.networkProxyCaPathPlaceholder': '自定义 CA 路径（NODE_EXTRA_CA_CERTS，可选）',
   'settings.usage': '用量统计',
 
   // ── Settings: Appearance ──────────────────────────────────────

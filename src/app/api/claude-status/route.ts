@@ -1,6 +1,7 @@
 import { NextResponse } from 'next/server';
 import { findClaudeBinary, getClaudeVersion, findAllClaudeBinaries, classifyClaudePath, isWindows, findGitBash, isWingetInstall } from '@/lib/platform';
 import type { ClaudeInstallInfo, ClaudeInstallType } from '@/lib/platform';
+import { getJson } from '@/lib/http/client';
 
 /** Latest version cache */
 let cachedLatestVersion: string | null = null;
@@ -16,15 +17,13 @@ async function fetchLatestVersion(): Promise<string | null> {
     return cachedLatestVersion;
   }
   try {
-    const res = await fetch('https://registry.npmjs.org/@anthropic-ai/claude-code/latest', {
-      signal: AbortSignal.timeout(5000),
+    const { data } = await getJson<{ version?: string }>('https://registry.npmjs.org/@anthropic-ai/claude-code/latest', {
+      timeoutMs: 5000,
+      retries: 1,
+      retryDelayMs: 250,
+      retryJitterMs: 50,
+      next: { revalidate: 3600 },
     });
-    if (!res.ok) {
-      lastFetchFailed = true;
-      cachedLatestVersionTimestamp = now;
-      return cachedLatestVersion;
-    }
-    const data = await res.json();
     const version = data.version as string | undefined;
     if (version) {
       cachedLatestVersion = version;

@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSetting } from '@/lib/db';
+import { getJson, requestJson, HttpClientError } from '@/lib/http/client';
 
 /**
  * POST /api/settings/feishu/verify
@@ -33,13 +34,15 @@ export async function POST(request: NextRequest) {
       : 'https://open.feishu.cn';
 
     // Get tenant access token
-    const tokenRes = await fetch(`${baseUrl}/open-apis/auth/v3/tenant_access_token/internal`, {
+    const { data: tokenData } = await requestJson<{ tenant_access_token?: string; msg?: string }>(`${baseUrl}/open-apis/auth/v3/tenant_access_token/internal`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ app_id, app_secret }),
-      signal: AbortSignal.timeout(10_000),
+      timeoutMs: 10_000,
+      retries: 1,
+      retryDelayMs: 250,
+      retryJitterMs: 50,
     });
-    const tokenData = await tokenRes.json();
 
     if (!tokenData.tenant_access_token) {
       return NextResponse.json({
@@ -49,12 +52,14 @@ export async function POST(request: NextRequest) {
     }
 
     // Get bot info
-    const botRes = await fetch(`${baseUrl}/open-apis/bot/v3/info/`, {
+    const { data: botData } = await getJson<{ bot?: { open_id?: string; app_name?: string }; msg?: string }>(`${baseUrl}/open-apis/bot/v3/info/`, {
       method: 'GET',
       headers: { Authorization: `Bearer ${tokenData.tenant_access_token}` },
-      signal: AbortSignal.timeout(10_000),
+      timeoutMs: 10_000,
+      retries: 1,
+      retryDelayMs: 250,
+      retryJitterMs: 50,
     });
-    const botData = await botRes.json();
 
     if (botData?.bot?.open_id) {
       return NextResponse.json({
@@ -68,6 +73,22 @@ export async function POST(request: NextRequest) {
       error: botData?.msg || 'Could not retrieve bot info',
     });
   } catch (error) {
+    if (error instanceof HttpClientError) {
+      if (error.code === 'http_status') {
+        return NextResponse.json({
+          verified: false,
+          error: `HTTP ${error.status ?? 500}: Verification failed`,
+          detail: error.message,
+          requestId: error.requestId,
+        });
+      }
+      return NextResponse.json({
+        verified: false,
+        error: 'Verification request failed',
+        detail: error.message,
+        requestId: error.requestId,
+      }, { status: 500 });
+    }
     const message = error instanceof Error ? error.message : 'Verification failed';
     return NextResponse.json({ verified: false, error: message }, { status: 500 });
   }

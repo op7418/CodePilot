@@ -132,6 +132,15 @@ const en = {
   'settings.defaultPanelGit': 'Git',
   'settings.language': 'Language',
   'settings.languageDesc': 'Choose the display language for the interface',
+  'settings.networkProxyTitle': 'Network Proxy',
+  'settings.networkProxyDesc': 'Configure HTTP/HTTPS proxy for app network requests. Changes apply immediately.',
+  'settings.networkProxyEnabled': 'Enable proxy',
+  'settings.networkProxyUrlLabel': 'Proxy URL',
+  'settings.networkProxyUrlPlaceholder': 'Proxy URL (e.g. http://127.0.0.1:7890)',
+  'settings.networkNoProxyLabel': 'NO_PROXY',
+  'settings.networkNoProxyPlaceholder': 'NO_PROXY (comma-separated hosts, optional)',
+  'settings.networkProxyCaPathLabel': 'CA Path',
+  'settings.networkProxyCaPathPlaceholder': 'Custom CA path (NODE_EXTRA_CA_CERTS, optional)',
   'settings.usage': 'Usage',
 
   // ── Settings: Appearance ──────────────────────────────────────

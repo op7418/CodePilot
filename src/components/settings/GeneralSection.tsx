@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useSyncExternalStore } from "react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import {
   AlertDialog,
@@ -129,6 +130,11 @@ export function GeneralSection() {
   const [generativeUI, setGenerativeUI] = useState(true);
   const [generativeUISaving, setGenerativeUISaving] = useState(false);
   const [defaultPanel, setDefaultPanel] = useState('file_tree');
+  const [networkProxyEnabled, setNetworkProxyEnabled] = useState(false);
+  const [networkProxyUrl, setNetworkProxyUrl] = useState('');
+  const [networkNoProxy, setNetworkNoProxy] = useState('');
+  const [networkProxyCaPath, setNetworkProxyCaPath] = useState('');
+  const [networkProxySaving, setNetworkProxySaving] = useState(false);
   const { accountInfo } = useAccountInfo();
   const { t, locale, setLocale } = useTranslation();
 
@@ -143,6 +149,10 @@ export function GeneralSection() {
         setGenerativeUI(appSettings.generative_ui_enabled !== "false");
         // default_panel defaults to 'file_tree' when not set
         setDefaultPanel(appSettings.default_panel || 'file_tree');
+        setNetworkProxyEnabled(appSettings.network_proxy_enabled === "true");
+        setNetworkProxyUrl(appSettings.network_proxy_url || '');
+        setNetworkNoProxy(appSettings.network_no_proxy || '');
+        setNetworkProxyCaPath(appSettings.network_proxy_ca_path || '');
       }
     } catch {
       // ignore
@@ -213,6 +223,49 @@ export function GeneralSection() {
     } finally {
       setGenerativeUISaving(false);
     }
+  };
+
+  const saveNetworkProxySettings = async (overrides?: {
+    enabled?: boolean;
+    proxyUrl?: string;
+    noProxy?: string;
+    caPath?: string;
+  }) => {
+    const enabled = overrides?.enabled ?? networkProxyEnabled;
+    const proxyUrl = (overrides?.proxyUrl ?? networkProxyUrl).trim();
+    const noProxy = (overrides?.noProxy ?? networkNoProxy).trim();
+    const caPath = (overrides?.caPath ?? networkProxyCaPath).trim();
+
+    setNetworkProxySaving(true);
+    try {
+      const res = await fetch("/api/settings/app", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          settings: {
+            network_proxy_enabled: enabled ? "true" : "",
+            network_proxy_url: proxyUrl,
+            network_no_proxy: noProxy,
+            network_proxy_ca_path: caPath,
+          },
+        }),
+      });
+      if (res.ok) {
+        setNetworkProxyEnabled(enabled);
+        setNetworkProxyUrl(proxyUrl);
+        setNetworkNoProxy(noProxy);
+        setNetworkProxyCaPath(caPath);
+      }
+    } catch {
+      // ignore
+    } finally {
+      setNetworkProxySaving(false);
+    }
+  };
+
+  const handleNetworkProxyToggle = (checked: boolean) => {
+    setNetworkProxyEnabled(checked);
+    saveNetworkProxySettings({ enabled: checked });
   };
 
   return (
@@ -287,6 +340,55 @@ export function GeneralSection() {
               ))}
             </SelectContent>
           </Select>
+        </FieldRow>
+
+        {/* Network proxy */}
+        <FieldRow
+          label={t('settings.networkProxyTitle' as TranslationKey)}
+          description={t('settings.networkProxyDesc' as TranslationKey)}
+          separator
+        >
+          <div className="w-full max-w-md space-y-2">
+            <div className="flex items-center justify-between">
+              <span className="text-xs text-muted-foreground">{t('settings.networkProxyEnabled' as TranslationKey)}</span>
+              <Switch
+                checked={networkProxyEnabled}
+                onCheckedChange={handleNetworkProxyToggle}
+                disabled={networkProxySaving}
+              />
+            </div>
+            <p className="text-xs text-muted-foreground">{t('settings.networkProxyUrlLabel' as TranslationKey)}</p>
+            <Input
+              value={networkProxyUrl}
+              onChange={(e) => setNetworkProxyUrl(e.target.value)}
+              placeholder={t('settings.networkProxyUrlPlaceholder' as TranslationKey)}
+              disabled={networkProxySaving}
+            />
+            <p className="text-xs text-muted-foreground">{t('settings.networkNoProxyLabel' as TranslationKey)}</p>
+            <Input
+              value={networkNoProxy}
+              onChange={(e) => setNetworkNoProxy(e.target.value)}
+              placeholder={t('settings.networkNoProxyPlaceholder' as TranslationKey)}
+              disabled={networkProxySaving}
+            />
+            <p className="text-xs text-muted-foreground">{t('settings.networkProxyCaPathLabel' as TranslationKey)}</p>
+            <Input
+              value={networkProxyCaPath}
+              onChange={(e) => setNetworkProxyCaPath(e.target.value)}
+              placeholder={t('settings.networkProxyCaPathPlaceholder' as TranslationKey)}
+              disabled={networkProxySaving}
+            />
+            <div className="flex justify-end">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => saveNetworkProxySettings()}
+                disabled={networkProxySaving}
+              >
+                {t('cli.save')}
+              </Button>
+            </div>
+          </div>
         </FieldRow>
 
         {/* Setup Center */}

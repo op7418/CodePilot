@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSetting, setSetting } from '@/lib/db';
+import { applyNetworkProxyFromAppSettings, readNetworkProxySettings } from '@/lib/network-proxy';
 
 /**
  * CodePilot app-level settings (stored in SQLite, separate from ~/.claude/settings.json).
@@ -18,6 +19,10 @@ const ALLOWED_KEYS = [
   'default_panel',
   'agent_runtime',
   'cli_enabled',
+  'network_proxy_enabled',
+  'network_proxy_url',
+  'network_no_proxy',
+  'network_proxy_ca_path',
   // Feature announcement dismiss flags (persist across Electron restarts)
   'codepilot:announcement:v0.48-agent-engine',
 ];
@@ -66,6 +71,8 @@ export async function PUT(request: NextRequest) {
         setSetting(key, '');
       }
     }
+
+    applyNetworkProxyFromAppSettings(readNetworkProxySettings(getSetting));
 
     return NextResponse.json({ success: true });
   } catch (error) {

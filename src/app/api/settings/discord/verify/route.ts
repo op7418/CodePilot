@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSetting } from '@/lib/db';
+import { getJson, HttpClientError } from '@/lib/http/client';
 
 /**
  * POST /api/settings/discord/verify
@@ -24,24 +25,20 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Call Discord API to verify the token
-    const res = await fetch('https://discord.com/api/v10/users/@me', {
+    const { data } = await getJson<{
+      id?: string;
+      username?: string;
+      discriminator?: string;
+    }>('https://discord.com/api/v10/users/@me', {
       method: 'GET',
       headers: {
         Authorization: `Bot ${bot_token}`,
       },
-      signal: AbortSignal.timeout(10_000),
+      timeoutMs: 10_000,
+      retries: 1,
+      retryDelayMs: 250,
+      retryJitterMs: 50,
     });
-
-    if (!res.ok) {
-      const errorData = await res.json().catch(() => ({}));
-      return NextResponse.json({
-        verified: false,
-        error: errorData.message || `HTTP ${res.status}: Token verification failed`,
-      });
-    }
-
-    const data = await res.json();
 
     if (data.id) {
       return NextResponse.json({
@@ -55,6 +52,24 @@ export async function POST(request: NextRequest) {
       error: 'Could not retrieve bot info',
     });
   } catch (error) {
+    if (error instanceof HttpClientError) {
+      if (error.code === 'http_status') {
+        return NextResponse.json({
+          verified: false,
+          error: `HTTP ${error.status ?? 500}: Token verification failed`,
+          detail: error.message,
+          requestId: error.requestId,
+        });
+      }
+
+      return NextResponse.json({
+        verified: false,
+        error: 'Verification request failed',
+        detail: error.message,
+        requestId: error.requestId,
+      }, { status: 500 });
+    }
+
     const message = error instanceof Error ? error.message : 'Verification failed';
     return NextResponse.json({ verified: false, error: message }, { status: 500 });
   }

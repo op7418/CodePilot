@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getSetting } from '@/lib/db';
+import { getJson, requestJson, HttpClientError } from '@/lib/http/client';
 
 /**
  * POST /api/settings/qq/verify
@@ -31,14 +32,19 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 1: Get access token
-    const tokenRes = await fetch('https://bots.qq.com/app/getAppAccessToken', {
+    const { data: tokenData } = await requestJson<{
+      access_token?: string;
+      message?: string;
+    }>('https://bots.qq.com/app/getAppAccessToken', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ appId: app_id, clientSecret: app_secret }),
-      signal: AbortSignal.timeout(10_000),
+      timeoutMs: 10_000,
+      retries: 1,
+      retryDelayMs: 250,
+      retryJitterMs: 50,
     });
 
-    const tokenData = await tokenRes.json();
     if (!tokenData.access_token) {
       return NextResponse.json({
         verified: false,
@@ -47,13 +53,16 @@ export async function POST(request: NextRequest) {
     }
 
     // Step 2: Verify gateway is reachable
-    const gatewayRes = await fetch('https://api.sgroup.qq.com/gateway', {
+    const { data: gatewayData } = await getJson<{
+      url?: string;
+    }>('https://api.sgroup.qq.com/gateway', {
       method: 'GET',
       headers: { Authorization: `QQBot ${tokenData.access_token}` },
-      signal: AbortSignal.timeout(10_000),
+      timeoutMs: 10_000,
+      retries: 1,
+      retryDelayMs: 250,
+      retryJitterMs: 50,
     });
-
-    const gatewayData = await gatewayRes.json();
     if (!gatewayData.url) {
       return NextResponse.json({
         verified: false,
@@ -66,6 +75,24 @@ export async function POST(request: NextRequest) {
       gatewayUrl: gatewayData.url,
     });
   } catch (error) {
+    if (error instanceof HttpClientError) {
+      if (error.code === 'http_status') {
+        return NextResponse.json({
+          verified: false,
+          error: `HTTP ${error.status ?? 500}: Verification failed`,
+          detail: error.message,
+          requestId: error.requestId,
+        });
+      }
+
+      return NextResponse.json({
+        verified: false,
+        error: 'Verification request failed',
+        detail: error.message,
+        requestId: error.requestId,
+      }, { status: 500 });
+    }
+
     const message = error instanceof Error ? error.message : 'Verification failed';
     return NextResponse.json({ verified: false, error: message }, { status: 500 });
   }

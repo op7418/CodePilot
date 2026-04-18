@@ -4,6 +4,13 @@
  */
 export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
+    const { getSetting } = await import('@/lib/db');
+    const { applyNetworkProxyFromAppSettings, readNetworkProxySettings } = await import('@/lib/network-proxy');
+
+    // Re-apply persisted network proxy settings on boot.
+    // Without this, proxy envs only take effect after settings are saved once in current process.
+    applyNetworkProxyFromAppSettings(readNetworkProxySettings(getSetting));
+
     // Initialize Sentry for server-side error capture (respects opt-out marker file)
     const dsn = process.env.NEXT_PUBLIC_SENTRY_DSN;
     if (dsn) {
