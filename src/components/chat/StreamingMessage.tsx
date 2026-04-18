@@ -16,6 +16,7 @@ import { BatchPlanInlinePreview } from './batch-image-gen/BatchPlanInlinePreview
 import { WidgetRenderer } from './WidgetRenderer';
 import { parseAllShowWidgets, computePartialWidgetKey } from './MessageItem';
 import { PENDING_KEY, buildReferenceImages } from '@/lib/image-ref-store';
+import { shouldShowThinkingPhaseIndicator } from '@/lib/streaming-status';
 import type { PlannerOutput, MediaBlock } from '@/types';
 
 interface ImageGenRequest {
@@ -524,7 +525,13 @@ export function StreamingMessage({
         })()}
 
         {/* Loading indicator when no content yet and no thinking content — evolves over time */}
-        {isStreaming && !content && toolUses.length === 0 && !thinkingContent && (
+        {shouldShowThinkingPhaseIndicator({
+          isStreaming,
+          content,
+          toolUsesCount: toolUses.length,
+          thinkingContent,
+          statusText,
+        }) && (
           <div className="py-2">
             <ThinkingPhaseLabel />
           </div>

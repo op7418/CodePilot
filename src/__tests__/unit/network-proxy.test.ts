@@ -1,5 +1,7 @@
 import { afterEach, describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { getGlobalDispatcher, setGlobalDispatcher } from 'undici';
+import type { Dispatcher } from 'undici';
 import { applyNetworkProxyFromAppSettings, readNetworkProxySettings } from '@/lib/network-proxy';
 
 const ENV_KEYS = [
@@ -13,12 +15,14 @@ const ENV_KEYS = [
 ] as const;
 
 let snapshot: Partial<Record<(typeof ENV_KEYS)[number], string | undefined>> = {};
+let dispatcherSnapshot: Dispatcher | null = null;
 
 function saveEnvSnapshot() {
   snapshot = {};
   for (const key of ENV_KEYS) {
     snapshot[key] = process.env[key];
   }
+  dispatcherSnapshot = getGlobalDispatcher();
 }
 
 function restoreEnvSnapshot() {
@@ -27,6 +31,10 @@ function restoreEnvSnapshot() {
     if (value === undefined) delete process.env[key];
     else process.env[key] = value;
   }
+  if (dispatcherSnapshot) {
+    setGlobalDispatcher(dispatcherSnapshot);
+  }
+  dispatcherSnapshot = null;
 }
 
 describe('applyNetworkProxyFromAppSettings', () => {
@@ -90,6 +98,26 @@ describe('applyNetworkProxyFromAppSettings', () => {
     assert.equal(process.env.NO_PROXY, undefined);
     assert.equal(process.env.no_proxy, undefined);
     assert.equal(process.env.NODE_EXTRA_CA_CERTS, undefined);
+  });
+
+  it('switches undici global dispatcher when proxy toggles', () => {
+    saveEnvSnapshot();
+
+    applyNetworkProxyFromAppSettings({
+      network_proxy_enabled: 'true',
+      network_proxy_url: 'http://127.0.0.1:7890',
+      network_no_proxy: '',
+      network_proxy_ca_path: '',
+    });
+    assert.equal(getGlobalDispatcher().constructor.name, 'EnvHttpProxyAgent');
+
+    applyNetworkProxyFromAppSettings({
+      network_proxy_enabled: '',
+      network_proxy_url: '',
+      network_no_proxy: '',
+      network_proxy_ca_path: '',
+    });
+    assert.equal(getGlobalDispatcher().constructor.name, 'Agent');
   });
 
   it('reads network proxy settings from settings getter safely', () => {
