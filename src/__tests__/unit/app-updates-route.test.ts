@@ -49,31 +49,35 @@ describe('GET /api/app/updates', () => {
     assert.equal(typeof payload.detectedPlatform, 'string');
   });
 
-  it('maps upstream 5xx into a readable 502 payload', async () => {
+  it('falls back to a no-update payload when upstream is unavailable', async () => {
     globalThis.fetch = (async () => (
       new Response('bad gateway', { status: 503, statusText: 'Service Unavailable' })
     )) as typeof fetch;
 
     const response = await GET();
-    assert.equal(response.status, 502);
+    assert.equal(response.status, 200);
     const payload = await response.json() as Record<string, unknown>;
 
-    assert.equal(payload.error, 'Failed to fetch release info');
-    assert.equal(typeof payload.detail, 'string');
-    assert.equal(typeof payload.requestId, 'string');
+    assert.equal(payload.latestVersion, '0.1.0');
+    assert.equal(payload.currentVersion, '0.1.0');
+    assert.equal(payload.updateAvailable, false);
+    assert.equal(payload.releaseName, '');
+    assert.equal(payload.downloadUrl, '');
   });
 
-  it('returns 500 when response JSON is invalid', async () => {
+  it('falls back to a no-update payload when response JSON is invalid', async () => {
     globalThis.fetch = (async () => (
       new Response('not-json', { status: 200 })
     )) as typeof fetch;
 
     const response = await GET();
-    assert.equal(response.status, 500);
+    assert.equal(response.status, 200);
     const payload = await response.json() as Record<string, unknown>;
 
-    assert.equal(payload.error, 'Failed to check for updates');
-    assert.equal(typeof payload.detail, 'string');
-    assert.equal(typeof payload.requestId, 'string');
+    assert.equal(payload.latestVersion, '0.1.0');
+    assert.equal(payload.currentVersion, '0.1.0');
+    assert.equal(payload.updateAvailable, false);
+    assert.equal(payload.releaseName, '');
+    assert.equal(payload.downloadUrl, '');
   });
 });
