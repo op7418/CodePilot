@@ -1,9 +1,10 @@
 /**
- * Telegram Media — download and process images from Telegram messages.
+ * Telegram Media — download and process images and documents from Telegram messages.
  *
  * Handles photo[] size selection, file download via Bot API, base64 conversion,
- * and document-type image validation. Produces FileAttachment objects that plug
- * directly into the existing streamClaude vision pipeline.
+ * image validation, and arbitrary document attachments. Produces FileAttachment
+ * objects that plug directly into the streamClaude pipeline (vision for images,
+ * Read-tool path for non-image files via claude-client.ts).
  */
 
 import type { FileAttachment } from '@/types';
@@ -16,6 +17,9 @@ const OPTIMAL_LONG_EDGE = 1568;
 
 /** Default max image size in bytes (20 MB). */
 const DEFAULT_MAX_IMAGE_SIZE = 20 * 1024 * 1024;
+
+/** Default max non-image file size in bytes (20 MB — Telegram Bot API ceiling). */
+const DEFAULT_MAX_FILE_SIZE = 20 * 1024 * 1024;
 
 /** Max retry attempts for download. */
 const MAX_RETRIES = 3;
@@ -71,6 +75,15 @@ export function isImageEnabled(): boolean {
 }
 
 /**
+ * Check whether the Telegram non-image document feature is enabled.
+ */
+export function isDocumentEnabled(): boolean {
+  const setting = getSetting('bridge_telegram_document_enabled');
+  // Default to true if not explicitly set to 'false'
+  return setting !== 'false';
+}
+
+/**
  * Get the configured max image size in bytes.
  */
 function getMaxImageSize(): number {
@@ -80,6 +93,18 @@ function getMaxImageSize(): number {
     if (!isNaN(parsed) && parsed > 0) return parsed;
   }
   return DEFAULT_MAX_IMAGE_SIZE;
+}
+
+/**
+ * Get the configured max non-image file size in bytes.
+ */
+function getMaxFileSize(): number {
+  const setting = getSetting('bridge_telegram_max_document_size');
+  if (setting) {
+    const parsed = parseInt(setting, 10);
+    if (!isNaN(parsed) && parsed > 0) return parsed;
+  }
+  return DEFAULT_MAX_FILE_SIZE;
 }
 
 /**
@@ -151,7 +176,12 @@ export async function downloadPhoto(
   messageId: string,
 ): Promise<MediaDownloadResult> {
   const selected = selectOptimalPhoto(photos);
-  return downloadFileById(botToken, selected.file_id, messageId);
+  return downloadFileById(botToken, selected.file_id, messageId, {
+    maxSize: getMaxImageSize(),
+    mimeFallback: 'image/jpeg',
+    nameFallback: `image_${messageId}`,
+    kind: 'image',
+  });
 }
 
 /**
@@ -176,14 +206,67 @@ export async function downloadDocumentImage(
     return {
       attachment: null,
       rejected: 'too_large',
-      rejectedMessage: formatSizeError(doc.file_size, maxSize),
+      rejectedMessage: formatSizeError(doc.file_size, maxSize, 'image'),
     };
   }
 
-  return downloadFileById(botToken, doc.file_id, messageId);
+  return downloadFileById(botToken, doc.file_id, messageId, {
+    maxSize,
+    mimeOverride: mime,
+    nameOverride: doc.file_name,
+    mimeFallback: 'image/jpeg',
+    nameFallback: `image_${messageId}`,
+    kind: 'image',
+  });
+}
+
+/**
+ * Download a non-image document from Telegram.
+ *
+ * Preserves the user-supplied filename and Telegram-reported MIME so Claude
+ * can recognize the file format when reading via its Read tool. Pre-checks
+ * file_size against the max limit before initiating download.
+ */
+export async function downloadDocument(
+  botToken: string,
+  doc: TelegramDocument,
+  messageId: string,
+): Promise<MediaDownloadResult> {
+  const maxSize = getMaxFileSize();
+  if (doc.file_size && doc.file_size > maxSize) {
+    return {
+      attachment: null,
+      rejected: 'too_large',
+      rejectedMessage: formatSizeError(doc.file_size, maxSize, 'file'),
+    };
+  }
+
+  return downloadFileById(botToken, doc.file_id, messageId, {
+    maxSize,
+    mimeOverride: doc.mime_type,
+    nameOverride: doc.file_name,
+    mimeFallback: 'application/octet-stream',
+    nameFallback: `file_${messageId}`,
+    kind: 'file',
+  });
 }
 
 // ── Internal ─────────────────────────────────────────────────
+
+interface DownloadFileOptions {
+  /** Maximum allowed size in bytes. */
+  maxSize: number;
+  /** Pre-known MIME (e.g. from TelegramDocument.mime_type). Skips inference. */
+  mimeOverride?: string;
+  /** Pre-known filename (e.g. from TelegramDocument.file_name). Skips path basename. */
+  nameOverride?: string;
+  /** MIME used when neither override nor inferMimeType yields a value. */
+  mimeFallback: string;
+  /** Filename used when neither override nor path basename yields a value. */
+  nameFallback: string;
+  /** Used to format the size-exceeded error message with appropriate hint. */
+  kind: 'image' | 'file';
+}
 
 /**
  * Download a file by its Telegram file_id.
@@ -194,8 +277,15 @@ async function downloadFileById(
   botToken: string,
   fileId: string,
   messageId: string,
+  opts: DownloadFileOptions,
 ): Promise<MediaDownloadResult> {
-  const maxSize = getMaxImageSize();
+  const { maxSize, mimeOverride, nameOverride, mimeFallback, nameFallback, kind } = opts;
+  const downloadFailMessage = kind === 'image'
+    ? 'Failed to download image from Telegram.'
+    : 'Failed to download file from Telegram.';
+  const retriesExhaustedMessage = kind === 'image'
+    ? 'Image download failed after retries.'
+    : 'File download failed after retries.';
 
   for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
     try {
@@ -224,7 +314,7 @@ async function downloadFileById(
       // Pre-check size from API response
       if (fileSize && fileSize > maxSize) {
         console.warn(`[telegram-media] File too large: ${fileSize} bytes (max ${maxSize})`);
-        return { attachment: null, rejected: 'too_large', rejectedMessage: formatSizeError(fileSize, maxSize) };
+        return { attachment: null, rejected: 'too_large', rejectedMessage: formatSizeError(fileSize, maxSize, kind) };
       }
 
       // Step 2: Download the file
@@ -239,29 +329,31 @@ async function downloadFileById(
           await sleep(1000 * Math.pow(2, attempt - 1));
           continue;
         }
-        return { attachment: null, rejected: 'download_failed', rejectedMessage: 'Failed to download image from Telegram.' };
+        return { attachment: null, rejected: 'download_failed', rejectedMessage: downloadFailMessage };
       }
 
       // Check Content-Length header
       const contentLength = downloadRes.headers.get('content-length');
       if (contentLength && parseInt(contentLength, 10) > maxSize) {
         console.warn(`[telegram-media] Content-Length exceeds max: ${contentLength}`);
-        return { attachment: null, rejected: 'too_large', rejectedMessage: formatSizeError(parseInt(contentLength, 10), maxSize) };
+        return { attachment: null, rejected: 'too_large', rejectedMessage: formatSizeError(parseInt(contentLength, 10), maxSize, kind) };
       }
 
       // Step 3: Read buffer and validate actual size
       const buffer = Buffer.from(await downloadRes.arrayBuffer());
       if (buffer.length > maxSize) {
         console.warn(`[telegram-media] Downloaded buffer too large: ${buffer.length} bytes`);
-        return { attachment: null, rejected: 'too_large', rejectedMessage: formatSizeError(buffer.length, maxSize) };
+        return { attachment: null, rejected: 'too_large', rejectedMessage: formatSizeError(buffer.length, maxSize, kind) };
       }
 
-      // Step 4: Determine MIME type
-      const mime = inferMimeType(filePath) || 'image/jpeg';
+      // Step 4: Determine MIME and filename — prefer overrides (Telegram-reported metadata),
+      // then infer from path, then fall back. This preserves original document filenames
+      // and accurate MIMEs (e.g. application/pdf) so Claude can read them correctly.
+      const mime = mimeOverride || inferMimeType(filePath) || mimeFallback;
+      const fileName = nameOverride || filePath.split('/').pop() || nameFallback;
 
       // Step 5: Convert to base64 and build FileAttachment
       const base64 = buffer.toString('base64');
-      const fileName = filePath.split('/').pop() || `image_${messageId}`;
 
       return {
         attachment: {
@@ -280,18 +372,21 @@ async function downloadFileById(
         await sleep(1000 * Math.pow(2, attempt - 1));
         continue;
       }
-      return { attachment: null, rejected: 'download_failed', rejectedMessage: 'Image download failed after retries.' };
+      return { attachment: null, rejected: 'download_failed', rejectedMessage: retriesExhaustedMessage };
     }
   }
 
-  return { attachment: null, rejected: 'download_failed', rejectedMessage: 'Image download failed after retries.' };
+  return { attachment: null, rejected: 'download_failed', rejectedMessage: retriesExhaustedMessage };
 }
 
 /** Format a human-readable size-exceeded error message. */
-function formatSizeError(actualBytes: number, limitBytes: number): string {
+function formatSizeError(actualBytes: number, limitBytes: number, kind: 'image' | 'file'): string {
   const actualMB = (actualBytes / (1024 * 1024)).toFixed(1);
   const limitMB = (limitBytes / (1024 * 1024)).toFixed(0);
-  return `Image too large (${actualMB} MB, limit ${limitMB} MB). Please send as a photo instead of a file.`;
+  if (kind === 'image') {
+    return `Image too large (${actualMB} MB, limit ${limitMB} MB). Please send as a photo instead of a file.`;
+  }
+  return `File too large (${actualMB} MB, limit ${limitMB} MB).`;
 }
 
 function sleep(ms: number): Promise<void> {
