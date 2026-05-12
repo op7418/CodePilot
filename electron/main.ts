@@ -25,6 +25,7 @@ import fs from 'fs';
 import net from 'net';
 import os from 'os';
 import { TerminalManager } from './terminal-manager';
+import { buildExpandedShellPath } from './path-utils';
 
 /**
  * Return a copy of process.env without __NEXT_PRIVATE_* variables.
@@ -483,28 +484,7 @@ function findGitBashSync(): boolean {
  * claude, nvm, homebrew, etc. Shared by the server launcher and install orchestrator.
  */
 function getExpandedShellPath(): string {
-  const home = os.homedir();
-  const shellPath = userShellEnv.PATH || process.env.PATH || '';
-  const sep = path.delimiter;
-
-  if (process.platform === 'win32') {
-    const appData = process.env.APPDATA || path.join(home, 'AppData', 'Roaming');
-    const localAppData = process.env.LOCALAPPDATA || path.join(home, 'AppData', 'Local');
-    const winExtra = [
-      path.join(appData, 'npm'),
-      path.join(localAppData, 'npm'),
-      path.join(home, '.npm-global', 'bin'),
-      path.join(home, '.local', 'bin'),
-      path.join(home, '.claude', 'bin'),
-    ];
-    const allParts = [shellPath, ...winExtra].join(sep).split(sep).filter(Boolean);
-    return [...new Set(allParts)].join(sep);
-  } else {
-    const basePath = `/usr/local/bin:/opt/homebrew/bin:/usr/bin:/bin`;
-    const raw = `${basePath}:${home}/.npm-global/bin:${home}/.local/bin:${home}/.claude/bin:${shellPath}`;
-    const allParts = raw.split(':').filter(Boolean);
-    return [...new Set(allParts)].join(':');
-  }
+  return buildExpandedShellPath({ shellPath: userShellEnv.PATH || process.env.PATH || '' });
 }
 
 /**
