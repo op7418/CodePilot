@@ -62,6 +62,7 @@ export {
   Moon,
   NotePencil,
   PaintBrush,
+  Pause,
   PencilLine,
   PencilSimple,
   Play,
