@@ -144,6 +144,21 @@ describe('Provider key lifecycle — Codex follow-ups', () => {
       );
     });
 
+    it('connection tests use model mappings before falling back to aliases', () => {
+      assert.ok(
+        source.match(/const testModelName[\s\S]*modelName\.trim\(\)[\s\S]*mapSonnet\.trim\(\)[\s\S]*mapOpus\.trim\(\)[\s\S]*mapHaiku\.trim\(\)/),
+        'test connection should prefer user-entered model mappings over default aliases',
+      );
+      assert.ok(
+        source.match(/modelName:\s*testModelName/),
+        'test request body should send the resolved test model name',
+      );
+      assert.ok(
+        !source.match(/modelName:\s*modelName\s*\|\|\s*undefined/),
+        'test request body should not ignore model mapping fields',
+      );
+    });
+
     it('test button disabled prop references canTest', () => {
       assert.ok(
         source.match(/disabled=\{saving \|\| testing \|\| !canTest\}/),

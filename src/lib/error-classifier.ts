@@ -61,6 +61,7 @@ export type ClaudeErrorCategory =
   | 'AUTH_FORBIDDEN'
   | 'AUTH_STYLE_MISMATCH'
   | 'RATE_LIMITED'
+  | 'PROVIDER_UNAVAILABLE'
   | 'NETWORK_UNREACHABLE'
   | 'ENDPOINT_NOT_FOUND'
   | 'MODEL_NOT_AVAILABLE'
@@ -224,6 +225,15 @@ const ERROR_PATTERNS: ErrorPattern[] = [
     patterns: ['429', 'rate limit', 'Rate limit', 'too many requests', 'overloaded'],
     userMessage: () => 'Rate limit exceeded.',
     actionHint: () => 'Wait a moment before retrying. If this persists, consider upgrading your API plan.',
+    retryable: true,
+  },
+
+  // ── Provider temporarily unavailable (503) ──
+  {
+    category: 'PROVIDER_UNAVAILABLE',
+    patterns: ['503', 'service temporarily unavailable', 'service unavailable', 'temporarily unavailable'],
+    userMessage: (ctx) => `Provider is temporarily unavailable${providerHint(ctx)}.`,
+    actionHint: () => 'Retry later. If this happens only during connection testing, check that the model name mapping matches the provider-supported model IDs.',
     retryable: true,
   },
 
@@ -433,8 +443,10 @@ function buildRecoveryActions(category: ClaudeErrorCategory, ctx: ErrorContext):
       actions.push({ label: 'Open Settings', action: 'open_settings' });
       break;
     case 'RATE_LIMITED':
+    case 'PROVIDER_UNAVAILABLE':
       actions.push({ label: 'Retry', action: 'retry' });
       if (meta?.pricingUrl) actions.push({ label: 'Upgrade Plan', url: meta.pricingUrl });
+      if (meta?.docsUrl) actions.push({ label: 'View Docs', url: meta.docsUrl });
       break;
     case 'MODEL_NOT_AVAILABLE':
     case 'ENDPOINT_NOT_FOUND':

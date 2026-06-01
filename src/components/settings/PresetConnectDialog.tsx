@@ -132,6 +132,14 @@ export function PresetConnectDialog({
     return false;
   })();
 
+  const testModelName = (() => {
+    if (modelName.trim()) return modelName.trim();
+    if (preset?.fields.includes("model_mapping")) {
+      return mapSonnet.trim() || mapOpus.trim() || mapHaiku.trim() || undefined;
+    }
+    return undefined;
+  })();
+
   const handleTestConnection = async () => {
     // Belt-and-suspenders: the button disabled state already enforces
     // this, but guard here in case something bypasses the UI (keyboard
@@ -155,7 +163,7 @@ export function PresetConnectDialog({
         protocol: preset?.protocol || 'anthropic',
         authStyle: preset?.key === 'anthropic-thirdparty' ? authStyle : (preset?.authStyle || authStyle),
         envOverrides,
-        modelName: modelName || undefined,
+        modelName: testModelName,
         providerName: name || preset?.name,
       };
       if (isEdit && editProvider) {
