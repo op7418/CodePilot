@@ -465,6 +465,23 @@ Row-split rules:
 - Hide the freshness row entirely when `last_refreshed_at` is null (catalog-only providers, never probed) — don't render "从未同步" placeholders inline; the absence IS the signal.
 - **Primary "Add" button on the far right**, outline variant. Adding is distinct from the muted bulk-toggles.
 
+## Sidebar list item spacing
+
+Vertical lists inside the chat sidebar (project groups, session rows, assistant groups) use:
+
+```tsx
+<div className="flex flex-col gap-1.5">  {/* 6px */}
+```
+
+**Why 6px (not 2px, not 8px):**
+- **2px** is visually indistinguishable from "items touch" — hover backgrounds still merge edge-to-edge, defeating the affordance that an item is hoverable.
+- **8px** looks fine on a single item but compounds on long lists (a 20-row session list eats 160px of extra height) and pushes the "new chat" affordance below the fold on 768p.
+- **6px** is the smallest gap that registers as a separation under default hover bg (`bg-sidebar-accent` ≈ 6% black overlay on light theme), and it's symmetric with the row's own internal padding (`px-3` horizontally, `h-8` ≈ 32px tall) so the visual rhythm stays balanced.
+
+The same `gap-1.5` is used by `SessionListItem` rendering its own internal stacks and by `SplitGroupSection` headers — keeping the value consistent across the sidebar means a hover transition between any two items has the same visual weight, so muscle memory carries over.
+
+If a list cell contains multi-line content (e.g. a row with title + subtitle), keep the gap and add `space-y-0.5` *inside* the cell for the title↔subtitle stack — outer rhythm and inner rhythm are different problems.
+
 ## Visible vs kebab actions
 
 Decide by frequency, not by cleanliness.
@@ -703,7 +720,9 @@ Pixel widths (`sm:max-w-[550px]` etc.) are not allowed. If the tier doesn't fit,
 The 2xl tier carries three rules together — body is the only scroll region, header/footer are pinned:
 - Header: `<DialogHeader className="shrink-0">`
 - Body: `<div className="flex-1 min-h-0 overflow-y-auto mt-4 …">`
-- Footer: `<DialogFooter className="shrink-0 border-t border-border/50 pt-3 mt-2">`
+- Footer: `<DialogFooter className="shrink-0 border-t border-border/50 pt-5 mt-3">`
+
+The footer's `border-t + pt-5` (32px stack) gives scrolling lists a visual anchor so the action bar never looks welded to the last list row. Apply this pattern to any 2xl dialog that scrolls — the footer is the natural "exit ramp" and deserves its own breathing room.
 
 Don't put `overflow-y-auto` on the `DialogContent` itself — that scrolls the whole dialog including the title, which loses the user's place. Reserve raw `overflow-y-auto` for tier md/lg dialogs that are short enough not to need a sticky header.
 
