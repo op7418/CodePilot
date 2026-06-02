@@ -811,7 +811,7 @@ export function PresetConnectDialog({
             );
           })()}
 
-          <DialogFooter className="flex items-center justify-between sm:justify-between">
+          <DialogFooter className="flex items-center justify-between sm:justify-between shrink-0 gap-2 border-t border-border/50 pt-5 mt-3">
             <Button
               type="button"
               variant="outline"
