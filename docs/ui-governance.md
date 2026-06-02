@@ -66,6 +66,35 @@ src/hooks/                  → 数据获取、状态管理 hooks
 - 超过 500 行需拆分为子组件或抽取 hooks
 - `ui/` 和 `ai-elements/` 层豁免（它们是独立的原语库）
 
+## 间距规范
+
+> Token 化的间距档位，避免"0/2/4/8 凭感觉选"导致的同文件间距漂移。
+
+### Sidebar list（侧边栏列表项之间）
+
+| 档位 | className | 用途 |
+|---|---|---|
+| **2px (`gap-0.5`)** | `<div className="flex flex-col gap-0.5">` | cell **内部** 的 icon+label / 标题+副标题等"同交互单元"堆叠 |
+| **6px (`gap-1.5`)** | `<div className="flex flex-col gap-1.5">` | sidebar 的**列表项之间**（nav 项、session row、项目组内 session）—— 默认值 |
+
+**6px 的选择理由：**
+- 2px 与 hover bg (`bg-sidebar-accent` ≈ 6% 黑叠加) 边缘融合，扫鼠标时两条 hover 背景融成一条色带
+- 8px 在 20 行列表上吃 160px 高度，把"新建会话"挤到 768p 折叠线以下
+- 6px 是「最小区分」与「长列表密度」的折中；与行内 `px-3` / `h-8` 构成"外 6 / 内 32 / 内 12"三档节奏
+
+**反模式：**不要混用 — 一个 sidebar 里如果出现 `gap-0.5` 和 `gap-1.5` 交替，肉眼会感知到节奏不齐，肌肉记忆失效。
+
+### Dialog footer（2xl 滚动 dialog 的底部按钮区）
+
+| 模式 | className | 适用场景 |
+|---|---|---|
+| **有 border + pt** | `<DialogFooter className="shrink-0 gap-2 border-t border-border/50 pt-5 mt-3">` | 2xl 滚动 dialog（provider detail、role mapping 长列表、preset 多步表单） |
+| **无 border** | `<DialogFooter className="shrink-0 gap-2">` | 短弹窗（confirm、add-model 单字段） |
+
+**为什么 footer 用 border + pt 而不是单 margin：**单纯 margin 即使 32px 在视觉上仍像"最后一行 + 按钮粘在一起"，间距不传达"分段"。1px anchor + 8px 缓冲让按钮"站在"分隔线肩部，"决策出口"语义成立。
+
+**为什么不在 primitive (`DialogFooter`) 上加 border：**短弹窗（confirm / add-model）不想要 32px 缓冲 + 1px 锚点，primitive 改动会污染它们。**调用方按需传 className，primitive 保持 `flex + gap-2` 的最小契约。**
+
 ## 新 Primitive 审批流程
 
 1. 先检查 `ui/` 中是否已有可复用的组件
