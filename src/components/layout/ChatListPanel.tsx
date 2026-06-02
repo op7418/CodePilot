@@ -467,7 +467,7 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
 
       {/* Feature nav items */}
       <div className="px-3 pb-2">
-        <div className="flex flex-col gap-0.5">
+        <div className="flex flex-col gap-1.5">
           {navItems.map((item) => {
             const isActive = pathname.startsWith(item.href);
             return (
@@ -595,7 +595,7 @@ export function ChatListPanel({ open, width, hasUpdate, readyToInstall }: ChatLi
                         transition={{ duration: 0.2, ease: 'easeOut' }}
                         style={{ overflow: 'hidden' }}
                       >
-                        <div className="mt-0.5 flex flex-col gap-0.5">
+                        <div className="mt-0.5 flex flex-col gap-1.5">
                           {visibleSessions.map((session) => {
                             const isActive = pathname === `/chat/${session.id}`;
                             const canSplit = !isActive && !isInSplit(session.id);
