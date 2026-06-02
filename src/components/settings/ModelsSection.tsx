@@ -1957,7 +1957,7 @@ export function ModelsSection() {
               </div>
             );
           })()}
-          <DialogFooter>
+          <DialogFooter className="shrink-0 gap-2 border-t border-border/50 pt-5 mt-3">
             <Button variant="outline" onClick={() => setRoleDialog(null)} disabled={roleSaving}>
               {t('common.cancel')}
             </Button>
