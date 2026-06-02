@@ -543,7 +543,7 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
                   transition={{ duration: 0.2, ease: 'easeOut' }}
                   style={{ overflow: 'hidden' }}
                 >
-                  <div className="flex flex-col">
+                  <div className="flex flex-col gap-1.5">
                     {/* Fixed top item: 新建项目 */}
                     <button
                       type="button"
@@ -615,7 +615,7 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
                                 transition={{ duration: 0.2, ease: 'easeOut' }}
                                 style={{ overflow: 'hidden' }}
                               >
-                                <div className="flex flex-col">
+                                <div className="flex flex-col gap-1.5">
                                   {visibleSessions.map((session) => {
                                     const isActive = pathname === `/chat/${session.id}`;
                                     const canSplit = !isActive && !isInSplit(session.id);
@@ -738,7 +738,7 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
                       transition={{ duration: 0.2, ease: 'easeOut' }}
                       style={{ overflow: 'hidden' }}
                     >
-                      <div className="flex flex-col">
+                      <div className="flex flex-col gap-1.5">
                         {aVisibleSessions.map((session) => {
                           const isActive = pathname === `/chat/${session.id}`;
                           const canSplit = !isActive && !isInSplit(session.id);
