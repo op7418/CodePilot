@@ -38,6 +38,14 @@ import {
   COLLAPSED_INITIALIZED_KEY,
 } from "./chat-list-utils";
 import type { ChatSession } from "@/types";
+import {
+  fetchSessionsWithCache,
+  getCachedSessions,
+  isCacheUsable,
+  addSessionToCache,
+  updateSessionInCache,
+  removeSessionFromCache,
+} from "@/lib/session-cache";
 
 interface ChatListPanelProps {
   open: boolean;
@@ -109,6 +117,8 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
       });
       if (res.ok) {
         const data = await res.json();
+        // Optimistic update: add to cache
+        addSessionToCache(data.session);
         window.dispatchEvent(new CustomEvent("session-created"));
         router.push(`/chat/${data.session.id}`);
       }
@@ -198,6 +208,8 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
         return;
       }
       const data = await res.json();
+      // Optimistic update: add to cache
+      addSessionToCache(data.session);
       router.push(`/chat/${data.session.id}`);
       window.dispatchEvent(new CustomEvent("session-created"));
     } catch {
@@ -217,31 +229,29 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
     });
   }, []);
 
-  // AbortController ref for cancelling in-flight requests
-  const abortRef = useRef<AbortController | null>(null);
+  // Debounce ref for event-driven refreshes
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchSessions = useCallback(async () => {
-    // Cancel any in-flight request
-    abortRef.current?.abort();
-    const controller = new AbortController();
-    abortRef.current = controller;
-    try {
-      const res = await fetch("/api/chat/sessions", { signal: controller.signal });
-      if (res.ok) {
-        const data = await res.json();
-        setSessions(data.sessions || []);
+  const fetchSessions = useCallback(async (forceRefresh = false) => {
+    // Serve stale cache immediately if available
+    if (!forceRefresh) {
+      const cached = getCachedSessions();
+      if (cached && isCacheUsable()) {
+        setSessions(cached);
       }
-    } catch (e) {
-      // Ignore abort errors; log others
-      if (e instanceof DOMException && e.name === 'AbortError') return;
+    }
+
+    // Fetch fresh data (with deduplication)
+    const sessions = await fetchSessionsWithCache(forceRefresh);
+    if (sessions) {
+      setSessions(sessions);
     }
   }, []);
 
   const debouncedFetchSessions = useCallback(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     debounceRef.current = setTimeout(() => {
-      fetchSessions();
+      fetchSessions(true); // Force refresh on events
     }, 300);
   }, [fetchSessions]);
 
@@ -249,7 +259,6 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
   useEffect(() => {
     fetchSessions();
     return () => {
-      abortRef.current?.abort();
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [fetchSessions]);
@@ -286,7 +295,9 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
         method: "DELETE",
       });
       if (res.ok) {
+        // Optimistic update: remove from both state and cache
         setSessions((prev) => prev.filter((s) => s.id !== sessionId));
+        removeSessionFromCache(sessionId);
         // Drop from split group if it's there
         if (isInSplit(sessionId)) {
           removeFromSplit(sessionId);
@@ -310,9 +321,11 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
         body: JSON.stringify({ title: newTitle }),
       });
       if (res.ok) {
+        // Optimistic update: update both state and cache
         setSessions((prev) =>
           prev.map((s) => (s.id === sessionId ? { ...s, title: newTitle } : s))
         );
+        updateSessionInCache(sessionId, { title: newTitle });
         window.dispatchEvent(new CustomEvent("session-updated"));
       }
     } catch {
