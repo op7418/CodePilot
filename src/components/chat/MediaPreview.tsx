@@ -34,7 +34,15 @@ export function MediaPreview({ media }: MediaPreviewProps) {
   }));
 
   return (
-    <div className="mt-2 space-y-2">
+    <div
+      className="mt-2 space-y-2"
+      style={{
+        // Defer rendering of off-screen media previews
+        // This significantly reduces paint time for conversations with images/videos
+        contentVisibility: 'auto',
+        containIntrinsicSize: 'auto 100px',
+      }}
+    >
       {/* Images */}
       {images.length > 0 && (
         <div className="flex flex-wrap gap-2">

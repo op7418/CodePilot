@@ -165,7 +165,15 @@ export function DiffSummary({ files, onPreview, onExportLongShot }: DiffSummaryP
   if (previewable.length === 0 && others.length === 0) return null;
 
   return (
-    <div className="mt-2">
+    <div
+      className="mt-2"
+      style={{
+        // Defer rendering of off-screen diff summaries
+        // This reduces paint time for long conversations with many file changes
+        contentVisibility: 'auto',
+        containIntrinsicSize: 'auto 40px',
+      }}
+    >
       {previewable.map((f) => (
         <ArtifactFileCard
           key={f.path}

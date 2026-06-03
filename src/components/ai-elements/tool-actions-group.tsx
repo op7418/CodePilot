@@ -544,7 +544,13 @@ export function ToolActionsGroup({
   if (flat) {
     const lastRunningId = [...tools].reverse().find((t) => t.result === undefined)?.id;
     return (
-      <div className="w-[min(100%,48rem)]">
+      <div
+        className="w-[min(100%,48rem)]"
+        style={{
+          contentVisibility: 'auto',
+          containIntrinsicSize: 'auto 28px',
+        }}
+      >
         <div className="border-l-2 border-border/50 pl-2 ml-1.5">
           {thinkingContent && <ThinkingRow content={thinkingContent} isStreaming={isStreaming} />}
           {computeSegments(tools).map((seg, i) =>
@@ -579,7 +585,16 @@ export function ToolActionsGroup({
   if (summaryParts.length === 0) summaryParts.push(`${tools.length} actions`);
 
   return (
-    <div className="w-[min(100%,48rem)]">
+    <div
+      className="w-[min(100%,48rem)]"
+      style={{
+        // Defer rendering of off-screen tool action groups
+        // This significantly reduces paint time for long conversations
+        // with many tool calls that are scrolled out of view
+        contentVisibility: 'auto',
+        containIntrinsicSize: 'auto 28px',
+      }}
+    >
       {/* Header — content left, caret right.
           Round 12 fix: was `py-1 rounded-sm` with NO horizontal
           padding, so the inner count badge sat flush against the
