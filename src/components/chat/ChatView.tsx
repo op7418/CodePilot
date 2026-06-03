@@ -366,44 +366,78 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
     }
   }, []);
 
-  // Fetch provider-specific options (with abort to prevent stale responses on fast switch)
+  // Fetch provider-specific options with debouncing to prevent rapid API calls
+  // during model switching. Uses a 300ms debounce to batch rapid changes.
+  const providerOptionsDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    // Clear any pending debounce
+    if (providerOptionsDebounceRef.current) {
+      clearTimeout(providerOptionsDebounceRef.current);
+    }
+
     const pid = currentProviderId || 'env';
     const controller = new AbortController();
-    fetch(`/api/providers/options?providerId=${encodeURIComponent(pid)}`, { signal: controller.signal })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (!controller.signal.aborted) {
-          setThinkingMode(data?.options?.thinking_mode || 'adaptive');
-          setContext1m(!!data?.options?.context_1m);
-        }
-      })
-      .catch(() => {});
-    return () => controller.abort();
+
+    // Debounce the fetch to batch rapid provider switches
+    providerOptionsDebounceRef.current = setTimeout(() => {
+      fetch(`/api/providers/options?providerId=${encodeURIComponent(pid)}`, { signal: controller.signal })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (!controller.signal.aborted) {
+            setThinkingMode(data?.options?.thinking_mode || 'adaptive');
+            setContext1m(!!data?.options?.context_1m);
+          }
+        })
+        .catch(() => {});
+    }, 300);
+
+    return () => {
+      controller.abort();
+      if (providerOptionsDebounceRef.current) {
+        clearTimeout(providerOptionsDebounceRef.current);
+      }
+    };
   }, [currentProviderId]);
 
   // Resolve upstream model ID for the current model/provider so the context
   // indicator can disambiguate alias windows (first-party opus = 1M vs
   // Bedrock/Vertex opus = 200K). /api/providers/models already returns
   // upstreamModelId per model on the returned groups.
+  // Debounced to batch rapid model/provider switches.
   const [currentModelUpstream, setCurrentModelUpstream] = useState<string | undefined>(undefined);
+  const modelUpstreamDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
+    // Clear any pending debounce
+    if (modelUpstreamDebounceRef.current) {
+      clearTimeout(modelUpstreamDebounceRef.current);
+    }
+
     const pid = currentProviderId || 'env';
     const controller = new AbortController();
-    fetch('/api/providers/models', { signal: controller.signal })
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        if (controller.signal.aborted) return;
-        const group = data?.groups?.find((g: { provider_id: string }) => g.provider_id === pid);
-        // Canonical-aware (tech-debt #37): currentModel may be a canonical id
-        // (`claude-opus-4-7`) while the rows are aliases (`opus`) — match by
-        // either so the context-window indicator gets the right upstream.
-        const models = (group?.models ?? []) as Array<{ value: string; upstreamModelId?: string }>;
-        const model = findModelOption(models, currentModel);
-        setCurrentModelUpstream(model?.upstreamModelId);
-      })
-      .catch(() => {});
-    return () => controller.abort();
+
+    // Debounce the fetch to batch rapid model/provider switches
+    modelUpstreamDebounceRef.current = setTimeout(() => {
+      fetch('/api/providers/models', { signal: controller.signal })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => {
+          if (controller.signal.aborted) return;
+          const group = data?.groups?.find((g: { provider_id: string }) => g.provider_id === pid);
+          // Canonical-aware (tech-debt #37): currentModel may be a canonical id
+          // (`claude-opus-4-7`) while the rows are aliases (`opus`) — match by
+          // either so the context-window indicator gets the right upstream.
+          const models = (group?.models ?? []) as Array<{ value: string; upstreamModelId?: string }>;
+          const model = findModelOption(models, currentModel);
+          setCurrentModelUpstream(model?.upstreamModelId);
+        })
+        .catch(() => {});
+    }, 300);
+
+    return () => {
+      controller.abort();
+      if (modelUpstreamDebounceRef.current) {
+        clearTimeout(modelUpstreamDebounceRef.current);
+      }
+    };
   }, [currentProviderId, currentModel]);
   useEffect(() => { if (initialPermissionProfile) setPermissionProfile(initialPermissionProfile); }, [initialPermissionProfile]);
 
