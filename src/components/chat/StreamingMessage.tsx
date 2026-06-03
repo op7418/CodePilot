@@ -126,12 +126,27 @@ const STRUCTURED_BLOCK_RE = /```(show-widget|batch-plan|image-gen-request)/;
 function useBufferedContent(rawContent: string, isStreaming: boolean): string {
   const [bypassed, setBypassed] = useState(false);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Track the last content length to avoid unnecessary word-count recomputation
+  const lastLengthRef = useRef(0);
+  const wordCountRef = useRef(0);
+
+  // Optimized word count: only recompute when content length changes significantly
+  const getWordCount = useCallback((text: string): number => {
+    if (!text) return 0;
+    // Only recompute if content grew by more than 50 chars (optimization)
+    if (text.length - lastLengthRef.current < 50 && wordCountRef.current > 0) {
+      return wordCountRef.current;
+    }
+    lastLengthRef.current = text.length;
+    wordCountRef.current = text.split(/\s+/).filter(Boolean).length;
+    return wordCountRef.current;
+  }, []);
 
   // Derive whether bypass conditions are met (pure computation, no side effects)
   const shouldBypass = !isStreaming
     || bypassed
     || (!!rawContent && STRUCTURED_BLOCK_RE.test(rawContent))
-    || (!!rawContent && rawContent.split(/\s+/).filter(Boolean).length >= BUFFER_WORD_THRESHOLD);
+    || (!!rawContent && getWordCount(rawContent) >= BUFFER_WORD_THRESHOLD);
 
   // Effect: sync bypass state when conditions are met (one-way latch, safe)
   useEffect(() => {
@@ -144,6 +159,8 @@ function useBufferedContent(rawContent: string, isStreaming: boolean): string {
   useEffect(() => {
     if (!rawContent && !isStreaming) {
       setBypassed(false); // eslint-disable-line react-hooks/set-state-in-effect
+      lastLengthRef.current = 0;
+      wordCountRef.current = 0;
       if (timerRef.current) {
         clearTimeout(timerRef.current);
         timerRef.current = null;
@@ -226,9 +243,11 @@ function ElapsedTimer({ startedAt }: { startedAt: number }) {
 
   useEffect(() => {
     if (!startedAtIsReady) return;
+    // Use 2-second interval instead of 1-second to reduce re-renders
+    // The visual difference is negligible for elapsed time display
     const interval = setInterval(() => {
       setElapsed(Math.floor((Date.now() - startedAt) / 1000));
-    }, 1000);
+    }, 2000);
     return () => clearInterval(interval);
   }, [startedAt, startedAtIsReady]);
 
