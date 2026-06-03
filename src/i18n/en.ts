@@ -29,6 +29,7 @@ const en = {
   'chatList.copySessionId': 'Copy Conversation ID',
   'chatList.renameConversation': 'Rename Conversation',
   'chatList.removeProject': 'Remove Project',
+  'chatList.removeProjectConfirm': 'Remove project "{name}" and all its conversations?',
   'chatList.openFolder': 'Open Folder',
   'chatList.copyFolderPath': 'Copy Folder Path',
   'chatList.searchSessions': 'Search sessions...',
