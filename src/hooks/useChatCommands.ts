@@ -1,4 +1,4 @@
-import { useCallback } from 'react';
+import { useCallback, useRef } from 'react';
 import type { Message } from '@/types';
 
 interface UseChatCommandsOpts {
@@ -8,7 +8,18 @@ interface UseChatCommandsOpts {
   sendMessage: (content: string) => void;
 }
 
+/**
+ * Hook for handling instant chat commands (/help, /clear, /cost).
+ *
+ * Optimization: uses a ref for messages to avoid recreating the callback
+ * on every message update. The /cost command reads from the ref at call
+ * time, not at hook creation time — same semantics, fewer re-renders.
+ */
 export function useChatCommands({ sessionId, messages, setMessages, sendMessage }: UseChatCommandsOpts): (command: string) => void {
+  // Keep a ref to messages so the callback doesn't depend on the array reference
+  const messagesRef = useRef(messages);
+  messagesRef.current = messages;
+
   return useCallback((command: string) => {
     switch (command) {
       case '/help': {
@@ -35,6 +46,8 @@ export function useChatCommands({ sessionId, messages, setMessages, sendMessage 
         }
         break;
       case '/cost': {
+        // Read from ref at call time — avoids depending on messages in useCallback deps
+        const currentMessages = messagesRef.current;
         // Aggregate token usage from all messages in this session
         let totalInput = 0;
         let totalOutput = 0;
@@ -43,7 +56,7 @@ export function useChatCommands({ sessionId, messages, setMessages, sendMessage 
         let totalCost = 0;
         let turnCount = 0;
 
-        for (const msg of messages) {
+        for (const msg of currentMessages) {
           if (msg.token_usage) {
             try {
               const usage = typeof msg.token_usage === 'string' ? JSON.parse(msg.token_usage) : msg.token_usage;
@@ -81,5 +94,5 @@ export function useChatCommands({ sessionId, messages, setMessages, sendMessage 
         // This shouldn't be reached since non-immediate commands are handled via badge
         sendMessage(command);
     }
-  }, [sessionId, sendMessage, messages, setMessages]);
+  }, [sessionId, sendMessage, setMessages]); // Removed messages from deps — uses ref instead
 }
