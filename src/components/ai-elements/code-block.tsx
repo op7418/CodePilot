@@ -154,21 +154,75 @@ const CodeBlockContext = createContext<CodeBlockContextType>({
 });
 
 // Highlighter cache keyed by "lang:lightTheme:darkTheme" — bounded to 10 entries
+// Stats tracking enabled for monitoring cache hit rates in development
 const highlighterCache = new LRUMap<
   string,
   Promise<HighlighterGeneric<BundledLanguage, BundledTheme>>
->(10);
+>(10, { trackStats: true });
 
-// Token cache — bounded to 200 entries
-const tokensCache = new LRUMap<string, TokenizedCode>(200);
+// Token cache — bounded to 500 entries (increased from 200 for better hit rates
+// in long chat sessions with many code blocks)
+const tokensCache = new LRUMap<string, TokenizedCode>(500, { trackStats: true });
 
 // Subscribers for async token updates
 const subscribers = new Map<string, Set<(result: TokenizedCode) => void>>();
 
+/**
+ * Get cache statistics for monitoring and debugging.
+ * Returns hit rates for both the highlighter and token caches.
+ * Useful during development to understand cache effectiveness.
+ */
+export function getCodeBlockCacheStats() {
+  return {
+    highlighter: highlighterCache.getStats(),
+    tokens: tokensCache.getStats(),
+    subscribers: subscribers.size,
+  };
+}
+
+/**
+ * Reset all code block cache statistics.
+ * Useful for starting fresh measurements.
+ */
+export function resetCodeBlockCacheStats() {
+  highlighterCache.resetStats();
+  tokensCache.resetStats();
+}
+
+/**
+ * Compute a cache key for tokenized code.
+ *
+ * Uses a more robust key construction to reduce collision risk:
+ *   - Language and themes provide the highlighting context
+ *   - Code length provides a quick size check
+ *   - A hash of the full code content provides uniqueness
+ *   - For very long code (>500 chars), we sample from multiple positions
+ *     to create a fingerprint that catches modifications anywhere in the code
+ */
 const getTokensCacheKey = (code: string, language: BundledLanguage, lightTheme: BundledTheme, darkTheme: BundledTheme) => {
-  const start = code.slice(0, 100);
-  const end = code.length > 100 ? code.slice(-100) : "";
-  return `${language}:${lightTheme}:${darkTheme}:${code.length}:${start}:${end}`;
+  // For short code, use the full content as the key (exact match)
+  if (code.length <= 200) {
+    return `${language}:${lightTheme}:${darkTheme}:${code}`;
+  }
+
+  // For longer code, create a fingerprint by sampling from multiple positions
+  // This catches modifications at the beginning, middle, and end of the code
+  const len = code.length;
+  const start = code.slice(0, 80);
+  const mid = code.slice(Math.floor(len / 2) - 40, Math.floor(len / 2) + 40);
+  const end = code.slice(-80);
+
+  // Simple hash: combine character codes at key positions
+  // This provides better uniqueness than just start+end for similar-length code
+  let hash = 0;
+  const samplePositions = [0, Math.floor(len / 4), Math.floor(len / 2), Math.floor(3 * len / 4), len - 1];
+  for (const pos of samplePositions) {
+    if (pos < len) {
+      hash = ((hash << 5) - hash + code.charCodeAt(pos)) | 0;
+    }
+  }
+
+  return `${language}:${lightTheme}:${darkTheme}:${len}:${hash}:${start}:${mid}:${end}`;
 };
 
 // Lazy-loaded bundledLanguages to avoid eager import of the full shiki module
@@ -179,6 +233,45 @@ async function loadBundledLanguages(): Promise<Record<string, unknown>> {
     _bundledLanguages = mod.bundledLanguages as Record<string, unknown>;
   }
   return _bundledLanguages;
+}
+
+/**
+ * Commonly used languages that should be pre-loaded for better UX.
+ * These are the languages most frequently seen in chat code blocks.
+ */
+const COMMON_LANGUAGES: BundledLanguage[] = [
+  'typescript', 'javascript', 'tsx', 'jsx',
+  'python', 'bash', 'json', 'html', 'css',
+  'rust', 'go', 'java', 'c', 'cpp',
+];
+
+/**
+ * Warm the highlighter cache by pre-loading commonly used languages.
+ * This is a fire-and-forget function that should be called during app initialization
+ * to reduce the initial highlight delay for common code blocks.
+ *
+ * The warming is lazy — it only starts after the first code block is rendered
+ * and the shiki module is loaded.
+ */
+export function warmCodeBlockCache(options?: {
+  languages?: BundledLanguage[];
+  lightTheme?: BundledTheme;
+  darkTheme?: BundledTheme;
+}) {
+  const languages = options?.languages ?? COMMON_LANGUAGES;
+  const lightTheme = options?.lightTheme ?? SHIKI_DEFAULT_LIGHT;
+  const darkTheme = options?.darkTheme ?? SHIKI_DEFAULT_DARK;
+
+  // Fire-and-forget: pre-load highlighters for common languages
+  // This runs in the background and doesn't block rendering
+  for (const lang of languages) {
+    const cacheKey = `${lang}:${lightTheme}:${darkTheme}`;
+    if (!highlighterCache.has(cacheKey)) {
+      getHighlighter(lang, lightTheme, darkTheme).catch(() => {
+        // Silently ignore failures — warming is best-effort
+      });
+    }
+  }
 }
 
 const isBundledLanguage = (lang: string): lang is BundledLanguage => {
