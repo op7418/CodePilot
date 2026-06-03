@@ -1,6 +1,6 @@
 'use client';
 
-import { useRef, useEffect, useState, useCallback } from 'react';
+import { useRef, useEffect, useState, useCallback, memo } from 'react';
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
 import { useStickToBottomContext } from 'use-stick-to-bottom';
@@ -202,6 +202,47 @@ interface MessageListProps {
   onTaskRunAction?: () => void;
 }
 
+/**
+ * Memoized message list item wrapper.
+ *
+ * This component wraps the complex rendering logic for each message
+ * (runtime switch markers, task run markers, rewind buttons) and
+ * prevents unnecessary re-renders when parent state changes during
+ * streaming but this specific message's props haven't changed.
+ */
+interface MessageListItemProps {
+  message: Message;
+  sessionId?: string;
+  isAssistantProject?: boolean;
+  assistantName?: string;
+  /** Pre-computed leading marker (null if none) */
+  leadingMarker: React.ReactNode;
+  /** Pre-computed rewind SDK UUID (undefined if none) */
+  rewindSdkUuid?: string;
+  /** Whether currently streaming (hides rewind button) */
+  isStreaming: boolean;
+}
+
+const MessageListItem = memo(function MessageListItem({
+  message,
+  sessionId,
+  isAssistantProject,
+  assistantName,
+  leadingMarker,
+  rewindSdkUuid,
+  isStreaming,
+}: MessageListItemProps) {
+  return (
+    <div key={message.id} id={`msg-${message.id}`} className="group">
+      {leadingMarker}
+      <MessageItem message={message} sessionId={sessionId} isAssistantProject={isAssistantProject} assistantName={assistantName} />
+      {rewindSdkUuid && sessionId && !isStreaming && (
+        <RewindButton sessionId={sessionId} userMessageId={rewindSdkUuid} />
+      )}
+    </div>
+  );
+});
+
 export function MessageList({
   messages,
   streamingContent,
@@ -367,13 +408,16 @@ export function MessageList({
           }
 
           return (
-            <div key={message.id} id={`msg-${message.id}`} className="group">
-              {leadingMarker}
-              <MessageItem message={message} sessionId={sessionId} isAssistantProject={isAssistantProject} assistantName={assistantName} />
-              {rewindSdkUuid && sessionId && !isStreaming && (
-                <RewindButton sessionId={sessionId} userMessageId={rewindSdkUuid} />
-              )}
-            </div>
+            <MessageListItem
+              key={message.id}
+              message={message}
+              sessionId={sessionId}
+              isAssistantProject={isAssistantProject}
+              assistantName={assistantName}
+              leadingMarker={leadingMarker}
+              rewindSdkUuid={rewindSdkUuid}
+              isStreaming={isStreaming}
+            />
           );
         })}
 
