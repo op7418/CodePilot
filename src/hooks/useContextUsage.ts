@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useRef } from 'react';
 import type { Message } from '@/types';
 import { getContextWindow } from '@/lib/model-context';
 import { walkContextUsage } from '@/lib/context-usage-walk';
@@ -60,6 +60,30 @@ export interface ContextUsageData {
 
 const SNAPSHOT_FRESHNESS_MS = 60_000;
 
+/**
+ * Extract a stable fingerprint from the messages array.
+ * This avoids recomputing context usage when messages array reference
+ * changes but the actual token usage data hasn't changed.
+ *
+ * The fingerprint captures:
+ * - Number of messages (length)
+ * - Last assistant message's token_usage (the most recent API response)
+ * - Whether the array has a summary message
+ */
+function getMessagesFingerprint(messages: Message[]): string {
+  if (messages.length === 0) return 'empty';
+
+  // Find the last assistant message with token_usage
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const msg = messages[i];
+    if (msg.role === 'assistant' && msg.token_usage) {
+      return `${messages.length}:${msg.token_usage}`;
+    }
+  }
+
+  return `${messages.length}:no-usage`;
+}
+
 export function useContextUsage(
   messages: Message[],
   modelName: string,
@@ -94,7 +118,18 @@ export function useContextUsage(
     };
   },
 ): ContextUsageData {
+  // Compute a stable fingerprint to avoid unnecessary recomputation
+  const fingerprint = useMemo(() => getMessagesFingerprint(messages), [messages]);
+
+  // Cache the previous result to return when fingerprint hasn't changed
+  const cachedRef = useRef<{ fingerprint: string; data: ContextUsageData } | null>(null);
+
   return useMemo(() => {
+    // Return cached result if fingerprint hasn't changed
+    if (cachedRef.current?.fingerprint === fingerprint) {
+      return cachedRef.current.data;
+    }
+
     // Catalog window — the static fallback. Plain `getContextWindow`
     // result; may be `null` for models the catalog doesn't enumerate
     // (GLM / Bailian / Volcengine / MiniMax / Kimi / DeepSeek / etc.).
@@ -126,7 +161,7 @@ export function useContextUsage(
       // No estimated-next-turn from the snapshot — we assume next turn is
       // similar to current (snapshot is authoritative on "used now" but
       // can't project future output).
-      return {
+      const result: ContextUsageData = {
         modelName,
         contextWindow: max,
         used,
@@ -152,6 +187,8 @@ export function useContextUsage(
           pending: options?.pending,
         }),
       };
+      cachedRef.current = { fingerprint, data: result };
+      return result;
     }
 
     // Walk assistant token_usage records from the end. The pure
@@ -211,7 +248,7 @@ export function useContextUsage(
       if (effectiveRatio >= 0.95) state = 'critical';
       else if (effectiveRatio >= 0.8) state = 'warning';
 
-      return {
+      const result: ContextUsageData = {
         modelName,
         contextWindow,
         used,
@@ -227,6 +264,8 @@ export function useContextUsage(
         source: 'result_usage',
         breakdown,
       };
+      cachedRef.current = { fingerprint, data: result };
+      return result;
     }
 
     // No meaningful baseline found. Still surface the SDK-reported
@@ -235,7 +274,7 @@ export function useContextUsage(
     // capacity badge. `hasData` stays false because we have no real
     // `used` to draw a percent from; RunCockpit's fallback path
     // renders the breakdown without the ratio bar in that case.
-    return {
+    const result: ContextUsageData = {
       modelName,
       contextWindow: latestSdkContextWindow ?? catalogContextWindow,
       used: 0,
@@ -254,5 +293,7 @@ export function useContextUsage(
         pending: options?.pending,
       }),
     };
-  }, [messages, modelName, options?.context1m, options?.hasSummary, options?.upstreamModelId, options?.snapshot, options?.pending]);
+    cachedRef.current = { fingerprint, data: result };
+    return result;
+  }, [fingerprint, modelName, options?.context1m, options?.hasSummary, options?.upstreamModelId, options?.snapshot, options?.pending]);
 }
