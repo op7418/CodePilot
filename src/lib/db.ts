@@ -38,10 +38,10 @@ function withMigrationLock(dbInstance: Database.Database, fn: (db: Database.Data
           try { fs.unlinkSync(lockPath); } catch { /* ignore */ }
           continue;
         }
-        // Wait a bit and retry
+        // Wait a bit and retry. Atomics.wait blocks the thread without
+        // burning CPU cycles (unlike a Date.now() spin loop).
         const waitMs = 50 + Math.random() * 100;
-        const waitUntil = Date.now() + waitMs;
-        while (Date.now() < waitUntil) { /* busy wait — better-sqlite3 is sync */ }
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, waitMs);
         continue;
       }
       throw err;
