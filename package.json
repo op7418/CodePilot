@@ -72,6 +72,7 @@
     "@streamdown/code": "^1.0.1",
     "@streamdown/math": "^1.0.1",
     "@streamdown/mermaid": "1.0.1",
+    "@tanstack/react-virtual": "^3.14.2",
     "@types/pngjs": "^6.0.5",
     "@types/qrcode": "^1.5.6",
     "ai": "^6.0.169",

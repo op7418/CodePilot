@@ -322,11 +322,21 @@ export function MessageList({
           // render as an inline checkpoint instead of a normal user
           // bubble — same idea as `[__IMAGE_GEN_NOTICE__ ...]` already
           // does for image-gen events.
+
+          // Performance: older messages get content-visibility:auto so
+          // the browser skips layout/paint when they're off-screen.
+          // Only the last VISIBLE_WINDOW messages are forced to render
+          // eagerly (they're typically in or near the viewport).
+          const VISIBLE_WINDOW = 50;
+          const isOldMessage = idx < messages.length - VISIBLE_WINDOW;
+          const contentVisibilityStyle = isOldMessage
+            ? { contentVisibility: 'auto' as const, containIntrinsicBlockSize: '80px' }
+            : undefined;
           if (message.role === 'user') {
             const switchPayload = parseRuntimeSwitchMarker(message.content);
             if (switchPayload) {
               return (
-                <div key={message.id} id={`msg-${message.id}`}>
+                <div key={message.id} id={`msg-${message.id}`} style={contentVisibilityStyle}>
                   <RuntimeSwitchMarker payload={switchPayload} />
                 </div>
               );
@@ -367,7 +377,7 @@ export function MessageList({
           }
 
           return (
-            <div key={message.id} id={`msg-${message.id}`} className="group">
+            <div key={message.id} id={`msg-${message.id}`} className="group" style={contentVisibilityStyle}>
               {leadingMarker}
               <MessageItem message={message} sessionId={sessionId} isAssistantProject={isAssistantProject} assistantName={assistantName} />
               {rewindSdkUuid && sessionId && !isStreaming && (
