@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import React, { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import { usePathname, useRouter } from "next/navigation";
 import { TooltipProvider } from "@/components/ui/tooltip";
@@ -146,7 +146,7 @@ const LG_BREAKPOINT = 1024;
  * supported coexistence — only the behavior was wrong.
  */
 
-function ChatContentRow({
+const ChatContentRow = React.memo(function ChatContentRow({
   isChatDetailRoute,
   isSplitActive,
   children,
@@ -198,7 +198,7 @@ function ChatContentRow({
       {isChatDetailRoute && <PanelZone />}
     </>
   );
-}
+});
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
@@ -368,12 +368,25 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   // --- Multi-session stream tracking (driven by stream-session-manager) ---
   const [activeStreamingSessions, setActiveStreamingSessions] = useState<Set<string>>(EMPTY_SET);
   const [pendingApprovalSessionIds, setPendingApprovalSessionIds] = useState<Set<string>>(EMPTY_SET);
+  const prevActiveRef = useRef<Set<string>>(EMPTY_SET);
+  const prevApprovalsRef = useRef<Set<string>>(EMPTY_SET);
+
+  // Helper: only update state if the Set content actually changed,
+  // avoiding unnecessary context value changes that cascade re-renders
+  // to every usePanel() consumer.
+  function setIfChanged(prev: Set<string>, next: Set<string>, setter: (s: Set<string>) => void): void {
+    if (prev.size !== next.size || ![...prev].every((v) => next.has(v))) {
+      setter(next);
+    }
+  }
 
   // Listen for global stream events from stream-session-manager
   useEffect(() => {
     const handler = () => {
       const activeIds = getActiveSessionIds();
-      setActiveStreamingSessions(activeIds.length > 0 ? new Set(activeIds) : EMPTY_SET);
+      const nextActive = activeIds.length > 0 ? new Set(activeIds) : EMPTY_SET;
+      setIfChanged(prevActiveRef.current, nextActive, setActiveStreamingSessions);
+      prevActiveRef.current = nextActive;
 
       const approvals = new Set<string>();
       for (const sid of activeIds) {
@@ -382,7 +395,9 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           approvals.add(sid);
         }
       }
-      setPendingApprovalSessionIds(approvals.size > 0 ? approvals : EMPTY_SET);
+      const nextApprovals = approvals.size > 0 ? approvals : EMPTY_SET;
+      setIfChanged(prevApprovalsRef.current, nextApprovals, setPendingApprovalSessionIds);
+      prevApprovalsRef.current = nextApprovals;
     };
     window.addEventListener('stream-session-event', handler);
     return () => window.removeEventListener('stream-session-event', handler);
