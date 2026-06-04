@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { Light as SyntaxHighlighter } from "react-syntax-highlighter";
 import { useThemeFamily } from "@/lib/theme/context";
-import { resolveCodeTheme, resolveHljsStyle } from "@/lib/theme/code-themes";
+import { resolveCodeTheme, useHljsStyle } from "@/lib/theme/code-themes";
 import { usePanel } from "@/hooks/usePanel";
 import { useTranslation } from "@/hooks/useTranslation";
 import { ResizeHandle } from "@/components/layout/ResizeHandle";
@@ -1404,36 +1404,52 @@ function PresentationStyleSelect({
 function useDocCodeTheme(isDark: boolean) {
   const { family, families } = useThemeFamily();
   const codeTheme = resolveCodeTheme(families, family);
-  return resolveHljsStyle(codeTheme, isDark);
+  return useHljsStyle(codeTheme, isDark);
 }
 
 /** Source code view using react-syntax-highlighter */
 function SourceView({ preview, isDark }: { preview: FilePreviewType; isDark: boolean }) {
-  const hljsStyle = useDocCodeTheme(isDark);
+  const { style: hljsStyle, loaded: hljsStyleLoaded } = useDocCodeTheme(isDark);
   return (
     <div className="text-xs">
-      <SyntaxHighlighter
-        language={preview.language}
-        style={hljsStyle}
-        showLineNumbers
-        customStyle={{
-          margin: 0,
-          padding: "8px",
-          borderRadius: 0,
-          fontSize: "11px",
-          lineHeight: "1.5",
-          background: "transparent",
-        }}
-        lineNumberStyle={{
-          minWidth: "2.5em",
-          paddingRight: "8px",
-          color: "var(--muted-foreground)",
-          opacity: 0.5,
-          userSelect: "none",
-        }}
-      >
-        {preview.content}
-      </SyntaxHighlighter>
+      {hljsStyleLoaded && hljsStyle ? (
+        <SyntaxHighlighter
+          language={preview.language}
+          style={hljsStyle}
+          showLineNumbers
+          customStyle={{
+            margin: 0,
+            padding: "8px",
+            borderRadius: 0,
+            fontSize: "11px",
+            lineHeight: "1.5",
+            background: "transparent",
+          }}
+          lineNumberStyle={{
+            minWidth: "2.5em",
+            paddingRight: "8px",
+            color: "var(--muted-foreground)",
+            opacity: 0.5,
+            userSelect: "none",
+          }}
+        >
+          {preview.content}
+        </SyntaxHighlighter>
+      ) : (
+        <pre
+          style={{
+            margin: 0,
+            padding: "8px",
+            borderRadius: 0,
+            fontSize: "11px",
+            lineHeight: "1.5",
+            background: "transparent",
+          }}
+          className="overflow-auto"
+        >
+          {preview.content}
+        </pre>
+      )}
     </div>
   );
 }

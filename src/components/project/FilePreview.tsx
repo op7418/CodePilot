@@ -8,16 +8,8 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useTheme } from "next-themes";
 import { Light as SyntaxHighlighter } from "react-syntax-highlighter";
 import { useThemeFamily } from "@/lib/theme/context";
-import { resolveCodeTheme, resolveHljsStyle } from "@/lib/theme/code-themes";
+import { resolveCodeTheme, useHljsStyle } from "@/lib/theme/code-themes";
 import { usePanel } from "@/hooks/usePanel";
-
-function useFilePreviewCodeTheme() {
-  const { resolvedTheme } = useTheme();
-  const { family, families } = useThemeFamily();
-  const isDark = resolvedTheme === "dark";
-  const codeTheme = resolveCodeTheme(families, family);
-  return resolveHljsStyle(codeTheme, isDark);
-}
 import { useTranslation } from "@/hooks/useTranslation";
 import type { FilePreview as FilePreviewType } from "@/types";
 
@@ -29,7 +21,11 @@ interface FilePreviewProps {
 export function FilePreview({ filePath, onBack }: FilePreviewProps) {
   const { workingDirectory } = usePanel();
   const { t } = useTranslation();
-  const hljsStyle = useFilePreviewCodeTheme();
+  const { resolvedTheme } = useTheme();
+  const { family, families } = useThemeFamily();
+  const isDark = resolvedTheme === "dark";
+  const codeTheme = resolveCodeTheme(families, family);
+  const { style: hljsStyle, loaded: hljsStyleLoaded } = useHljsStyle(codeTheme, isDark);
   const [preview, setPreview] = useState<FilePreviewType | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -126,27 +122,42 @@ export function FilePreview({ filePath, onBack }: FilePreviewProps) {
           </div>
         ) : preview ? (
           <div className="rounded-md border border-border text-xs">
-            <SyntaxHighlighter
-              language={preview.language}
-              style={hljsStyle}
-              showLineNumbers
-              customStyle={{
-                margin: 0,
-                padding: "8px",
-                borderRadius: "6px",
-                fontSize: "11px",
-                lineHeight: "1.5",
-              }}
-              lineNumberStyle={{
-                minWidth: "2.5em",
-                paddingRight: "8px",
-                color: "var(--muted-foreground)",
-                opacity: 0.5,
-                userSelect: "none",
-              }}
-            >
-              {preview.content}
-            </SyntaxHighlighter>
+            {hljsStyleLoaded && hljsStyle ? (
+              <SyntaxHighlighter
+                language={preview.language}
+                style={hljsStyle}
+                showLineNumbers
+                customStyle={{
+                  margin: 0,
+                  padding: "8px",
+                  borderRadius: "6px",
+                  fontSize: "11px",
+                  lineHeight: "1.5",
+                }}
+                lineNumberStyle={{
+                  minWidth: "2.5em",
+                  paddingRight: "8px",
+                  color: "var(--muted-foreground)",
+                  opacity: 0.5,
+                  userSelect: "none",
+                }}
+              >
+                {preview.content}
+              </SyntaxHighlighter>
+            ) : (
+              <pre
+                style={{
+                  margin: 0,
+                  padding: "8px",
+                  borderRadius: "6px",
+                  fontSize: "11px",
+                  lineHeight: "1.5",
+                }}
+                className="overflow-auto"
+              >
+                {preview.content}
+              </pre>
+            )}
           </div>
         ) : null}
       </ScrollArea>
