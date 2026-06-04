@@ -162,9 +162,39 @@ export function useNotificationPoll() {
       }
     }
 
-    timerRef.current = setInterval(poll, POLL_INTERVAL);
+    // Pause the notification poll while the page is hidden. The main
+    // process's bg-notify poller (electron/main.ts) already covers the
+    // hidden case, and waking the renderer every 5s on every background
+    // tab just to drain an empty queue is wasted CPU + network. Resume
+    // with an immediate catch-up poll so the user sees fresh state
+    // without waiting POLL_INTERVAL.
+    const start = () => {
+      if (timerRef.current) return;
+      timerRef.current = setInterval(poll, POLL_INTERVAL);
+    };
+    const stop = () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+    const onVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
+      if (document.visibilityState === 'visible') {
+        void poll();
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      start();
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
     return () => {
-      if (timerRef.current) clearInterval(timerRef.current);
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      stop();
     };
   }, []);
 }

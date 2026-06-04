@@ -47,17 +47,51 @@ export function useBridgeStatus(): {
     refreshStatus();
   }, [refreshStatus]);
 
-  // Poll bridge status while bridge is running
+  // Poll bridge status while the bridge is running and the page is
+  // visible. Pausing when the tab is hidden avoids waking the renderer
+  // on a 5-second cadence for data the user cannot act on, and frees
+  // the network for higher-priority traffic when the user returns.
   useEffect(() => {
-    if (bridgeStatus?.running) {
-      pollRef.current = setInterval(refreshStatus, 5000);
-    } else if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-    }
-    return () => {
+    if (!bridgeStatus?.running) {
       if (pollRef.current) {
         clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+      return;
+    }
+
+    const start = () => {
+      if (pollRef.current) return;
+      pollRef.current = setInterval(refreshStatus, 5000);
+    };
+    const stop = () => {
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
+      }
+    };
+
+    const onVisibilityChange = () => {
+      if (typeof document === 'undefined') return;
+      if (document.visibilityState === 'visible') {
+        // Catch up immediately on resume so the UI shows fresh data
+        // before the next interval tick.
+        void refreshStatus();
+        start();
+      } else {
+        stop();
+      }
+    };
+
+    if (typeof document !== 'undefined' && document.visibilityState === 'visible') {
+      start();
+    }
+    document.addEventListener('visibilitychange', onVisibilityChange);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityChange);
+      if (pollRef.current) {
+        clearInterval(pollRef.current);
+        pollRef.current = null;
       }
     };
   }, [bridgeStatus?.running, refreshStatus]);
