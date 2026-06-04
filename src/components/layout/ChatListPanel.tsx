@@ -273,7 +273,7 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
     return () => clearInterval(interval);
   }, [fetchSessions]);
 
-  const handleDeleteSession = async (
+  const handleDeleteSession = useCallback(async (
     e: React.MouseEvent,
     sessionId: string
   ) => {
@@ -300,9 +300,9 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
     } finally {
       setDeletingSession(null);
     }
-  };
+  }, [isInSplit, pathname, removeFromSplit, router]);
 
-  const handleRenameSession = async (sessionId: string, newTitle: string) => {
+  const handleRenameSession = useCallback(async (sessionId: string, newTitle: string) => {
     try {
       const res = await fetch(`/api/chat/sessions/${sessionId}`, {
         method: "PATCH",
@@ -318,9 +318,9 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
     } catch {
       // Silently fail
     }
-  };
+  }, []);
 
-  const handleRemoveProject = async (workingDirectory: string) => {
+  const handleRemoveProject = useCallback(async (workingDirectory: string) => {
     if (!confirm(`Remove project "${workingDirectory.split('/').pop()}" and all its conversations?`)) return;
     const projectSessions = sessions.filter((s) => s.working_directory === workingDirectory);
     const deletedIds = new Set<string>();
@@ -347,9 +347,9 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
         }
       }
     }
-  };
+  }, [sessions, isInSplit, pathname, removeFromSplit, router]);
 
-  const handleCreateSessionInProject = async (
+  const handleCreateSessionInProject = useCallback(async (
     e: React.MouseEvent,
     workingDirectory: string
   ) => {
@@ -369,7 +369,27 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
     } catch {
       // Silently fail
     }
-  };
+  }, [getCurrentModelAndProvider, router]);
+
+  // Stable callbacks consumed by memoized <SessionListItem /> children.
+  // Without these, every render of ChatListPanel allocates a new arrow
+  // for onMouseEnter / onMouseLeave / onAddToSplit, defeating the memo
+  // and forcing every visible item to re-render.
+  const handleSessionMouseEnter = useCallback((id: string) => {
+    setHoveredSession(id);
+  }, []);
+  const handleSessionMouseLeave = useCallback(() => {
+    setHoveredSession(null);
+  }, []);
+  const handleSessionAddToSplit = useCallback((session: ChatSession) => {
+    addToSplit({
+      sessionId: session.id,
+      title: session.title,
+      workingDirectory: session.working_directory || "",
+      projectName: session.project_name || "",
+      mode: session.mode,
+    });
+  }, [addToSplit]);
 
   const filteredSessions = sessions;
 
@@ -632,17 +652,11 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
                                         isWorkspace={false}
                                         formatRelativeTime={formatRelativeTime}
                                         t={t}
-                                        onMouseEnter={() => setHoveredSession(session.id)}
-                                        onMouseLeave={() => setHoveredSession(null)}
+                                        onMouseEnter={handleSessionMouseEnter}
+                                        onMouseLeave={handleSessionMouseLeave}
                                         onDelete={handleDeleteSession}
                                         onRename={handleRenameSession}
-                                        onAddToSplit={(s) => addToSplit({
-                                          sessionId: s.id,
-                                          title: s.title,
-                                          workingDirectory: s.working_directory || "",
-                                          projectName: s.project_name || "",
-                                          mode: s.mode,
-                                        })}
+                                        onAddToSplit={handleSessionAddToSplit}
                                       />
                                     );
                                   })}
@@ -755,17 +769,11 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
                               isWorkspace
                               formatRelativeTime={formatRelativeTime}
                               t={t}
-                              onMouseEnter={() => setHoveredSession(session.id)}
-                              onMouseLeave={() => setHoveredSession(null)}
+                              onMouseEnter={handleSessionMouseEnter}
+                              onMouseLeave={handleSessionMouseLeave}
                               onDelete={handleDeleteSession}
                               onRename={handleRenameSession}
-                              onAddToSplit={(s) => addToSplit({
-                                sessionId: s.id,
-                                title: s.title,
-                                workingDirectory: s.working_directory || "",
-                                projectName: s.project_name || "",
-                                mode: s.mode,
-                              })}
+                              onAddToSplit={handleSessionAddToSplit}
                             />
                           );
                         })}

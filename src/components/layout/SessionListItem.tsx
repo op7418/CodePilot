@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import Link from "next/link";
 import {
   Bell,
@@ -35,14 +35,14 @@ interface SessionListItemProps {
   isWorkspace?: boolean;
   formatRelativeTime: (dateStr: string, t: (key: TranslationKey, params?: Record<string, string | number>) => string) => string;
   t: (key: TranslationKey, params?: Record<string, string | number>) => string;
-  onMouseEnter: () => void;
+  onMouseEnter: (sessionId: string) => void;
   onMouseLeave: () => void;
   onDelete: (e: React.MouseEvent, sessionId: string) => void;
   onRename: (sessionId: string, newTitle: string) => void;
   onAddToSplit: (session: ChatSession) => void;
 }
 
-export function SessionListItem({
+export const SessionListItem = memo(function SessionListItem({
   session,
   isActive,
   isHovered,
@@ -66,7 +66,7 @@ export function SessionListItem({
   return (
     <div
       className="group relative"
-      onMouseEnter={onMouseEnter}
+      onMouseEnter={() => onMouseEnter(session.id)}
       onMouseLeave={onMouseLeave}
     >
       <Link
@@ -277,4 +277,4 @@ export function SplitGroupSection({
       </div>
     </div>
   );
-}
+});
