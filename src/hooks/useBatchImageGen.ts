@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useContext, useState, useCallback, useRef } from 'react';
+import { createContext, useContext, useState, useCallback, useRef, useEffect } from 'react';
 import type { MediaJob, MediaJobItem, PlannerOutput, PlannerItem, JobProgressEvent } from '@/types';
 
 // ==========================================
@@ -74,6 +74,19 @@ const initialState: BatchImageGenState = {
 export function useBatchImageGenState(): BatchImageGenContextValue {
   const [state, setState] = useState<BatchImageGenState>(initialState);
   const progressSourceRef = useRef<EventSource | null>(null);
+
+  // Close the SSE progress stream on unmount to release the server-side
+  // connection and the registered event listeners (which hold closures
+  // over the unmounted component's state setters). Without this, navigating
+  // away mid-job leaks the EventSource until the server-side timeout fires.
+  useEffect(() => {
+    return () => {
+      if (progressSourceRef.current) {
+        progressSourceRef.current.close();
+        progressSourceRef.current = null;
+      }
+    };
+  }, []);
 
   const setEnabled = useCallback((v: boolean) => {
     setState(prev => ({
