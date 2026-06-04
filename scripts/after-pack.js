@@ -35,7 +35,7 @@ module.exports = async function afterPack(context) {
 
   try {
     // Use @electron/rebuild via npx (it's a dependency of electron-builder)
-    const rebuildCmd = `npx electron-rebuild -f -o better-sqlite3 -v ${electronVersion} -a ${archName}`;
+    const rebuildCmd = `npx electron-rebuild -f -o better-sqlite3,node-pty -v ${electronVersion} -a ${archName}`;
     console.log(`[afterPack] Running: ${rebuildCmd}`);
     execSync(rebuildCmd, {
       cwd: projectDir,
@@ -52,7 +52,7 @@ module.exports = async function afterPack(context) {
         buildPath: projectDir,
         electronVersion: electronVersion,
         arch: archName,
-        onlyModules: ['better-sqlite3'],
+        onlyModules: ['better-sqlite3', 'node-pty'],
         force: true,
       });
       console.log('[afterPack] Rebuild via @electron/rebuild API succeeded');

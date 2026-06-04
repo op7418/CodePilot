@@ -1,7 +1,10 @@
 "use client";
 
-import { useEffect, useRef, useState, useCallback } from "react";
-import Ansi from "ansi-to-react";
+import { useEffect, useRef, useCallback } from "react";
+import { Terminal } from "@xterm/xterm";
+import { FitAddon } from "@xterm/addon-fit";
+import { WebLinksAddon } from "@xterm/addon-web-links";
+import "@xterm/xterm/css/xterm.css";
 import type { useTerminal } from "@/hooks/useTerminal";
 
 interface TerminalInstanceProps {
@@ -9,99 +12,112 @@ interface TerminalInstanceProps {
 }
 
 /**
- * TerminalInstance — renders terminal output with ANSI color support.
+ * TerminalInstance — full terminal emulator powered by xterm.js + node-pty.
  *
- * Uses ansi-to-react for ANSI escape code rendering.
- * xterm.js integration can be added later for full terminal emulation.
+ * Renders a real xterm Terminal with proper PTY I/O, resize handling,
+ * clickable links, and xterm-256color support.
  */
-/** Hard cap on terminal output characters (~500 KB). Oldest output is discarded. */
-const MAX_OUTPUT_CHARS = 500_000;
-
-function truncateOutput(text: string): string {
-  return text.length > MAX_OUTPUT_CHARS ? text.slice(-MAX_OUTPUT_CHARS) : text;
-}
-
 export function TerminalInstance({ terminal }: TerminalInstanceProps) {
-  const { isElectron, connected, exited, create, write, setOnData } = terminal;
-  const scrollRef = useRef<HTMLDivElement>(null);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const [output, setOutput] = useState("");
-  const bufferRef = useRef("");
-  const rafRef = useRef<number | null>(null);
+  const { isElectron, connected, exited, create, write, resize, setOnData } = terminal;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const xtermRef = useRef<Terminal | null>(null);
+  const fitAddonRef = useRef<FitAddon | null>(null);
 
-  // Flush buffered output via rAF to avoid excessive re-renders
-  const flush = useCallback(() => {
-    rafRef.current = null;
-    bufferRef.current = truncateOutput(bufferRef.current);
-    setOutput(bufferRef.current);
+  // Initialize xterm Terminal on mount
+  useEffect(() => {
+    if (!containerRef.current) return;
+
+    const xterm = new Terminal({
+      cursorBlink: true,
+      fontSize: 13,
+      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+      theme: {
+        background: "#1a1a1a",
+        foreground: "#d4d4d4",
+        cursor: "#d4d4d4",
+        selectionBackground: "#264f78",
+      },
+      allowProposedApi: true,
+    });
+
+    const fitAddon = new FitAddon();
+    xterm.loadAddon(fitAddon);
+    xterm.loadAddon(new WebLinksAddon());
+
+    xterm.open(containerRef.current);
+    fitAddon.fit();
+
+    xtermRef.current = xterm;
+    fitAddonRef.current = fitAddon;
+
+    return () => {
+      xterm.dispose();
+      xtermRef.current = null;
+      fitAddonRef.current = null;
+    };
   }, []);
 
-  // Subscribe to PTY output
+  // Fit on container resize
   useEffect(() => {
-    setOnData((data: string) => {
-      bufferRef.current += data;
-      if (rafRef.current === null) {
-        rafRef.current = requestAnimationFrame(flush);
-      }
+    if (!containerRef.current || !fitAddonRef.current) return;
+
+    const observer = new ResizeObserver(() => {
+      fitAddonRef.current?.fit();
     });
-    return () => {
-      if (rafRef.current !== null) cancelAnimationFrame(rafRef.current);
-    };
-  }, [setOnData, flush]);
+    observer.observe(containerRef.current);
 
-  // Auto-scroll on new output
-  useEffect(() => {
-    if (scrollRef.current) {
-      scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
-    }
-  }, [output]);
+    return () => observer.disconnect();
+  }, []);
 
-  // Create terminal on mount
+  // Create PTY when xterm is ready and electron is available
   useEffect(() => {
-    if (isElectron && !connected && !exited) {
-      create(120, 30);
+    if (isElectron && !connected && !exited && xtermRef.current) {
+      const cols = xtermRef.current.cols;
+      const rows = xtermRef.current.rows;
+      create(cols, rows);
     }
   }, [isElectron, connected, exited, create]);
 
-  // Focus input when terminal connects
+  // Wire xterm input -> PTY write
   useEffect(() => {
-    inputRef.current?.focus();
-  }, [connected]);
+    if (!xtermRef.current) return;
+    const disposable = xtermRef.current.onData((data: string) => {
+      write(data);
+    });
+    return () => disposable.dispose();
+  }, [write]);
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      const value = inputRef.current?.value || '';
-      write(value + '\n');
-      if (inputRef.current) inputRef.current.value = '';
+  // Wire PTY output -> xterm write
+  useEffect(() => {
+    setOnData((data: string) => {
+      xtermRef.current?.write(data);
+    });
+  }, [setOnData]);
+
+  // Send resize events to PTY when terminal is resized
+  const handleResize = useCallback(() => {
+    if (xtermRef.current && connected) {
+      resize(xtermRef.current.cols, xtermRef.current.rows);
     }
-  };
+  }, [resize, connected]);
 
-  const handleContainerClick = () => {
-    inputRef.current?.focus();
-  };
+  // Trigger resize after fit
+  useEffect(() => {
+    if (!fitAddonRef.current) return;
+    const observer = new ResizeObserver(() => {
+      fitAddonRef.current?.fit();
+      handleResize();
+    });
+    if (containerRef.current) {
+      observer.observe(containerRef.current);
+    }
+    return () => observer.disconnect();
+  }, [handleResize]);
 
   return (
     <div
-      className="flex flex-col h-full bg-[#1a1a1a] text-[#d4d4d4] font-mono text-xs"
-      onClick={handleContainerClick}
-    >
-      <div
-        ref={scrollRef}
-        className="flex-1 overflow-auto p-2 whitespace-pre-wrap break-all"
-      >
-        <Ansi>{output}</Ansi>
-      </div>
-      <div className="flex items-center border-t border-[#333] px-2">
-        <span className="text-green-400 mr-1">$</span>
-        <input
-          ref={inputRef}
-          type="text"
-          className="flex-1 bg-transparent border-none outline-none text-xs py-1.5 text-[#d4d4d4] caret-[#d4d4d4]"
-          onKeyDown={handleKeyDown}
-          autoFocus
-          spellCheck={false}
-        />
-      </div>
-    </div>
+      ref={containerRef}
+      className="h-full w-full [&_.xterm]:h-full [&_.xterm-viewport]:!overflow-auto"
+    />
   );
 }

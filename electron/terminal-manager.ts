@@ -1,4 +1,4 @@
-import { spawn, type ChildProcessWithoutNullStreams } from 'child_process';
+import * as pty from 'node-pty';
 
 export interface TerminalCreateOptions {
   cwd: string;
@@ -8,20 +8,16 @@ export interface TerminalCreateOptions {
 }
 
 interface TerminalInstance {
-  process: ChildProcessWithoutNullStreams;
+  pty: pty.IPty;
   cwd: string;
 }
 
-// TerminalManager — manages terminal processes.
-//
-// KNOWN LIMITATION: Uses child_process.spawn with stdio: 'pipe' instead of
-// a real PTY. This means:
-//  - resize() is a no-op (COLUMNS/LINES env vars are set at creation only)
-//  - Full-screen programs (vim, htop) won't render correctly
-//  - readline line-editing may behave differently
-//
-// TODO: Upgrade to a real PTY library for full support. See
-// docs/handover/git-terminal-layout.md for the 4-step upgrade path.
+/**
+ * TerminalManager — manages real PTY terminal sessions via node-pty.
+ *
+ * Supports full terminal emulation: resize, full-screen programs (vim, htop),
+ * proper readline editing, and true xterm-256color escape sequences.
+ */
 export class TerminalManager {
   private terminals = new Map<string, TerminalInstance>();
   private onData: ((id: string, data: string) => void) | null = null;
@@ -48,57 +44,47 @@ export class TerminalManager {
       ...opts.env,
       TERM: 'xterm-256color',
       COLORTERM: 'truecolor',
-      COLUMNS: String(opts.cols),
-      LINES: String(opts.rows),
     };
     // Allow launching Claude Code inside the terminal
     delete env.CLAUDECODE;
 
-    const child = spawn(shell, shellArgs, {
+    const ptyProcess = pty.spawn(shell, shellArgs, {
+      name: 'xterm-256color',
+      cols: opts.cols,
+      rows: opts.rows,
       cwd: opts.cwd,
-      env,
-      stdio: ['pipe', 'pipe', 'pipe'],
+      env: env as Record<string, string>,
     });
 
-    child.stdout.on('data', (data: Buffer) => {
-      this.onData?.(id, data.toString());
+    ptyProcess.onData((data: string) => {
+      this.onData?.(id, data);
     });
 
-    child.stderr.on('data', (data: Buffer) => {
-      this.onData?.(id, data.toString());
-    });
-
-    child.on('exit', (code) => {
+    ptyProcess.onExit(({ exitCode }) => {
       this.terminals.delete(id);
-      this.onExit?.(id, code ?? 0);
+      this.onExit?.(id, exitCode);
     });
 
-    child.on('error', (err) => {
-      console.error(`[terminal:${id}] error:`, err);
-      this.terminals.delete(id);
-      this.onExit?.(id, 1);
-    });
-
-    this.terminals.set(id, { process: child, cwd: opts.cwd });
+    this.terminals.set(id, { pty: ptyProcess, cwd: opts.cwd });
   }
 
   write(id: string, data: string): void {
     const terminal = this.terminals.get(id);
     if (!terminal) return;
-    terminal.process.stdin.write(data);
+    terminal.pty.write(data);
   }
 
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  resize(id: string, _cols: number, _rows: number): void {
-    // With spawn (non-PTY), resize is a no-op.
-    // Would use pty.resize() with a real PTY library.
+  resize(id: string, cols: number, rows: number): void {
+    const terminal = this.terminals.get(id);
+    if (!terminal) return;
+    terminal.pty.resize(cols, rows);
   }
 
   kill(id: string): void {
     const terminal = this.terminals.get(id);
     if (!terminal) return;
     try {
-      terminal.process.kill();
+      terminal.pty.kill();
     } catch {
       // already dead
     }

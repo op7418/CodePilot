@@ -41,6 +41,8 @@ export function UnifiedTopBar() {
     setChatListOpen,
     fileTreeOpen,
     setFileTreeOpen,
+    terminalOpen,
+    setTerminalOpen,
     isAssistantWorkspace,
     currentBranch,
     gitDirtyCount,
@@ -393,6 +395,24 @@ export function UnifiedTopBar() {
               </Button>
             </TooltipTrigger>
             <TooltipContent side="bottom">{t('topBar.fileTree')}</TooltipContent>
+          </Tooltip>
+
+          {/* Terminal toggle — opens/closes the bottom terminal drawer. */}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant={terminalOpen ? 'secondary' : 'ghost'}
+                size="icon-sm"
+                className={
+                  terminalOpen ? '' : 'text-muted-foreground hover:text-foreground'
+                }
+                onClick={() => setTerminalOpen(!terminalOpen)}
+              >
+                <CodePilotIcon name="terminal" size="md" className="text-inherit" aria-hidden />
+                <span className="sr-only">{t('terminal.open' as TranslationKey)}</span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent side="bottom">{t('terminal.open' as TranslationKey)}</TooltipContent>
           </Tooltip>
 
           {/* Single Workspace Sidebar toggle — replaces the previous

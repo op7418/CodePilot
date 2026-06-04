@@ -49,6 +49,7 @@ afterSign: scripts/after-sign.js
 asarUnpack:
   - "**/*.node"
   - "**/better-sqlite3/**"
+  - "**/node-pty/**"
 mac:
   icon: build/icon.icns
   category: public.app-category.developer-tools

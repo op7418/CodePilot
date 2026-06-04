@@ -36,7 +36,7 @@ async function buildElectron() {
     bundle: true,
     platform: 'node',
     target: 'node18',
-    external: ['electron'],
+    external: ['electron', 'node-pty'],
     sourcemap: true,
     minify: false,
   };

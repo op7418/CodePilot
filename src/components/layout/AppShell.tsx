@@ -60,6 +60,10 @@ const FeatureAnnouncementDialog = dynamic(
   () => import('./FeatureAnnouncementDialog').then((m) => ({ default: m.FeatureAnnouncementDialog })),
   { ssr: false },
 );
+const TerminalDrawer = dynamic(
+  () => import('@/components/terminal/TerminalDrawer').then((m) => ({ default: m.TerminalDrawer })),
+  { ssr: false },
+);
 
 const SPLIT_SESSIONS_KEY = "codepilot:split-sessions";
 const SPLIT_ACTIVE_COLUMN_KEY = "codepilot:split-active-column";
@@ -350,6 +354,19 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [fileTreeOpen, setFileTreeOpen] = useState(false);
   const [terminalOpen, setTerminalOpen] = useState(false);
   const [assistantPanelOpen, setAssistantPanelOpen] = useState(false);
+
+  // Terminal toggle: Cmd+` (macOS) / Ctrl+` (Windows/Linux)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      const modifier = e.metaKey || e.ctrlKey;
+      if (modifier && e.key === '`') {
+        e.preventDefault();
+        setTerminalOpen(!terminalOpen);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [terminalOpen]);
   const [isAssistantWorkspace, setIsAssistantWorkspace] = useState(false);
 
   // --- Git summary (derived from polling hook, no setState needed) ---
@@ -759,6 +776,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 {children}
               </ChatContentRow>
             </div>
+            <TerminalDrawer />
           </div>
           {/* Phase A state gates: only mount when actually needed.
               UpdateDialog gate (P3 review fix): require BOTH
