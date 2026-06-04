@@ -37,7 +37,7 @@ import { getTrayMenuLabels } from '../src/lib/tray-menu-labels';
  * other Next.js project on the machine to skip its own config
  * loading, breaking builds and dev servers.
  */
-function sanitizedProcessEnv(): Record<string, string> {
+function _sanitizedProcessEnv: Record<string, string> {
   const env: Record<string, string> = {};
   for (const [key, value] of Object.entries(process.env)) {
     if (!key.startsWith('__NEXT_PRIVATE_') && value !== undefined) {
@@ -47,10 +47,22 @@ function sanitizedProcessEnv(): Record<string, string> {
   return env;
 }
 
+// Cached once at module load — process.env doesn't change during the
+// Electron main process lifetime, so iterating it on every call is waste.
+const _sanitizedProcessEnv = _sanitizedProcessEnv;
+
 let mainWindow: BrowserWindow | null = null;
 let serverProcess: Electron.UtilityProcess | null = null;
 let serverPort: number | null = null;
 let serverErrors: string[] = [];
+const MAX_SERVER_ERRORS = 500;
+
+function pushServerError(msg: string): void {
+  if (serverErrors.length >= MAX_SERVER_ERRORS) {
+    serverErrors.shift();
+  }
+  serverErrors.push(msg);
+}
 let serverExited = false;
 let serverExitCode: number | null = null;
 let userShellEnv: Record<string, string> = {};
@@ -74,12 +86,20 @@ interface InstallState {
   logs: string[];
 }
 
+const MAX_INSTALL_LOGS = 1000;
 let installState: InstallState = {
   status: 'idle',
   currentStep: null,
   steps: [],
   logs: [],
 };
+
+function pushInstallLog(msg: string): void {
+  if (installState.logs.length >= MAX_INSTALL_LOGS) {
+    installState.logs.shift();
+  }
+  installState.logs.push(msg);
+}
 
 let installProcess: ChildProcess | null = null;
 
@@ -852,9 +872,9 @@ function startServer(port: number): Electron.UtilityProcess {
   const constructedPath = getExpandedShellPath();
 
   const env: Record<string, string> = {
-    ...userShellEnv,
-    ...sanitizedProcessEnv(),
-    // Ensure user shell env vars override (especially API keys)
+    // Base: sanitized process env (strips __NEXT_PRIVATE_ vars)
+    ..._sanitizedProcessEnv,
+    // User shell env overrides process env (API keys, PATH, etc.)
     ...userShellEnv,
     // Inject system proxy (only if not already set in shell env)
     ...(!userShellEnv.HTTP_PROXY && !userShellEnv.HTTPS_PROXY ? resolvedProxyEnv : {}),
@@ -878,13 +898,13 @@ function startServer(port: number): Electron.UtilityProcess {
   child.stdout?.on('data', (data: Buffer) => {
     const msg = data.toString().trim();
     console.log(`[server] ${msg}`);
-    serverErrors.push(msg);
+    pushServerError(msg);
   });
 
   child.stderr?.on('data', (data: Buffer) => {
     const msg = data.toString().trim();
     console.error(`[server:err] ${msg}`);
-    serverErrors.push(msg);
+    pushServerError(msg);
   });
 
   child.on('exit', (code) => {
@@ -1406,7 +1426,7 @@ app.whenReady().then(async () => {
 
   ipcMain.handle('install:check-prerequisites', async () => {
     const expandedPath = getExpandedShellPath();
-    const execEnv = { ...sanitizedProcessEnv(), ...userShellEnv, PATH: expandedPath };
+    const execEnv = { ..._sanitizedProcessEnv, ...userShellEnv, PATH: expandedPath };
 
     // Candidate paths — native first, then bun, then homebrew, then npm
     const home = os.homedir();
@@ -1583,7 +1603,7 @@ app.whenReady().then(async () => {
     const home = os.homedir();
     const execEnv: Record<string, string> = {
       ...userShellEnv,
-      ...sanitizedProcessEnv(),
+      ..._sanitizedProcessEnv,
       ...userShellEnv,
       PATH: expandedPath,
     };
@@ -1603,7 +1623,7 @@ app.whenReady().then(async () => {
     }
 
     function addLog(line: string) {
-      installState.logs.push(line);
+      pushInstallLog(line);
       sendProgress();
     }
 
@@ -1815,7 +1835,7 @@ app.whenReady().then(async () => {
     }
 
     installState.status = 'cancelled';
-    installState.logs.push('Cancelling installation...');
+    pushInstallLog('Cancelling installation...');
 
     if (installProcess) {
       const pid = installProcess.pid;
@@ -1831,7 +1851,7 @@ app.whenReady().then(async () => {
         // already dead
       }
       installProcess = null;
-      installState.logs.push('Installation process terminated.');
+      pushInstallLog('Installation process terminated.');
     }
 
     mainWindow?.webContents.send('install:progress', installState);
@@ -1848,7 +1868,7 @@ app.whenReady().then(async () => {
     }
     try {
       const expandedPath = getExpandedShellPath();
-      const execEnv = { ...sanitizedProcessEnv(), ...userShellEnv, PATH: expandedPath };
+      const execEnv = { ..._sanitizedProcessEnv, ...userShellEnv, PATH: expandedPath };
 
       const result = await new Promise<{ success: boolean; output: string }>((resolve) => {
         let output = '';
