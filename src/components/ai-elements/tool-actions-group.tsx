@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import {
   SpinnerGap,
@@ -13,16 +13,20 @@ import { cn } from '@/lib/utils';
 import { Shimmer } from '@/components/ai-elements/shimmer';
 import { useStickToBottomContext } from 'use-stick-to-bottom';
 import { Streamdown } from 'streamdown';
-import { cjk } from '@streamdown/cjk';
-import { math } from '@streamdown/math';
-import { mermaid } from '@streamdown/mermaid';
-
-const thinkingPlugins = { cjk, math, mermaid };
 import type { MediaBlock } from '@/types';
 import {
   isToolUnsupportedError,
   buildToolUnsupportedHint,
 } from '@/lib/harness/capability-display-text';
+
+// Shape of the plugin bag Streamdown accepts. Kept loose because the
+// Streamdown prop type is a private union of remark/rehype plugin
+// instances and we only need to pass it through. We never resolve the
+// actual modules at the top of the file because @streamdown/mermaid is
+// ~400 KB and only used inside the (collapsed-by-default) thinking
+// section of a tool-action group — it should not be paid for on first
+// paint of every chat message.
+type ThinkingPlugins = Record<string, unknown>;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -384,6 +388,25 @@ function ThinkingRow({ content, isStreaming }: { content: string; isStreaming?: 
   const [expanded, setExpanded] = useState(!!isStreaming);
   const [hovered, setHovered] = useState(false);
   const { stopScroll } = useStickToBottomContext();
+  // Streamdown's @streamdown/* plugins are loaded only when the user
+  // actually expands a thinking block. Mermaid alone is ~400 KB and
+  // almost no user session renders a thinking diagram on first paint,
+  // so the import cost is deferred until first expand.
+  const [plugins, setPlugins] = useState<ThinkingPlugins | null>(null);
+  useEffect(() => {
+    if (!expanded || plugins) return;
+    let cancelled = false;
+    void Promise.all([
+      import('@streamdown/cjk').then((m) => m.cjk),
+      import('@streamdown/math').then((m) => m.math),
+      import('@streamdown/mermaid').then((m) => m.mermaid),
+    ]).then(([cjk, math, mermaid]) => {
+      if (!cancelled) setPlugins({ cjk, math, mermaid } as ThinkingPlugins);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [expanded, plugins]);
 
   // Extract summary from first **bold** or # heading
   const summary = (() => {
@@ -433,7 +456,11 @@ function ThinkingRow({ content, isStreaming }: { content: string; isStreaming?: 
             style={{ overflow: 'hidden' }}
           >
             <div className="ml-6 px-2 py-1.5 text-xs text-muted-foreground/70 border-l-2 border-border/30 prose prose-sm dark:prose-invert max-w-none">
-              <Streamdown plugins={thinkingPlugins}>{content}</Streamdown>
+              {plugins ? (
+                <Streamdown plugins={plugins}>{content}</Streamdown>
+              ) : (
+                <span className="whitespace-pre-wrap">{content}</span>
+              )}
             </div>
           </motion.div>
         )}
