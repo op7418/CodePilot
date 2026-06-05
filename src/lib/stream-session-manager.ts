@@ -117,6 +117,11 @@ const GC_DELAY_MS = 5 * 60 * 1000; // 5 minutes
 // request's .finally) so a hung /api/chat/interrupt can't strand the stream in
 // 'active' and lock the composer's isStreaming gate (GitHub #578).
 const STREAM_FORCE_ABORT_MS = 2000;
+// Debounce the refresh-file-tree window event so rapid-succession write
+// tool results (e.g. 5 files in one turn) trigger at most one file-tree
+// re-fetch instead of one per file.
+const REFRESH_FILE_TREE_DEBOUNCE_MS = 300;
+let refreshFileTreeTimer: ReturnType<typeof setTimeout> | null = null;
 
 function getStreamsMap(): Map<string, ActiveStream> {
   if (!(globalThis as Record<string, unknown>)[GLOBAL_KEY]) {
@@ -537,8 +542,6 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
           stream.toolResultsArray = [...stream.toolResultsArray, res];
         }
         emit(stream, 'snapshot-updated');
-        // Refresh file tree after each tool completes
-        window.dispatchEvent(new Event('refresh-file-tree'));
         // Phase 4: dispatch codepilot:file-changed when this tool_result
         // belongs to a write/edit tool and is not an error. Lookup the
         // matching tool_use by id to read the name + input, then resolve
@@ -557,6 +560,15 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
                 source: 'ai-tool',
               });
             }
+            // Refresh file tree after write tools (debounced) —
+            // non-write tools (read, grep, ls, glob) don't mutate
+            // the filesystem so skipping them avoids wasted re-fetches
+            // during agentic workflows with 10-30 tool calls.
+            if (refreshFileTreeTimer) clearTimeout(refreshFileTreeTimer);
+            refreshFileTreeTimer = setTimeout(() => {
+              refreshFileTreeTimer = null;
+              window.dispatchEvent(new Event('refresh-file-tree'));
+            }, REFRESH_FILE_TREE_DEBOUNCE_MS);
           }
         }
       },
