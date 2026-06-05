@@ -369,20 +369,47 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   const [activeStreamingSessions, setActiveStreamingSessions] = useState<Set<string>>(EMPTY_SET);
   const [pendingApprovalSessionIds, setPendingApprovalSessionIds] = useState<Set<string>>(EMPTY_SET);
 
-  // Listen for global stream events from stream-session-manager
+  // Listen for global stream events from stream-session-manager.
+  // Use functional updaters with identity checks to avoid creating new
+  // Set objects when content hasn't changed — these Sets feed into
+  // panelContextValue (a new object every render), so unnecessary new
+  // Sets cascade-render ALL usePanel() consumers (~100ms during streaming).
   useEffect(() => {
     const handler = () => {
       const activeIds = getActiveSessionIds();
-      setActiveStreamingSessions(activeIds.length > 0 ? new Set(activeIds) : EMPTY_SET);
 
-      const approvals = new Set<string>();
-      for (const sid of activeIds) {
-        const snap = getSnapshot(sid);
-        if (snap?.pendingPermission && !snap.permissionResolved) {
-          approvals.add(sid);
+      setActiveStreamingSessions((prev) => {
+        if (activeIds.length === 0) {
+          return prev.size === 0 ? prev : EMPTY_SET;
         }
-      }
-      setPendingApprovalSessionIds(approvals.size > 0 ? approvals : EMPTY_SET);
+        if (
+          prev.size === activeIds.length &&
+          activeIds.every((id) => prev.has(id))
+        ) {
+          return prev;
+        }
+        return new Set(activeIds);
+      });
+
+      setPendingApprovalSessionIds((prev) => {
+        const approvals = new Set<string>();
+        for (const sid of activeIds) {
+          const snap = getSnapshot(sid);
+          if (snap?.pendingPermission && !snap.permissionResolved) {
+            approvals.add(sid);
+          }
+        }
+        if (approvals.size === 0) {
+          return prev.size === 0 ? prev : EMPTY_SET;
+        }
+        if (
+          prev.size === approvals.size &&
+          [...approvals].every((id) => prev.has(id))
+        ) {
+          return prev;
+        }
+        return approvals;
+      });
     };
     window.addEventListener('stream-session-event', handler);
     return () => window.removeEventListener('stream-session-event', handler);
