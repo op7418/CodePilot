@@ -1,6 +1,6 @@
 'use client';
 
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react';
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import {
   initialState,
   openDynamicTab as pureOpen,
@@ -74,15 +74,25 @@ export function WorkspaceSidebarProvider({ workingDirectory, sessionId, children
     }
   }, [key]);
 
-  // Persist on every change. JSON.stringify is cheap relative to user
-  // interaction frequency; the alternative (debounce) would let an
-  // accidental refresh lose the latest Tab.
+  // Persist with a trailing-edge debounce so rapid state mutations
+  // (tab open / close / activate / resize handle drag) are batched
+  // into a single synchronous localStorage write instead of blocking
+  // the main thread on every individual state tick. The debounce is
+  // short enough (150ms) that losing the very last mutation before
+  // a refresh is extremely unlikely in practice.
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
-    try {
-      window.localStorage.setItem(key, JSON.stringify(serialize(state)));
-    } catch {
-      // Quota / disabled storage: ignore. The in-memory state still works.
-    }
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      try {
+        window.localStorage.setItem(key, JSON.stringify(serialize(state)));
+      } catch {
+        // Quota / disabled storage: ignore. The in-memory state still works.
+      }
+    }, 150);
+    return () => {
+      if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    };
   }, [key, state]);
 
   const openTab = useCallback((tab: DynamicTab) => {
