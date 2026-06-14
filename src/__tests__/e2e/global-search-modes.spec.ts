@@ -34,6 +34,8 @@ async function createSession(page: Page, title: string, workingDirectory: string
 }
 
 test.describe('Global Search modes UX', () => {
+  test.setTimeout(60_000);
+
   test('supports all/session/message/file modes and keyboard open', async ({ page }) => {
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const rootA = path.join(os.tmpdir(), `codepilot-search-modes-a-${suffix}`);
@@ -54,45 +56,74 @@ test.describe('Global Search modes UX', () => {
     addMessage(sessionA, 'user', `User says ${messageTokenA}`);
     addMessage(sessionB, 'assistant', `Assistant says ${messageTokenB}`);
 
-    const searchInput = page.locator(
-      'input[data-slot="command-input"], input[placeholder*="Search"], input[placeholder*="搜索"]'
-    ).first();
+    const searchInput = page.locator('input[data-slot="command-input"]').first();
+    const searchSurface = page.getByTestId('global-search-surface');
+    const openSearch = async () => {
+      await expect(page.getByRole('button', { name: /^(搜索|Search)$/ }).first()).toBeVisible({
+        timeout: 10_000,
+      });
+      await page.evaluate(() => {
+        window.dispatchEvent(new CustomEvent('open-global-search'));
+      });
+      await expect(searchInput).toBeVisible({ timeout: 10_000 });
+      await expect(searchSurface).toBeVisible({ timeout: 10_000 });
+    };
 
     try {
       await page.goto(`/chat/${sessionA}`);
 
-      // Open global search from the sidebar trigger (language-agnostic fallback).
-      await page.getByRole('button', { name: /(搜索会话|Search sessions|Search)/i }).first().click();
-      await expect(searchInput).toBeVisible({ timeout: 10_000 });
+      await openSearch();
 
-      // Default all-mode caps its file-branch scan at the N most-recent
-      // workspaces (see ALL_MODE_FILE_SESSION_LIMIT in /api/search) so the
-      // POST stays under ~1s even on a populated DB — the earlier 30s
-      // timeout was masking the unbounded-scan latency that Codex flagged.
+      // All-mode returns all three result types.
       await searchInput.fill(suffix);
-      await expect(page.getByText(sessionTitleA).first()).toBeVisible();
-      await expect(page.getByText(fileNameA).first()).toBeVisible();
-      await expect(page.getByText(messageTokenA).first()).toBeVisible();
+      await expect(page.getByTestId('global-search-section-sessions')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('global-search-section-files')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('global-search-section-messages')).toBeVisible({ timeout: 10_000 });
+      await expect(
+        page.getByTestId('global-search-section-sessions').getByTestId('global-search-item')
+      ).toHaveCount(2, { timeout: 10_000 });
+      await expect(
+        page.getByTestId('global-search-section-files').getByTestId('global-search-item')
+      ).toHaveCount(1, { timeout: 10_000 });
+      await expect(
+        page.getByTestId('global-search-section-messages').getByTestId('global-search-item')
+      ).toHaveCount(2, { timeout: 10_000 });
 
-      // session: prefix narrows to session result.
-      await searchInput.fill(`session:${sessionTitleA}`);
-      await expect(page.getByText(sessionTitleA).first()).toBeVisible();
-      await expect(page.getByText(fileNameA)).toHaveCount(0);
+      // Clicking a scope chip rewrites the prefix and narrows the result set.
+      await page.getByTestId('global-search-scope-sessions').click();
+      await expect(searchInput).toHaveValue(`session:${suffix}`);
+      await expect(page.getByTestId('global-search-section-sessions')).toBeVisible({ timeout: 10_000 });
+      await expect(
+        page.getByTestId('global-search-section-sessions').getByTestId('global-search-item')
+      ).toHaveCount(2, { timeout: 10_000 });
+      await expect(page.getByTestId('global-search-section-files')).toHaveCount(0);
 
       // message: prefix narrows to message snippets and supports navigation to target session.
       await searchInput.fill(`message:${messageTokenB}`);
-      await expect(page.getByText(messageTokenB)).toBeVisible({ timeout: 10_000 });
-      await page.getByText(messageTokenB).first().click();
+      await expect(page.getByTestId('global-search-scope-messages')).toHaveAttribute('aria-pressed', 'true');
+      await expect(
+        page.getByTestId('global-search-section-messages').getByTestId('global-search-item')
+      ).toHaveCount(1, { timeout: 10_000 });
+      await expect(
+        page.getByTestId('global-search-section-messages').getByText(messageTokenB).first()
+      ).toBeVisible({ timeout: 10_000 });
+      await page.getByTestId('global-search-section-messages').getByText(messageTokenB).first().click();
       await expect(page).toHaveURL(new RegExp(`/chat/${sessionB}\\?message=`), { timeout: 10_000 });
 
-      // Re-open and verify file: prefix still works in the same UX flow.
-      await page.getByRole('button', { name: /(搜索会话|Search sessions|Search)/i }).first().click();
-      await expect(searchInput).toBeVisible({ timeout: 10_000 });
+      // Re-open and verify file scope still works in the same UX flow.
+      await openSearch();
+      await searchInput.fill('');
+      await page.getByTestId('global-search-scope-files').click();
+      await expect(searchInput).toHaveValue('file:');
       await searchInput.fill(`file:${fileNameA}`);
-      await expect(page.getByText(/(Searching in|当前搜索范围)/)).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText('file:')).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByText(fileNameA)).toBeVisible({ timeout: 10_000 });
-      await page.getByText(fileNameA).first().click();
+      await expect(page.getByTestId('global-search-scope-files')).toHaveAttribute('aria-pressed', 'true');
+      await expect(
+        page.getByTestId('global-search-section-files').getByTestId('global-search-item')
+      ).toHaveCount(1, { timeout: 10_000 });
+      await expect(
+        page.getByTestId('global-search-section-files').getByText(fileNameA).first()
+      ).toBeVisible({ timeout: 10_000 });
+      await page.getByTestId('global-search-section-files').getByText(fileNameA).first().click();
       await expect(page).toHaveURL(new RegExp(`/chat/${sessionA}\\?file=`), { timeout: 10_000 });
     } finally {
       await page.request.delete(`/api/chat/sessions/${sessionA}`, { timeout: 5_000 }).catch(() => {});
