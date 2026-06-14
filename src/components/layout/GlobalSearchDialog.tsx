@@ -9,13 +9,8 @@ import {
   CommandList,
   CommandItem,
 } from '@/components/ui/command';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
-import { CaretDown, CaretRight } from '@/components/ui/icon';
-import {
-  CodePilotIcon,
-  type CodePilotIconName,
-} from '@/components/ui/semantic-icon';
+import { CodePilotIcon, type CodePilotIconName } from '@/components/ui/semantic-icon';
 import { cn } from '@/lib/utils';
 import type { TranslationKey } from '@/i18n';
 import { formatRelativeTime } from './chat-list-utils';
@@ -67,19 +62,6 @@ const TYPE_LABEL_KEYS: Record<Exclude<SearchScope, 'all'>, TranslationKey> = {
   files: 'globalSearch.files',
 };
 
-const GROUP_ICON_NAMES: Record<SearchScope, CodePilotIconName> = {
-  all: 'search',
-  sessions: 'chat',
-  messages: 'note',
-  files: 'file_tree',
-};
-
-const CONTENT_TYPE_ICONS: Record<SearchResultMessage['contentType'], CodePilotIconName> = {
-  user: 'chat',
-  assistant: 'assistant',
-  tool: 'wrench',
-};
-
 const CONTENT_TYPE_LABEL_KEYS: Record<SearchResultMessage['contentType'], TranslationKey> = {
   user: 'messageList.userLabel',
   assistant: 'messageList.assistantLabel',
@@ -89,29 +71,25 @@ const CONTENT_TYPE_LABEL_KEYS: Record<SearchResultMessage['contentType'], Transl
 const SCOPE_OPTIONS: Array<{
   scope: SearchScope;
   labelKey: TranslationKey;
-  descriptionKey?: TranslationKey;
   prefix: string | null;
-  icon: CodePilotIconName;
+  icon?: CodePilotIconName;
 }> = [
-  { scope: 'all', labelKey: 'globalSearch.all', prefix: null, icon: 'search' },
+  { scope: 'all', labelKey: 'globalSearch.all', prefix: null },
   {
     scope: 'sessions',
     labelKey: 'globalSearch.sessions',
-    descriptionKey: 'globalSearch.scopeSessionsHint',
     prefix: 'session:',
     icon: 'chat',
   },
   {
     scope: 'messages',
     labelKey: 'globalSearch.messages',
-    descriptionKey: 'globalSearch.scopeMessagesHint',
     prefix: 'message:',
     icon: 'note',
   },
   {
     scope: 'files',
     labelKey: 'globalSearch.files',
-    descriptionKey: 'globalSearch.scopeFilesHint',
     prefix: 'file:',
     icon: 'file_tree',
   },
@@ -187,7 +165,6 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
     messages: [],
     files: [],
   });
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const abortRef = useRef<AbortController | null>(null);
   const composingRef = useRef(false);
 
@@ -239,29 +216,6 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
   const totalResults =
     results.sessions.length + results.messages.length + results.files.length;
   const hasResults = totalResults > 0;
-
-  const groupedMessages = useMemo(() => {
-    const groups: Record<
-      string,
-      { sessionTitle: string; messages: SearchResultMessage[] }
-    > = {};
-
-    for (const message of results.messages) {
-      if (!groups[message.sessionId]) {
-        groups[message.sessionId] = {
-          sessionTitle: message.sessionTitle,
-          messages: [],
-        };
-      }
-      groups[message.sessionId].messages.push(message);
-    }
-
-    return Object.entries(groups).map(([sessionId, value]) => ({
-      sessionId,
-      sessionTitle: value.sessionTitle,
-      messages: value.messages,
-    }));
-  }, [results.messages]);
 
   const focusSearchInput = useCallback(() => {
     if (typeof document === 'undefined') return;
@@ -324,7 +278,6 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
       abortRef.current = null;
       setQuery('');
       setResults({ sessions: [], messages: [], files: [] });
-      setCollapsedGroups(new Set());
       setLoading(false);
     }
   }, [open]);
@@ -333,18 +286,6 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
     return () => {
       abortRef.current?.abort();
     };
-  }, []);
-
-  const toggleGroup = useCallback((sessionId: string) => {
-    setCollapsedGroups((prev) => {
-      const next = new Set(prev);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
-      } else {
-        next.add(sessionId);
-      }
-      return next;
-    });
   }, []);
 
   const handleSelect = useCallback(
@@ -378,23 +319,25 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
     [focusSearchInput, searchTerm],
   );
 
+  const activeScopeLabel =
+    activeScope === 'all' ? t('globalSearch.all') : t(TYPE_LABEL_KEYS[activeScope]);
+  const expanded = hasSearchTerm || loading;
+  const resultStackClass =
+    'overflow-hidden rounded-2xl border border-border/60 bg-background/80';
+  const resultItemClass =
+    'rounded-none border-0 border-b border-border/45 bg-transparent px-3.5 py-2.5 data-[selected=true]:bg-accent/70 last:border-b-0';
+
   const renderSectionHeader = (
     scope: Exclude<SearchScope, 'all'>,
     count: number,
   ) => (
-    <div className="flex items-center justify-between gap-3 px-1">
-      <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.18em] text-muted-foreground">
-        <CodePilotIcon
-          name={GROUP_ICON_NAMES[scope]}
-          size="sm"
-          className="text-inherit"
-          aria-hidden
-        />
-        <span>{t(TYPE_LABEL_KEYS[scope])}</span>
+    <div className="flex items-center justify-between gap-3 px-2 pb-1 pt-1">
+      <div className="text-[11px] font-medium text-muted-foreground">
+        {t(TYPE_LABEL_KEYS[scope])}
       </div>
-      <Badge variant="outline" className="border-border/70 bg-background/80 text-[10px] text-muted-foreground">
+      <span className="rounded-full bg-muted/55 px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground">
         {count}
-      </Badge>
+      </span>
     </div>
   );
 
@@ -404,426 +347,256 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
       onOpenChange={onOpenChange}
       title={t('globalSearch.title')}
       description={t('globalSearch.description')}
-      className="h-[min(88vh,720px)] overflow-hidden rounded-[28px] border border-border/70 bg-background/95 p-0 shadow-2xl backdrop-blur-xl sm:max-w-4xl"
+      className={cn(
+        'top-[44%] h-[min(70vh,560px)] overflow-hidden rounded-[24px] border border-border/70 bg-background/98 p-0 shadow-[var(--shadow-diffuse)] backdrop-blur-xl sm:max-w-[760px]',
+        '[&_[data-slot=command-input-wrapper]]:h-12 [&_[data-slot=command-input-wrapper]]:border-0 [&_[data-slot=command-input-wrapper]]:px-3',
+      )}
       showCloseButton={false}
       shouldFilter={false}
     >
-      <div className="border-b border-border/60 bg-gradient-to-b from-muted/60 to-background/95 px-5 pb-4 pt-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="space-y-1">
-            <div className="inline-flex items-center gap-2 text-[11px] font-semibold uppercase tracking-[0.2em] text-muted-foreground">
-              <CodePilotIcon
-                name="search"
-                size="sm"
-                className="text-inherit"
-                aria-hidden
-              />
-              <span>{t('globalSearch.title')}</span>
-            </div>
-            <p className="max-w-xl text-sm text-muted-foreground">
-              {t('globalSearch.description')}
-            </p>
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="border-b border-border/60 px-3 pt-3">
+          <div className="overflow-hidden rounded-[18px] border border-border/70 bg-background shadow-sm">
+            <CommandInput
+              placeholder={t('globalSearch.placeholder')}
+              value={query}
+              onValueChange={setQuery}
+              className="h-12 text-[15px]"
+              onCompositionStart={() => {
+                composingRef.current = true;
+              }}
+              onCompositionEnd={(event) => {
+                composingRef.current = false;
+                setQuery((event.target as HTMLInputElement).value);
+              }}
+            />
           </div>
-          <Badge
-            variant="outline"
-            className="border-border/70 bg-background/80 px-2.5 py-1 font-mono text-[10px] text-muted-foreground"
-          >
-            ⌘K
-          </Badge>
-        </div>
-      </div>
 
-      <CommandInput
-        placeholder={t('globalSearch.placeholder')}
-        value={query}
-        onValueChange={setQuery}
-        className="h-12 text-[15px]"
-        onCompositionStart={() => {
-          composingRef.current = true;
-        }}
-        onCompositionEnd={(event) => {
-          composingRef.current = false;
-          setQuery((event.target as HTMLInputElement).value);
-        }}
-      />
-
-      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border/60 bg-background/80 px-4 py-3">
-        <div className="flex flex-wrap items-center gap-2">
-          {SCOPE_OPTIONS.map((option) => {
-            const isActive = option.scope === activeScope;
-            return (
-              <Button
-                key={option.scope}
-                type="button"
-                variant={isActive ? 'secondary' : 'ghost'}
-                size="xs"
-                aria-pressed={isActive}
-                data-testid={`global-search-scope-${option.scope}`}
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => handleScopeSelect(option.scope)}
-                className={cn(
-                  'h-7 rounded-full px-2.5 text-[11px]',
-                  isActive
-                    ? 'bg-foreground text-background hover:bg-foreground/90 [&_svg]:!text-current'
-                    : 'border border-transparent text-muted-foreground hover:border-border/60 hover:bg-muted/60 hover:text-foreground',
-                )}
-              >
-                <CodePilotIcon
-                  name={option.icon}
-                  size="sm"
-                  className="text-inherit"
-                  aria-hidden
-                />
-                {t(option.labelKey)}
-              </Button>
-            );
-          })}
-        </div>
-
-        <div
-          className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground"
-          data-testid="global-search-status"
-        >
-          {activePrefix && (
-            <Badge
-              variant="outline"
-              className="border-primary/25 bg-primary/10 font-mono text-[10px] text-primary"
-            >
-              {activePrefix}
-            </Badge>
-          )}
-          <span className="inline-flex items-center gap-2">
-            {loading ? (
-              <>
-                <CodePilotIcon
-                  name="loading"
-                  size="sm"
-                  className="animate-spin text-muted-foreground"
-                  aria-hidden
-                />
-                {t('globalSearch.searching')}
-              </>
-            ) : hasSearchTerm ? (
-              t('globalSearch.resultsSummary', { count: totalResults })
-            ) : (
-              t('globalSearch.hintPrefix')
-            )}
-          </span>
-        </div>
-      </div>
-
-      <CommandList className="max-h-none flex-1 min-h-0 overflow-y-auto px-3 pb-4 pt-3">
-        <div className="space-y-4" data-testid="global-search-surface">
-          {!hasSearchTerm && !loading && (
-            <div
-              className="rounded-[24px] border border-dashed border-border/70 bg-muted/25 px-5 py-6"
-              data-testid="global-search-empty-state"
-            >
-              <div className="mx-auto flex max-w-2xl flex-col items-center text-center">
-                <div className="flex size-12 items-center justify-center rounded-2xl border border-border/70 bg-background/90 shadow-sm">
-                  <CodePilotIcon
-                    name="search"
-                    size="md"
-                    className="text-foreground"
-                    aria-hidden
-                  />
-                </div>
-                <h3 className="mt-4 text-base font-medium text-foreground">
-                  {t('globalSearch.hint')}
-                </h3>
-                <p className="mt-2 max-w-xl text-sm text-muted-foreground">
-                  {t('globalSearch.emptyDescription')}
-                </p>
-              </div>
-
-              <div className="mt-6 grid gap-3 sm:grid-cols-3">
-                {SCOPE_OPTIONS.filter((option) => option.scope !== 'all').map((option) => (
-                  <button
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <div className="inline-flex rounded-full bg-muted/55 p-0.5">
+              {SCOPE_OPTIONS.map((option) => {
+                const isActive = option.scope === activeScope;
+                return (
+                  <Button
                     key={option.scope}
                     type="button"
+                    variant="ghost"
+                    size="xs"
+                    aria-pressed={isActive}
+                    data-testid={`global-search-scope-${option.scope}`}
                     onMouseDown={(event) => event.preventDefault()}
                     onClick={() => handleScopeSelect(option.scope)}
-                    className="group rounded-2xl border border-border/70 bg-background/80 p-4 text-left transition-colors hover:bg-muted/50"
+                    className={cn(
+                      'h-7 gap-1.5 rounded-full px-3 text-[12px] transition-colors',
+                      isActive
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
                   >
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="flex size-9 items-center justify-center rounded-xl bg-muted/60">
-                        <CodePilotIcon
-                          name={option.icon}
-                          size="sm"
-                          className="text-foreground"
-                          aria-hidden
-                        />
-                      </div>
-                      <code className="rounded-full border border-border/60 bg-muted/60 px-2 py-0.5 font-mono text-[10px] text-muted-foreground">
-                        {option.prefix}
-                      </code>
-                    </div>
-                    <p className="mt-4 text-sm font-medium text-foreground">
-                      {t(option.labelKey)}
-                    </p>
-                    <p className="mt-1 text-xs leading-5 text-muted-foreground">
-                      {option.descriptionKey ? t(option.descriptionKey) : ''}
-                    </p>
-                  </button>
-                ))}
-              </div>
+                    {option.icon && (
+                      <CodePilotIcon
+                        name={option.icon}
+                        size="sm"
+                        className="text-inherit"
+                        aria-hidden
+                      />
+                    )}
+                    {t(option.labelKey)}
+                  </Button>
+                );
+              })}
             </div>
-          )}
 
-          {hasSearchTerm && !loading && !hasResults && (
             <div
-              className="rounded-[24px] border border-border/70 bg-muted/20 px-5 py-10 text-center"
-              data-testid="global-search-no-results"
+              className="flex min-w-0 items-center justify-end gap-2 text-[11px] text-muted-foreground"
+              data-testid="global-search-status"
             >
-              <div className="mx-auto flex max-w-lg flex-col items-center">
-                <div className="flex size-11 items-center justify-center rounded-2xl border border-border/70 bg-background/90">
-                  <CodePilotIcon name="search" size="sm" aria-hidden />
-                </div>
-                <p className="mt-4 text-base font-medium text-foreground">
+              {activePrefix && (
+                <code className="rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                  {activePrefix}
+                </code>
+              )}
+              {loading ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <CodePilotIcon
+                    name="loading"
+                    size="sm"
+                    className="animate-spin text-muted-foreground"
+                    aria-hidden
+                  />
+                  {t('globalSearch.searching')}
+                </span>
+              ) : hasSearchTerm ? (
+                <span>{t('globalSearch.resultsSummary', { count: totalResults })}</span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <CommandList
+          className="max-h-none min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-2"
+        >
+          <div className={cn(expanded && 'space-y-3')} data-testid="global-search-surface">
+            {!hasSearchTerm && !loading && (
+              <div
+                className="flex min-h-9 items-center justify-end gap-1.5 rounded-2xl bg-muted/[0.16] px-3 py-2 text-[11px] text-muted-foreground"
+                data-testid="global-search-empty-state"
+              >
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground shadow-sm">
+                  Enter
+                </kbd>
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground shadow-sm">
+                  Esc
+                </kbd>
+              </div>
+            )}
+
+            {hasSearchTerm && !loading && !hasResults && (
+              <div
+                className="rounded-2xl border border-dashed border-border/70 bg-muted/[0.14] px-4 py-8 text-center"
+                data-testid="global-search-no-results"
+              >
+                <p className="text-sm font-medium text-foreground">
                   {t('globalSearch.noResults')}
                 </p>
-                <p className="mt-2 text-sm text-muted-foreground">
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
                   {t('globalSearch.noResultsHint')}
                 </p>
-                <code className="mt-4 rounded-full border border-border/70 bg-background/90 px-3 py-1 font-mono text-[11px] text-muted-foreground">
-                  {searchTerm}
+                <code className="mt-3 inline-flex rounded-full bg-background px-2.5 py-1 font-mono text-[11px] text-muted-foreground shadow-sm">
+                  {activeScopeLabel}: {searchTerm}
                 </code>
               </div>
-            </div>
-          )}
+            )}
 
-          {loading && hasSearchTerm && (
-            <div className="space-y-3 py-1">
-              {Array.from({ length: 3 }).map((_, index) => (
-                <div
-                  key={`search-loading-${index}`}
-                  className="animate-pulse rounded-2xl border border-border/60 bg-muted/20 p-4"
-                >
-                  <div className="flex items-start gap-3">
-                    <div className="size-9 rounded-xl bg-muted" />
-                    <div className="min-w-0 flex-1 space-y-2">
-                      <div className="h-4 w-2/3 rounded bg-muted" />
-                      <div className="h-3 w-1/3 rounded bg-muted" />
+            {loading && hasSearchTerm && (
+              <div className={resultStackClass}>
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <div
+                    key={`search-loading-${index}`}
+                    className="animate-pulse border-b border-border/45 px-3.5 py-3 last:border-b-0"
+                  >
+                    <div className="space-y-2">
+                      <div className="h-3 w-2/3 rounded bg-muted/80" />
+                      <div className="h-3 w-1/3 rounded bg-muted/55" />
                     </div>
                   </div>
-                </div>
-              ))}
-            </div>
-          )}
+                ))}
+              </div>
+            )}
 
-          {hasSearchTerm && !loading && hasResults && (
-            <>
-              {results.sessions.length > 0 && (
-                <section
-                  className="space-y-2"
-                  data-testid="global-search-section-sessions"
-                >
-                  {renderSectionHeader('sessions', results.sessions.length)}
-                  <div className="space-y-2">
-                    {results.sessions.map((item) => (
-                      <CommandItem
-                        key={`session-${item.id}`}
-                        value={`session-${item.id}`}
-                        onSelect={() => handleSelect(item)}
-                        className="rounded-2xl border border-border/60 bg-background/80 px-3 py-3 data-[selected=true]:border-border data-[selected=true]:bg-muted/50"
-                        data-testid="global-search-item"
-                      >
-                        <div className="flex w-full items-start gap-3">
-                          <div className="mt-0.5 flex size-9 items-center justify-center rounded-xl bg-muted/60">
-                            <CodePilotIcon
-                              name="chat"
-                              size="sm"
-                              className="text-foreground"
-                              aria-hidden
-                            />
-                          </div>
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                                {renderHighlightedText(
-                                  normalizeInlineText(item.title),
-                                  searchTerm,
-                                )}
-                              </p>
-                              <Badge
-                                variant="outline"
-                                className="border-border/70 bg-background/90 text-[10px] text-muted-foreground"
-                              >
-                                {formatRelativeTime(item.updatedAt, t)}
-                              </Badge>
-                            </div>
-                            <p className="truncate text-xs text-muted-foreground">
+            {hasSearchTerm && !loading && hasResults && (
+              <div className="space-y-3">
+                {results.sessions.length > 0 && (
+                  <section className="space-y-1" data-testid="global-search-section-sessions">
+                    {renderSectionHeader('sessions', results.sessions.length)}
+                    <div className={resultStackClass}>
+                      {results.sessions.map((item) => (
+                        <CommandItem
+                          key={`session-${item.id}`}
+                          value={`session-${item.id}`}
+                          onSelect={() => handleSelect(item)}
+                          className={resultItemClass}
+                          data-testid="global-search-item"
+                        >
+                          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5">
+                            <p className="min-w-0 truncate text-sm font-medium leading-6 text-foreground">
+                              {renderHighlightedText(
+                                normalizeInlineText(item.title),
+                                searchTerm,
+                              )}
+                            </p>
+                            <span className="text-[11px] leading-6 text-muted-foreground">
+                              {formatRelativeTime(item.updatedAt, t)}
+                            </span>
+                            <p className="col-span-2 truncate text-[11px] leading-5 text-muted-foreground">
                               {renderHighlightedText(item.projectName, searchTerm)}
                             </p>
                           </div>
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </div>
-                </section>
-              )}
+                        </CommandItem>
+                      ))}
+                    </div>
+                  </section>
+                )}
 
-              {groupedMessages.length > 0 && (
-                <section
-                  className="space-y-2"
-                  data-testid="global-search-section-messages"
-                >
-                  {renderSectionHeader('messages', results.messages.length)}
-                  <div className="space-y-3">
-                    {groupedMessages.map((group) => {
-                      const isCollapsed = collapsedGroups.has(group.sessionId);
-                      return (
-                        <div
-                          key={`message-group-${group.sessionId}`}
-                          className="rounded-[22px] border border-border/60 bg-muted/20"
+                {results.messages.length > 0 && (
+                  <section className="space-y-1" data-testid="global-search-section-messages">
+                    {renderSectionHeader('messages', results.messages.length)}
+                    <div className={resultStackClass}>
+                      {results.messages.map((item) => (
+                        <CommandItem
+                          key={`message-${item.messageId}`}
+                          value={`message-${item.messageId}`}
+                          onSelect={() => handleSelect(item)}
+                          className={resultItemClass}
+                          data-testid="global-search-item"
                         >
-                          <button
-                            type="button"
-                            onClick={() => toggleGroup(group.sessionId)}
-                            className="flex w-full items-center justify-between gap-3 px-3 py-3 text-left"
-                          >
-                            <div className="flex min-w-0 items-center gap-3">
-                              <div className="flex size-8 items-center justify-center rounded-xl bg-background/90">
-                                {isCollapsed ? (
-                                  <CaretRight
-                                    size={14}
-                                    className="text-muted-foreground"
-                                  />
-                                ) : (
-                                  <CaretDown
-                                    size={14}
-                                    className="text-muted-foreground"
-                                  />
-                                )}
-                              </div>
-                              <div className="min-w-0">
-                                <p
-                                  className="truncate text-sm font-medium text-foreground"
-                                  title={normalizeInlineText(group.sessionTitle)}
-                                >
-                                  {renderHighlightedText(
-                                    normalizeInlineText(group.sessionTitle),
-                                    searchTerm,
-                                  )}
-                                </p>
-                                <p className="text-xs text-muted-foreground">
-                                  {t('globalSearch.messages')}
-                                </p>
-                              </div>
-                            </div>
-                            <Badge
-                              variant="outline"
-                              className="border-border/70 bg-background/90 text-[10px] text-muted-foreground"
+                          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5">
+                            <p
+                              className="min-w-0 truncate text-[11px] leading-5 text-muted-foreground"
+                              title={normalizeInlineText(item.sessionTitle)}
                             >
-                              {group.messages.length}
-                            </Badge>
-                          </button>
-
-                          {!isCollapsed && (
-                            <div className="space-y-2 px-3 pb-3">
-                              {group.messages.map((item) => (
-                                <CommandItem
-                                  key={`message-${item.messageId}`}
-                                  value={`message-${item.messageId}`}
-                                  onSelect={() => handleSelect(item)}
-                                  className="rounded-2xl border border-border/60 bg-background/85 px-3 py-3 data-[selected=true]:border-border data-[selected=true]:bg-muted/45"
-                                  data-testid="global-search-item"
-                                >
-                                  <div className="flex w-full items-start gap-3">
-                                    <div className="mt-0.5 flex size-9 items-center justify-center rounded-xl bg-muted/60">
-                                      <CodePilotIcon
-                                        name={CONTENT_TYPE_ICONS[item.contentType]}
-                                        size="sm"
-                                        className="text-foreground"
-                                        aria-hidden
-                                      />
-                                    </div>
-                                    <div className="min-w-0 flex-1 space-y-1.5">
-                                      <div className="flex flex-wrap items-center gap-2">
-                                        <Badge
-                                          variant="outline"
-                                          className="border-border/70 bg-background/90 text-[10px] text-muted-foreground"
-                                        >
-                                          {t(CONTENT_TYPE_LABEL_KEYS[item.contentType])}
-                                        </Badge>
-                                        <span className="text-[11px] text-muted-foreground">
-                                          {formatRelativeTime(item.createdAt, t)}
-                                        </span>
-                                      </div>
-                                      <p className="line-clamp-2 text-sm leading-5 text-foreground">
-                                        {renderHighlightedText(
-                                          normalizeInlineText(item.snippet),
-                                          searchTerm,
-                                        )}
-                                      </p>
-                                    </div>
-                                  </div>
-                                </CommandItem>
-                              ))}
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
-                  </div>
-                </section>
-              )}
-
-              {results.files.length > 0 && (
-                <section
-                  className="space-y-2"
-                  data-testid="global-search-section-files"
-                >
-                  {renderSectionHeader('files', results.files.length)}
-                  <div className="space-y-2">
-                    {results.files.map((item) => (
-                      <CommandItem
-                        key={`file-${item.path}`}
-                        value={`file-${item.path}`}
-                        onSelect={() => handleSelect(item)}
-                        className="rounded-2xl border border-border/60 bg-background/80 px-3 py-3 data-[selected=true]:border-border data-[selected=true]:bg-muted/50"
-                        data-testid="global-search-item"
-                      >
-                        <div className="flex w-full items-start gap-3">
-                          <div className="mt-0.5 flex size-9 items-center justify-center rounded-xl bg-muted/60">
-                            <CodePilotIcon
-                              name={item.nodeType === 'directory' ? 'folder_open' : 'file'}
-                              size="sm"
-                              className="text-foreground"
-                              aria-hidden
-                            />
+                              {renderHighlightedText(
+                                normalizeInlineText(item.sessionTitle),
+                                searchTerm,
+                              )}
+                            </p>
+                            <span className="text-[11px] leading-5 text-muted-foreground">
+                              {t(CONTENT_TYPE_LABEL_KEYS[item.contentType])}
+                              <span aria-hidden> · </span>
+                              {formatRelativeTime(item.createdAt, t)}
+                            </span>
+                            <p className="col-span-2 line-clamp-2 text-[13px] leading-6 text-foreground">
+                              {renderHighlightedText(
+                                normalizeInlineText(item.snippet),
+                                searchTerm,
+                              )}
+                            </p>
                           </div>
-                          <div className="min-w-0 flex-1 space-y-1">
-                            <div className="flex flex-wrap items-center gap-2">
-                              <p className="min-w-0 flex-1 truncate text-sm font-medium text-foreground">
-                                {renderHighlightedText(item.name, searchTerm)}
-                              </p>
-                              <Badge
-                                variant="outline"
-                                className="border-border/70 bg-background/90 text-[10px] text-muted-foreground"
-                              >
-                                {item.nodeType === 'directory'
-                                  ? t('globalSearch.directoryLabel')
-                                  : t('globalSearch.fileLabel')}
-                              </Badge>
-                            </div>
-                            <p className="truncate text-xs text-muted-foreground">
+                        </CommandItem>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {results.files.length > 0 && (
+                  <section className="space-y-1" data-testid="global-search-section-files">
+                    {renderSectionHeader('files', results.files.length)}
+                    <div className={resultStackClass}>
+                      {results.files.map((item) => (
+                        <CommandItem
+                          key={`file-${item.path}`}
+                          value={`file-${item.path}`}
+                          onSelect={() => handleSelect(item)}
+                          className={resultItemClass}
+                          data-testid="global-search-item"
+                        >
+                          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5">
+                            <p className="min-w-0 truncate text-sm font-medium leading-6 text-foreground">
+                              {renderHighlightedText(item.name, searchTerm)}
+                            </p>
+                            <span className="text-[11px] leading-6 text-muted-foreground">
+                              {item.nodeType === 'directory'
+                                ? t('globalSearch.directoryLabel')
+                                : t('globalSearch.fileLabel')}
+                            </span>
+                            <p className="col-span-2 truncate text-[11px] text-muted-foreground">
                               {normalizeInlineText(item.sessionTitle)}
-                            </p>
-                            <p className="truncate font-mono text-[11px] text-muted-foreground/80">
-                              {renderHighlightedText(formatPathTail(item.path), searchTerm)}
+                              <span aria-hidden> · </span>
+                              <span className="font-mono text-muted-foreground/80">
+                                {renderHighlightedText(formatPathTail(item.path), searchTerm)}
+                              </span>
                             </p>
                           </div>
-                        </div>
-                      </CommandItem>
-                    ))}
-                  </div>
-                </section>
-              )}
-            </>
-          )}
-        </div>
-      </CommandList>
+                        </CommandItem>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            )}
+          </div>
+        </CommandList>
+      </div>
     </CommandDialog>
   );
 }

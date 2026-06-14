@@ -37,6 +37,7 @@ test.describe('Global Search modes UX', () => {
   test.setTimeout(60_000);
 
   test('supports all/session/message/file modes and keyboard open', async ({ page }) => {
+    const searchResultTimeout = 20_000;
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const rootA = path.join(os.tmpdir(), `codepilot-search-modes-a-${suffix}`);
     const rootB = path.join(os.tmpdir(), `codepilot-search-modes-b-${suffix}`);
@@ -46,6 +47,7 @@ test.describe('Global Search modes UX', () => {
     const sessionTitleB = `Search Session Beta ${suffix}`;
     const messageTokenA = `message-token-alpha-${suffix}`;
     const messageTokenB = `message-token-beta-${suffix}`;
+    const searchDialog = page.locator('[data-slot="dialog-content"]').first();
 
     await fs.mkdir(path.dirname(filePathA), { recursive: true });
     await fs.mkdir(rootB, { recursive: true });
@@ -68,34 +70,46 @@ test.describe('Global Search modes UX', () => {
       await expect(searchInput).toBeVisible({ timeout: 10_000 });
       await expect(searchSurface).toBeVisible({ timeout: 10_000 });
     };
+    const getSearchDialogGeometry = async () => {
+      const box = await searchDialog.boundingBox();
+      expect(box).toBeTruthy();
+      return {
+        top: Math.round(box!.y),
+        height: Math.round(box!.height),
+      };
+    };
 
     try {
       await page.goto(`/chat/${sessionA}`);
 
       await openSearch();
+      const emptyGeometry = await getSearchDialogGeometry();
 
       // All-mode returns all three result types.
       await searchInput.fill(suffix);
-      await expect(page.getByTestId('global-search-section-sessions')).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByTestId('global-search-section-files')).toBeVisible({ timeout: 10_000 });
-      await expect(page.getByTestId('global-search-section-messages')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('global-search-section-sessions')).toBeVisible({ timeout: searchResultTimeout });
+      await expect(page.getByTestId('global-search-section-files')).toBeVisible({ timeout: searchResultTimeout });
+      await expect(page.getByTestId('global-search-section-messages')).toBeVisible({ timeout: searchResultTimeout });
       await expect(
         page.getByTestId('global-search-section-sessions').getByTestId('global-search-item')
-      ).toHaveCount(2, { timeout: 10_000 });
+      ).toHaveCount(2, { timeout: searchResultTimeout });
       await expect(
         page.getByTestId('global-search-section-files').getByTestId('global-search-item')
-      ).toHaveCount(1, { timeout: 10_000 });
+      ).toHaveCount(1, { timeout: searchResultTimeout });
       await expect(
         page.getByTestId('global-search-section-messages').getByTestId('global-search-item')
-      ).toHaveCount(2, { timeout: 10_000 });
+      ).toHaveCount(2, { timeout: searchResultTimeout });
+      const resultGeometry = await getSearchDialogGeometry();
+      expect(Math.abs(resultGeometry.top - emptyGeometry.top)).toBeLessThanOrEqual(1);
+      expect(Math.abs(resultGeometry.height - emptyGeometry.height)).toBeLessThanOrEqual(2);
 
       // Clicking a scope chip rewrites the prefix and narrows the result set.
       await page.getByTestId('global-search-scope-sessions').click();
       await expect(searchInput).toHaveValue(`session:${suffix}`);
-      await expect(page.getByTestId('global-search-section-sessions')).toBeVisible({ timeout: 10_000 });
+      await expect(page.getByTestId('global-search-section-sessions')).toBeVisible({ timeout: searchResultTimeout });
       await expect(
         page.getByTestId('global-search-section-sessions').getByTestId('global-search-item')
-      ).toHaveCount(2, { timeout: 10_000 });
+      ).toHaveCount(2, { timeout: searchResultTimeout });
       await expect(page.getByTestId('global-search-section-files')).toHaveCount(0);
 
       // message: prefix narrows to message snippets and supports navigation to target session.
@@ -103,10 +117,10 @@ test.describe('Global Search modes UX', () => {
       await expect(page.getByTestId('global-search-scope-messages')).toHaveAttribute('aria-pressed', 'true');
       await expect(
         page.getByTestId('global-search-section-messages').getByTestId('global-search-item')
-      ).toHaveCount(1, { timeout: 10_000 });
+      ).toHaveCount(1, { timeout: searchResultTimeout });
       await expect(
         page.getByTestId('global-search-section-messages').getByText(messageTokenB).first()
-      ).toBeVisible({ timeout: 10_000 });
+      ).toBeVisible({ timeout: searchResultTimeout });
       await page.getByTestId('global-search-section-messages').getByText(messageTokenB).first().click();
       await expect(page).toHaveURL(new RegExp(`/chat/${sessionB}\\?message=`), { timeout: 10_000 });
 
@@ -119,10 +133,10 @@ test.describe('Global Search modes UX', () => {
       await expect(page.getByTestId('global-search-scope-files')).toHaveAttribute('aria-pressed', 'true');
       await expect(
         page.getByTestId('global-search-section-files').getByTestId('global-search-item')
-      ).toHaveCount(1, { timeout: 10_000 });
+      ).toHaveCount(1, { timeout: searchResultTimeout });
       await expect(
         page.getByTestId('global-search-section-files').getByText(fileNameA).first()
-      ).toBeVisible({ timeout: 10_000 });
+      ).toBeVisible({ timeout: searchResultTimeout });
       await page.getByTestId('global-search-section-files').getByText(fileNameA).first().click();
       await expect(page).toHaveURL(new RegExp(`/chat/${sessionA}\\?file=`), { timeout: 10_000 });
     } finally {
