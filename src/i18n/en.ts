@@ -39,6 +39,9 @@ const en = {
   'chatList.projects': 'Projects',
   'chatList.assistantSection': 'Assistant',
   'chatList.newProject': 'New Project',
+  'chatList.dropToCreateProject': 'Drop folder to create project',
+  'chatList.dropFileNotFolder': 'Please drop a folder, not a file',
+  'chatList.dropCreateFailed': 'Failed to create project',
   'chatList.showMore': 'Show {count} more',
   'chatList.showLess': 'Show less',
 

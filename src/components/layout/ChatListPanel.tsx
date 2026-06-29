@@ -83,6 +83,12 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
     buddy?: { emoji: string; buddyName?: string; species?: string };
   } | null>(null);
   const [promoDismissed, setPromoDismissed] = useState(false);
+  // Drag a folder onto the sidebar to create a project (Electron desktop only).
+  // dragDepthRef is a counter that absorbs dragenter/dragleave bubbling across
+  // nested children, so the drop highlight doesn't flicker when the cursor
+  // crosses sub-elements inside the panel.
+  const dragDepthRef = useRef(0);
+  const [isDragOver, setIsDragOver] = useState(false);
 
   // Reload assistant summary when sessions change (e.g. after onboarding/rename)
   useEffect(() => {
@@ -125,6 +131,38 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
       setFolderPickerOpen(true);
     }
   }, [isElectron, openNativePicker, t, handleFolderSelect]);
+
+  const handleDrop = useCallback(async (e: React.DragEvent) => {
+    e.preventDefault();
+    dragDepthRef.current = 0;
+    setIsDragOver(false);
+    // Only the Electron desktop build can resolve a dropped File to a real
+    // filesystem path — under contextIsolation the renderer's File.path is
+    // intentionally zeroed, so we route through preload's webUtils helper.
+    const getPathForFile = window.electronAPI?.fs?.getPathForFile;
+    const files = e.dataTransfer?.files;
+    if (!getPathForFile || !files || files.length === 0) return;
+    const path = getPathForFile(files[0]);
+    if (!path) return;
+    // Reject non-directories up-front (the same /api/files/browse check
+    // handleNewChat uses) so dragging a single file produces a clear warning
+    // instead of a silent no-op inside handleFolderSelect.
+    try {
+      const checkRes = await fetch(`/api/files/browse?dir=${encodeURIComponent(path)}`);
+      if (!checkRes.ok) {
+        showToast({ type: 'warning', message: t('chatList.dropFileNotFolder') });
+        return;
+      }
+    } catch {
+      // Validation request itself failed — fall through and let
+      // handleFolderSelect's own failure path deal with it.
+    }
+    try {
+      await handleFolderSelect(path);
+    } catch {
+      showToast({ type: 'error', message: t('chatList.dropCreateFailed') });
+    }
+  }, [handleFolderSelect, t, showToast]);
 
   const handleNewChat = useCallback(async () => {
     let lastDir = workingDirectory
@@ -436,7 +474,33 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
   // <CardSurface kind="sidebar"> in AppShell. This inner block now
   // only owns the column layout for its own children.
   return (
-    <div className="flex h-full w-full flex-col">
+    <div
+      className="relative flex h-full w-full flex-col"
+      onDragEnter={(e) => {
+        // Electron-only + file/folder drags only. Skip in-browser runs
+        // (no path resolution available) and in-app text/link drags.
+        if (!window.electronAPI?.fs?.getPathForFile) return;
+        if (!e.dataTransfer?.types?.includes('Files')) return;
+        e.preventDefault();
+        dragDepthRef.current += 1;
+        setIsDragOver(true);
+      }}
+      onDragOver={(e) => {
+        // preventDefault is mandatory here — otherwise the browser would
+        // open the dropped file and onDrop would never fire.
+        if (!window.electronAPI?.fs?.getPathForFile) return;
+        if (!e.dataTransfer?.types?.includes('Files')) return;
+        e.preventDefault();
+      }}
+      onDragLeave={() => {
+        dragDepthRef.current -= 1;
+        if (dragDepthRef.current <= 0) {
+          dragDepthRef.current = 0;
+          setIsDragOver(false);
+        }
+      }}
+      onDrop={handleDrop}
+    >
       {/* Round 20 — the h-12 traffic-light-safe-area + collapse
           button used to live at the top of this panel. Both moved
           to UnifiedTopBar so the four floating cards (this sidebar,
@@ -840,6 +904,25 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
         onOpenChange={setFolderPickerOpen}
         onSelect={handleFolderSelect}
       />
+
+      {/* Drag-to-create overlay — visible only while a folder is dragged
+          over the panel (Electron desktop only). */}
+      <AnimatePresence>
+        {isDragOver && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+            className="pointer-events-none absolute inset-0 z-50 flex flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-primary/70 bg-primary/10 backdrop-blur-[2px]"
+          >
+            <CodePilotIcon name="folder_add" size="md" className="text-primary" aria-hidden />
+            <span className="text-[13px] font-medium text-primary">
+              {t('chatList.dropToCreateProject')}
+            </span>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
     </div>
   );
