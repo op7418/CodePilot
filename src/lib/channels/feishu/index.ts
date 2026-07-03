@@ -31,6 +31,14 @@ import { loadFeishuConfig, validateFeishuConfig } from './config';
 
 /** Max number of message IDs to keep for dedup. */
 const DEDUP_MAX = 1000;
+
+/**
+ * Max age for inbound messages in milliseconds.
+ * Messages older than this are dropped as stale — they are likely historical
+ * events replayed by the Lark SDK after a WSClient reconnect or bridge restart.
+ * Default: 5 minutes.
+ */
+const STALE_MESSAGE_MAX_AGE_MS = 5 * 60 * 1000;
 import { FeishuGateway } from './gateway';
 import { parseMessageWithResources } from './inbound';
 import { getBotInfo } from './identity';
@@ -391,6 +399,17 @@ export class FeishuChannelPlugin implements ChannelPlugin<FeishuConfig> {
   }
 
   private enqueueMessage(msg: InboundMessage): void {
+    // Stale message filter: drop messages older than STALE_MESSAGE_MAX_AGE_MS.
+    // The Lark SDK replays unprocessed historical events on WSClient reconnect,
+    // which can cause the bot to respond to messages from hours or days ago.
+    if (msg.timestamp && !msg.callbackData) {
+      const age = Date.now() - msg.timestamp;
+      if (age > STALE_MESSAGE_MAX_AGE_MS) {
+        console.log('[feishu/plugin]', `Stale message dropped (${Math.round(age / 1000)}s old):`, msg.messageId);
+        return;
+      }
+    }
+
     // Dedup: skip messages already seen (prevents duplicates from WS reconnect/retry)
     if (msg.messageId && !msg.callbackData) {
       if (this.seenMessageIds.has(msg.messageId)) {
