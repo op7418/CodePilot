@@ -28,6 +28,9 @@ interface CardActionEvent {
   open_message_id?: string;
 }
 import { loadFeishuConfig, validateFeishuConfig } from './config';
+
+/** Max number of message IDs to keep for dedup. */
+const DEDUP_MAX = 1000;
 import { FeishuGateway } from './gateway';
 import { parseMessageWithResources } from './inbound';
 import { getBotInfo } from './identity';
@@ -60,6 +63,8 @@ export class FeishuChannelPlugin implements ChannelPlugin<FeishuConfig> {
    * scheduling new timers.
    */
   private identityGeneration = 0;
+  /** Dedup: set of recently seen message IDs to prevent duplicate processing. */
+  private seenMessageIds = new Set<string>();
 
   loadConfig(): FeishuConfig | null {
     this.config = loadFeishuConfig();
@@ -347,6 +352,11 @@ export class FeishuChannelPlugin implements ChannelPlugin<FeishuConfig> {
       this.waitResolve(null);
       this.waitResolve = null;
     }
+    // NOTE: Do NOT clear seenMessageIds here.
+    // After gateway.stop() closes the WSClient, in-flight events from the old
+    // connection may still arrive briefly. Keeping the dedup set prevents them
+    // from being re-processed if a new gateway starts immediately after.
+    // The set is bounded by DEDUP_MAX and will naturally age out.
   }
 
   isRunning(): boolean {
@@ -381,10 +391,29 @@ export class FeishuChannelPlugin implements ChannelPlugin<FeishuConfig> {
   }
 
   private enqueueMessage(msg: InboundMessage): void {
-    // Track messageId for reaction acknowledgment (skip callback messages)
+    // Dedup: skip messages already seen (prevents duplicates from WS reconnect/retry)
     if (msg.messageId && !msg.callbackData) {
+      if (this.seenMessageIds.has(msg.messageId)) {
+        console.log('[feishu/plugin]', 'Duplicate message skipped:', msg.messageId);
+        return;
+      }
+      this.seenMessageIds.add(msg.messageId);
+
+      // Track messageId for reaction acknowledgment
       this.lastMessageIdByChat.set(msg.address.chatId, msg.messageId);
+
+      // Prune dedup set when it exceeds capacity
+      if (this.seenMessageIds.size > DEDUP_MAX) {
+        const excess = this.seenMessageIds.size - DEDUP_MAX;
+        let removed = 0;
+        for (const id of this.seenMessageIds) {
+          if (removed >= excess) break;
+          this.seenMessageIds.delete(id);
+          removed++;
+        }
+      }
     }
+
     if (this.waitResolve) {
       const resolve = this.waitResolve;
       this.waitResolve = null;

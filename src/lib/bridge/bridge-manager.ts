@@ -203,6 +203,8 @@ interface BridgeManagerState {
   adapters: Map<string, BaseChannelAdapter>;
   adapterMeta: Map<string, AdapterMeta>;
   running: boolean;
+  /** Guard against concurrent start() calls — set immediately on entry, cleared on completion or error */
+  starting: boolean;
   startedAt: string | null;
   loopAborts: Map<string, AbortController>;
   activeTasks: Map<string, AbortController>;
@@ -218,6 +220,7 @@ function getState(): BridgeManagerState {
       adapters: new Map(),
       adapterMeta: new Map(),
       running: false,
+      starting: false,
       startedAt: null,
       loopAborts: new Map(),
       activeTasks: new Map(),
@@ -263,6 +266,10 @@ export interface StartResult {
 export async function start(): Promise<StartResult> {
   const state = getState();
   if (state.running) return { started: true };
+  if (state.starting) return { started: false, reason: 'starting_in_progress' };
+
+  // Set starting flag immediately to prevent concurrent start() calls
+  state.starting = true;
 
   const bridgeEnabled = getSetting('remote_bridge_enabled') === 'true';
   if (!bridgeEnabled) {
@@ -311,6 +318,7 @@ export async function start(): Promise<StartResult> {
     console.warn('[bridge-manager] No adapters started successfully, bridge not activated');
     state.adapters.clear();
     state.adapterMeta.clear();
+    state.starting = false;
     const reason = configErrors.length > 0
       ? `adapter_config_invalid: ${configErrors.join('; ')}`
       : 'no_adapters_started';
@@ -320,6 +328,7 @@ export async function start(): Promise<StartResult> {
   // Mark running BEFORE starting consumer loops — runAdapterLoop checks
   // state.running in its while-condition, so it must be true first.
   state.running = true;
+  state.starting = false;
   state.startedAt = new Date().toISOString();
 
   // Suppress notification bot polling to avoid conflicts
@@ -344,6 +353,7 @@ export async function stop(): Promise<void> {
   if (!state.running) return;
 
   state.running = false;
+  state.starting = false;
 
   // Abort all active tool/stream tasks so in-flight Claude sessions stop
   // writing to DB and release session locks cleanly. Without this, `/stop`
