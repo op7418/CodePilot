@@ -700,13 +700,14 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     descriptionZh: 'MiniMax 编程套餐 — 国际区',
     protocol: 'anthropic',
     authStyle: 'auth_token',
-    baseUrl: 'https://api.minimax.io/anthropic',
+    baseUrl: 'https://api.minimax.io/anthropic/v1',
     defaultEnvOverrides: {
       API_TIMEOUT_MS: '3000000',
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     },
     defaultModels: [
       { modelId: 'sonnet', upstreamModelId: 'MiniMax-M2.7', displayName: 'MiniMax-M2.7', role: 'default' },
+      { modelId: 'MiniMax-M3', upstreamModelId: 'MiniMax-M3', displayName: 'MiniMax-M3', capabilities: { contextWindow: 1000000, reasoning: true, toolUse: true, supportsAdaptiveThinking: true } },
     ],
     defaultRoleModels: {
       default: 'MiniMax-M2.7',
