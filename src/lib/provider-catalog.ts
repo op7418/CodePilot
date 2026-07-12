@@ -700,7 +700,7 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     descriptionZh: 'MiniMax 编程套餐 — 国际区',
     protocol: 'anthropic',
     authStyle: 'auth_token',
-    baseUrl: 'https://api.minimax.io/anthropic/v1',
+    baseUrl: 'https://api.minimax.io/anthropic',
     defaultEnvOverrides: {
       API_TIMEOUT_MS: '3000000',
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
