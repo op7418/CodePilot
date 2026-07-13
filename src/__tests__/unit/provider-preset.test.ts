@@ -73,6 +73,48 @@ describe('Preset Schema Validation', () => {
     assert.equal(p.authStyle, 'auth_token');
   });
 
+  it('MiniMax presets expose M3 and M2.7 capabilities in both regions', () => {
+    const expectedBaseUrls = new Map([
+      ['minimax-cn', 'https://api.minimaxi.com/anthropic'],
+      ['minimax-global', 'https://api.minimax.io/anthropic'],
+    ]);
+
+    for (const [key, baseUrl] of expectedBaseUrls) {
+      const preset = VENDOR_PRESETS.find(v => v.key === key);
+      assert.ok(preset, `${key} preset must exist`);
+      assert.equal(preset.baseUrl, baseUrl);
+      assert.equal(preset.protocol, 'anthropic');
+
+      const m3 = preset.defaultModels.find(model => model.modelId === 'MiniMax-M3');
+      assert.deepEqual(m3, {
+        modelId: 'MiniMax-M3',
+        upstreamModelId: 'MiniMax-M3',
+        displayName: 'MiniMax-M3',
+        capabilities: {
+          contextWindow: 1000000,
+          reasoning: true,
+          toolUse: true,
+          vision: true,
+          supportsAdaptiveThinking: true,
+        },
+      });
+
+      const m27 = preset.defaultModels.find(model => model.upstreamModelId === 'MiniMax-M2.7');
+      assert.deepEqual(m27, {
+        modelId: 'sonnet',
+        upstreamModelId: 'MiniMax-M2.7',
+        displayName: 'MiniMax-M2.7',
+        role: 'default',
+        capabilities: {
+          contextWindow: 204800,
+          reasoning: true,
+          toolUse: true,
+        },
+      });
+      assert.equal(preset.defaultRoleModels?.default, 'MiniMax-M2.7');
+    }
+  });
+
   it('openai-compatible preset exists: openai-compatible protocol, api_key auth, no fixed URL, no fabricated catalog', () => {
     const p = VENDOR_PRESETS.find(v => v.key === 'openai-compatible');
     assert.ok(p, 'generic openai-compatible preset must exist');
