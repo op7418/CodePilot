@@ -1129,6 +1129,84 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     },
   },
 
+  // ── StepFun (阶跃星辰) ──
+  {
+    key: 'stepfun',
+    name: 'StepFun',
+    description: 'StepFun Step Plan — Anthropic-compatible reasoning API',
+    descriptionZh: '阶跃星辰 Step Plan — Anthropic 兼容推理 API',
+    protocol: 'anthropic',
+    authStyle: 'api_key',
+    baseUrl: 'https://api.stepfun.com/step_plan',
+    defaultEnvOverrides: {
+      CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
+    },
+    defaultModels: [
+      {
+        modelId: 'step-3.7-flash',
+        upstreamModelId: 'step-3.7-flash',
+        displayName: 'Step 3.7 Flash',
+        role: 'default',
+        capabilities: {
+          reasoning: true,
+          toolUse: true,
+          vision: true,
+          supportsEffort: true,
+          supportedEffortLevels: ['low', 'medium', 'high'],
+        },
+      },
+      {
+        modelId: 'step-3.5-flash-2603',
+        upstreamModelId: 'step-3.5-flash-2603',
+        displayName: 'Step 3.5 Flash 2603',
+        role: 'sonnet',
+        capabilities: {
+          reasoning: true,
+          toolUse: true,
+          supportsEffort: true,
+          supportedEffortLevels: ['low', 'medium', 'high'],
+        },
+      },
+      {
+        modelId: 'step-3.5-flash',
+        upstreamModelId: 'step-3.5-flash',
+        displayName: 'Step 3.5 Flash',
+        role: 'haiku',
+        capabilities: {
+          reasoning: true,
+          toolUse: true,
+        },
+      },
+      {
+        modelId: 'step-router-v1',
+        upstreamModelId: 'step-router-v1',
+        displayName: 'Step Router V1',
+        capabilities: {
+          reasoning: true,
+          toolUse: true,
+        },
+      },
+    ],
+    defaultRoleModels: {
+      default: 'step-3.7-flash',
+      opus: 'step-3.7-flash',
+      sonnet: 'step-3.5-flash-2603',
+      haiku: 'step-3.5-flash',
+    },
+    fields: ['api_key'],
+    iconKey: 'stepfun',
+    sdkProxyOnly: true,
+    meta: {
+      apiKeyUrl: 'https://platform.stepfun.com/interface-key',
+      docsUrl: 'https://platform.stepfun.com/docs/zh/step-plan/integrations/reasoning-api',
+      billingModel: 'token_plan',
+      notes: [
+        '需订阅 Step Plan 套餐并获取 API Key',
+        'Anthropic SDK 会自动拼接 /v1/messages，base_url 不带 /v1',
+      ],
+    },
+  },
+
   // ── AWS Bedrock ──
   {
     key: 'bedrock',
@@ -1690,6 +1768,13 @@ export function canReliablyFetchModels(
       reasonEn: "DeepSeek does not expose /v1/models — use manual entry in Add model.",
     };
   }
+  if (preset.key === 'stepfun') {
+    return {
+      reliable: false,
+      reasonZh: '阶跃星辰 Step Plan 不支持通过 /v1/models 拉取列表，请在「添加模型」里手动输入 model id',
+      reasonEn: "StepFun Step Plan does not expose /v1/models — use manual entry in Add model.",
+    };
+  }
   // Image providers: catalog-only.
   if (preset.protocol === 'gemini-image' || preset.protocol === 'openai-image') {
     return {
@@ -1795,6 +1880,7 @@ export function canSearchUpstreamModels(
     'bailian-token-plan-cn',
     'xiaomi-mimo-token-plan',
     'deepseek',
+    'stepfun',
   ]);
   if (preset && manualOnlyKeys.has(preset.key)) {
     return {
