@@ -25,6 +25,7 @@ export type ProviderIconKey =
   | "ollama"
   | "openai"
   | "deepseek"
+  | "stepfun"
   | "bedrock"
   | "google"
   | "aws"
@@ -90,6 +91,7 @@ export function getProviderIconKey(name: string, baseUrl: string): ProviderIconK
   )
     return "openai";
   if (url.includes("deepseek") || lower.includes("deepseek")) return "deepseek";
+  if (url.includes("stepfun") || lower.includes("stepfun") || lower.includes("阶跃")) return "stepfun";
   if (lower.includes("bedrock")) return "bedrock";
   if (lower.includes("vertex") || lower.includes("google")) return "google";
   if (lower.includes("aws")) return "aws";

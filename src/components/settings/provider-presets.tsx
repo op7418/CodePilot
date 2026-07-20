@@ -23,6 +23,7 @@ import Bailian from "@lobehub/icons/es/Bailian";
 import XiaomiMiMo from "@lobehub/icons/es/XiaomiMiMo";
 import Ollama from "@lobehub/icons/es/Ollama";
 import OpenAI from "@lobehub/icons/es/OpenAI";
+import Stepfun from "@lobehub/icons/es/Stepfun";
 
 // ---------------------------------------------------------------------------
 // Brand icon resolver
@@ -45,6 +46,7 @@ const ICON_BY_KEY: Record<ProviderIconKey, ReactNode> = {
   ollama: <Ollama size={18} />,
   openai: <OpenAI size={18} />,
   deepseek: <DeepSeek size={18} />,
+  stepfun: <Stepfun size={18} />,
   bedrock: <Bedrock size={18} />,
   google: <Google size={18} />,
   aws: <Aws size={18} />,
@@ -102,6 +104,7 @@ function resolveIcon(iconKey: string): ReactNode {
     ollama: <Ollama size={18} />,
     openai: <OpenAI size={18} />,
     deepseek: <DeepSeek size={18} />,
+    stepfun: <Stepfun size={18} />,
     cline: <Cline size={18} />,
     opencode: <OpenCode size={18} />,
     server: <HardDrives size={18} className="text-muted-foreground" />,
