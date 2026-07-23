@@ -15,6 +15,7 @@
 
 export type ProviderIconKey =
   | "openrouter"
+  | "requesty"
   | "zhipu"
   | "kimi"
   | "moonshot"
@@ -39,6 +40,10 @@ export function getProviderIconKey(name: string, baseUrl: string): ProviderIconK
   const url = baseUrl.toLowerCase();
 
   if (lower.includes("openrouter")) return "openrouter";
+  // Requesty — OpenAI-compatible model router. Scoped to brand-unique
+  // fragments (`requesty.ai` host / `requesty` name) so it can't steal
+  // another vendor's icon.
+  if (url.includes("requesty.ai") || lower.includes("requesty")) return "requesty";
   // OpenCode Go: the provider name carries a protocol suffix — "OpenCode Go
   // (OpenAI)" / "(Anthropic)". Match BEFORE the openai / anthropic name
   // matchers below, which would otherwise steal the wrong brand logo

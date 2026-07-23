@@ -25,6 +25,22 @@ import Ollama from "@lobehub/icons/es/Ollama";
 import OpenAI from "@lobehub/icons/es/OpenAI";
 import XAI from "@lobehub/icons/es/XAI";
 
+// Requesty has no brand icon in @lobehub/icons yet, so mirror the approach the
+// model-selector already uses for the `requesty` provider and render its logo
+// from models.dev. Same `size` prop shape as the lobehub icon components so the
+// two icon maps below can treat it uniformly.
+function RequestyIcon({ size = 18 }: { size?: number }): ReactNode {
+  return (
+    <img
+      alt="Requesty"
+      src="https://models.dev/logos/requesty.svg"
+      width={size}
+      height={size}
+      className="dark:invert"
+    />
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Brand icon resolver
 // ---------------------------------------------------------------------------
@@ -36,6 +52,7 @@ import XAI from "@lobehub/icons/es/XAI";
  */
 const ICON_BY_KEY: Record<ProviderIconKey, ReactNode> = {
   openrouter: <OpenRouter size={18} />,
+  requesty: <RequestyIcon size={18} />,
   zhipu: <Zhipu size={18} />,
   kimi: <Kimi size={18} />,
   moonshot: <Moonshot size={18} />,
@@ -92,6 +109,7 @@ function resolveIcon(iconKey: string): ReactNode {
   const ICON_MAP: Record<string, ReactNode> = {
     anthropic: <Anthropic size={18} />,
     openrouter: <OpenRouter size={18} />,
+    requesty: <RequestyIcon size={18} />,
     zhipu: <Zhipu size={18} />,
     kimi: <Kimi size={18} />,
     moonshot: <Moonshot size={18} />,

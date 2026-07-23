@@ -720,6 +720,46 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     },
   },
 
+  // ── Requesty ──
+  // Requesty is an OpenAI-compatible model router (like OpenRouter, but its
+  // gateway speaks the OpenAI Chat Completions wire protocol at
+  // `https://router.requesty.ai/v1`). It therefore rides the generic
+  // `openai-compatible` path — CodePilot / Codex runtimes via the AI SDK chat
+  // transport — rather than OpenRouter's Anthropic-skin `protocol: 'openrouter'`.
+  // Because the base URL ends in `/v1` and the preset is not catalog-only, the
+  // "搜索并添加模型" dialog reaches Requesty's `/v1/models` through the generic
+  // reliable-provider probe (canReliablyFetchModels / canSearchUpstreamModels),
+  // so no dedicated catalog fetcher is needed. `provider/model` naming matches
+  // OpenRouter. `defaultModels` is an intentional alias-only bootstrap (a few
+  // popular SKUs); user-added models are normal usage, not drift — so no
+  // `fixedCatalog`/`modelDiscoveryMode` gate.
+  {
+    key: 'requesty',
+    name: 'Requesty',
+    description: 'Use Requesty to access multiple models',
+    descriptionZh: '通过 Requesty 访问多种模型',
+    protocol: 'openai-compatible',
+    authStyle: 'api_key',
+    baseUrl: 'https://router.requesty.ai/v1',
+    defaultEnvOverrides: {},
+    defaultModels: [
+      { modelId: 'openai/gpt-4o-mini', displayName: 'GPT-4o mini', role: 'default', capabilities: { toolUse: true, vision: true } },
+      { modelId: 'openai/gpt-4o', displayName: 'GPT-4o', capabilities: { toolUse: true, vision: true } },
+      { modelId: 'anthropic/claude-sonnet-4-5', displayName: 'Claude Sonnet 4.5', capabilities: { toolUse: true, vision: true, reasoning: true } },
+      { modelId: 'google/gemini-2.5-flash', displayName: 'Gemini 2.5 Flash', capabilities: { toolUse: true, vision: true } },
+      { modelId: 'deepseek/deepseek-chat', displayName: 'DeepSeek Chat', capabilities: { toolUse: true } },
+    ],
+    defaultRoleModels: { default: 'openai/gpt-4o-mini' },
+    fields: ['api_key'],
+    iconKey: 'requesty',
+    meta: {
+      apiKeyUrl: 'https://app.requesty.ai/api-keys',
+      docsUrl: 'https://docs.requesty.ai',
+      pricingUrl: 'https://app.requesty.ai/router/list',
+      billingModel: 'pay_as_you_go',
+    },
+  },
+
   // ── Zhipu GLM (China) ──
   {
     key: 'glm-cn',
