@@ -346,11 +346,12 @@ async function executeDueTask(
       // path so isSessionTask reminders still work.
       const { generateTextFromProvider } = await import('./text-generator');
       const { resolveProvider } = await import('./provider-resolver');
-      const resolved = resolveProvider();
+      const resolved = resolveProvider({ callScene: 'scheduled_task' });
       if (!resolved.hasCredentials) {
         throw new Error('No API credentials configured');
       }
       result = await generateTextFromProvider({
+        callScene: 'scheduled_task',
         providerId: resolved.provider?.id || '',
         model: resolved.upstreamModel || resolved.model || 'sonnet',
         system: `You are executing a scheduled task. Be concise and direct.\nTask name: ${task.name}\nCurrent time: ${new Date().toLocaleString()}`,

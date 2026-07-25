@@ -8,6 +8,7 @@
 
 | 文件 | 主题 |
 |------|------|
+| qwen-token-plan-grok-oauth-2026-07-21.md | **千问 Token Plan 与 Grok OAuth 接入调研**：确认 Coding Plan 未被简单改名，个人/团队 Token Plan 共用 URL 却有不同精确目录，需持久化 preset identity；拆清 Grok Build、xAI API Key 与 OpenCode SuperGrok OAuth，并按用户裁决同时规划 API Key + Responses 与参考 OpenCode 的 browser/device OAuth，公开 client 兼容风险由 API Key 兜底 |
 | multi-agent-loop-review-process-audit-2026-07-20.md | **loop review 过程独立审计（Claude）**：基于连续六次实现/复审运行的裁决原文与 57 commit 流所作的机制层补充——6 分钟审查轮排除 layer 4/5、deferral 无载体致「待 smoke」蒸发、账本对账吃掉双位数预算、「机械轮」蚕食人类闸门、required checks 出自共享计划、范围缩减散文化洗白（reward hacking 定性 + 5 处实证）、僵尸运行记录；给出映射复盘门禁 A–E 的 7 条可执行补丁 |
 | multi-agent-loop-acceptance-failure-2026-07-19.md | **多 Agent loop 验收失效复盘**：53 个提交仍未通过用户路径的根因；定位共享错误计划、低层级 required checks、待 smoke 被误报完成、父任务无总门与延期未回问；给出 U1–U8 不可变验收矩阵和证据阶梯 |
 | sentry-post-refactor-audit-2026-07-05.md | **Sentry 重构后有效性审计 + 后台新问题**:检测整体仍生效;已核实盲区=`reportNativeError` 对 `EMPTY_RESPONSE`/`TIMEOUT_*` 是 no-op(`error-classifier.ts` 集合未含);后台新问题 `AI_MissingToolResultsError` 佐证 audit #49 吞 tool-error。标注了已核实/待 Codex 复核 |

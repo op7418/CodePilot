@@ -32,7 +32,7 @@ import {
   getAllProviders,
 } from '../../lib/db';
 import { resolveProvider } from '../../lib/provider-resolver';
-import { getCatalogDefaultModelsForRecord } from '../../lib/provider-catalog';
+import { getCatalogDefaultModelsForRecord as getCatalogDefaultModelsForRecordResolved } from '../../lib/provider-catalog';
 
 const TEST_PROVIDER_PREFIX = '__test_caps_rt_';
 
@@ -57,6 +57,12 @@ function createScratchProvider(baseUrl: string): string {
 
 const GLM_BASE_URL = 'https://open.bigmodel.cn/api/anthropic';
 const KIMI_BASE_URL = 'https://api.kimi.com/coding/';
+const getCatalogDefaultModelsForRecord = (record: { provider_type: string; base_url: string }) =>
+  getCatalogDefaultModelsForRecordResolved({
+    preset_key: '',
+    protocol: record.provider_type,
+    ...record,
+  });
 
 function resolvedModel(providerId: string, modelId: string) {
   const resolution = resolveProvider({ providerId, model: modelId });

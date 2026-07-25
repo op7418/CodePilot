@@ -8,6 +8,7 @@
 
 | 文件 | 主题 |
 |------|------|
+| qwen-token-plan-grok-access.md | 千问 Coding/Token Plan 稳定 identity、interactive-only 调用策略、xAI API Key/OAuth 双渠道、PKCE/device/refresh 生命周期与 Runtime 数据流 |
 | foundation-refresh-claude-review-2026-07-20.md | **基础体验更新 Claude 独立审查任务书**：汇总模型/推理强度、跨 Runtime 权限、自动命名、Claude DNS/延迟、全局字体与 K3 套餐改动；列明当前证据、未完成 smoke 和必须重点质疑的高风险边界 |
 | agent-tooling-todo-bridge.md | SDK → SSE → DB 事件流、TodoWrite 字段映射、去重策略 |
 | bridge-system.md | 多 IM 远程桥接系统架构（目录结构、数据流、设计决策） |

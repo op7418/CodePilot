@@ -239,6 +239,7 @@ async function runToolTurn(
   const scripted = installScriptedFetch(toolTurnScript('probe', {}, 'done, no more tools.'));
   try {
     const stream = loopFn({
+      callScene: 'interactive_chat',
       prompt: 'do the probe',
       sessionId: session.id,
       model: MODEL,

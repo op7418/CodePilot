@@ -19,7 +19,8 @@
 
 import { spawn, spawnSync, type ChildProcessWithoutNullStreams } from 'node:child_process';
 import { existsSync } from 'node:fs';
-import { dirname, join } from 'node:path';
+import { homedir } from 'node:os';
+import { dirname, join, win32 as win32Path } from 'node:path';
 import { CodexAppServerClient, type CodexTransport } from './app-server-client';
 import type { CodexAvailability } from './types';
 import { shouldDropCodexTraceLine, resolveCodexRustLog } from './codex-trace-filter';
@@ -359,17 +360,74 @@ function probeCodexVersion(binaryPath: string): string | null {
   }
 }
 
-// Memoize the PATH/.app resolution. Version probing spawns `codex --version`,
-// and findCodexBinary() is on the hot path (every getCodexAvailability poll +
-// runtime.isAvailable()), so we probe at most once per process. CODEX_DISABLED
-// and CODEX_BIN are re-checked fresh on every call (cheap) ABOVE this cache.
-let resolvedBinaryCache: { value: string | null } | null = null;
+export interface CodexCandidateDiscoveryOptions {
+  readonly platform?: NodeJS.Platform;
+  readonly pathValue?: string;
+  readonly homeDir?: string;
+  readonly exists?: (candidatePath: string) => boolean;
+}
+
+/**
+ * Known macOS desktop-client bundle locations, in tiebreak priority order.
+ *
+ * OpenAI's desktop bundle now ships as `ChatGPT.app` while older installs used
+ * `Codex.app`. Check both the system-wide and per-user Applications folders so
+ * a bundled CLI remains discoverable even when no shell shim exists on PATH.
+ */
+export function getMacOSCodexBundleCandidates(homeDir: string = homedir()): string[] {
+  return [
+    '/Applications/ChatGPT.app/Contents/Resources/codex',
+    '/Applications/Codex.app/Contents/Resources/codex',
+    join(homeDir, 'Applications/ChatGPT.app/Contents/Resources/codex'),
+    join(homeDir, 'Applications/Codex.app/Contents/Resources/codex'),
+  ];
+}
+
+/** Cheap existence-only candidate scan. No subprocesses are spawned here. */
+export function collectCodexCandidatePaths(options: CodexCandidateDiscoveryOptions = {}): string[] {
+  const platform = options.platform ?? process.platform;
+  const pathValue = options.pathValue ?? process.env.PATH ?? '';
+  const homeDir = options.homeDir ?? homedir();
+  const exists = options.exists ?? existsSync;
+  const pathJoin = platform === 'win32' ? win32Path.join : join;
+  const sep = platform === 'win32' ? ';' : ':';
+  const exts = platform === 'win32' ? ['.exe', '.cmd', ''] : [''];
+  const candidatePaths: string[] = [];
+
+  for (const dir of pathValue.split(sep).filter(Boolean)) {
+    for (const ext of exts) {
+      const candidate = pathJoin(dir, `codex${ext}`);
+      if (exists(candidate) && !candidatePaths.includes(candidate)) candidatePaths.push(candidate);
+    }
+  }
+
+  // Bundle paths are appended AFTER PATH so equal-version custom builds keep
+  // winning the input-order tiebreak in selectBestCodexCandidate().
+  if (platform === 'darwin') {
+    for (const candidate of getMacOSCodexBundleCandidates(homeDir)) {
+      if (exists(candidate) && !candidatePaths.includes(candidate)) candidatePaths.push(candidate);
+    }
+  }
+
+  return candidatePaths;
+}
+
+/** Stable, cheap fingerprint used to notice install/uninstall/PATH changes. */
+export function fingerprintCodexCandidates(candidatePaths: readonly string[]): string {
+  return JSON.stringify(candidatePaths);
+}
+
+// `findCodexBinary()` is a hot path, so successful version probes stay cached.
+// Unlike the old process-lifetime cache, the selected result is only reused
+// while a fresh existence scan produces the same candidate fingerprint.
+let resolvedBinaryCache: { fingerprint: string; value: string | null } | null = null;
 let versionProbeCache: { binary: string; value: string | null } | null = null;
 
 /** Test-only: clear the memoized binary resolution between cases. */
 export function resetCodexBinaryCacheForTests(): void {
   resolvedBinaryCache = null;
   versionProbeCache = null;
+  if (!cached) lastAvailability = { kind: 'unknown' };
 }
 
 /**
@@ -430,16 +488,18 @@ export function getCodexAutoReviewCapability(): CodexAutoReviewCapability {
  *      unit tests never spawn the subprocess or hit network).
  *   2. CODEX_BIN env var (test / CI override of the resolved path) —
  *      highest explicit priority.
- *   3. Collect candidates: PATH walk first, then the macOS Codex.app
- *      bundled binary (`/Applications/Codex.app/.../codex` — the .dmg
- *      installer drops it inside the bundle without always wiring a PATH
- *      entry; Phase 5b round 6, 2026-05-18).
+ *   3. Collect candidates: PATH walk first, then the macOS ChatGPT.app and
+ *      legacy Codex.app bundled binaries (system-wide + per-user installs).
  *   4. If more than one candidate exists, probe `--version` and pick the
  *      NEWEST (P0.1, 2026-06-01) so a stale Homebrew codex on PATH can't
  *      shadow a newer Codex.app build. Single candidate → use it as-is
  *      (no probe, keeps the common case spawn-free).
  *
- * The resolved binary + reason is logged for packaged-app diagnosis.
+ * The cheap candidate-existence scan runs on every idle availability query.
+ * Version probes are reused while its fingerprint is unchanged; install,
+ * uninstall, PATH and bundle-name changes invalidate resolution + version +
+ * stale failure availability together. A healthy running app-server remains
+ * pinned until it exits or is disposed — discovery never hot-kills it.
  */
 export function findCodexBinary(): string | null {
   // Phase 5b (2026-05-15) — hard disable for tests. The wider Codex
@@ -449,32 +509,27 @@ export function findCodexBinary(): string | null {
   // `npm run test:unit`; an interactive developer running tests
   // through their IDE picks it up the same way.
   if (process.env.CODEX_DISABLED === '1') return null;
+
+  // Do not switch a healthy in-use app-server underneath active chats. Any
+  // candidate changes are picked up after the process exits/is disposed.
+  if (cached && lastAvailability.kind === 'ready') return lastAvailability.binary;
+
   const fromEnv = process.env.CODEX_BIN;
-  if (fromEnv && existsSync(fromEnv)) return fromEnv;
+  const explicitCandidate = fromEnv && existsSync(fromEnv) ? fromEnv : null;
+  const candidatePaths = explicitCandidate
+    ? [explicitCandidate]
+    : collectCodexCandidatePaths();
+  const fingerprint = fingerprintCodexCandidates(candidatePaths)
+    + (explicitCandidate ? ':CODEX_BIN' : ':AUTO');
 
-  if (resolvedBinaryCache) return resolvedBinaryCache.value;
+  if (resolvedBinaryCache?.fingerprint === fingerprint) return resolvedBinaryCache.value;
 
-  // Collect candidates IN PRIORITY ORDER — PATH matches first, then the
-  // macOS Codex.app bundle. We don't shell out to `which` (spawn cost);
-  // the version probe below only runs when there are 2+ candidates.
-  const candidatePaths: string[] = [];
-  const path = process.env.PATH ?? '';
-  const sep = process.platform === 'win32' ? ';' : ':';
-  const exts = process.platform === 'win32' ? ['.exe', '.cmd', ''] : [''];
-  for (const dir of path.split(sep).filter(Boolean)) {
-    for (const ext of exts) {
-      const candidate = join(dir, 'codex' + ext);
-      if (existsSync(candidate) && !candidatePaths.includes(candidate)) candidatePaths.push(candidate);
-    }
-  }
-  // macOS Codex.app bundled binary — appended AFTER the PATH walk so an
-  // equal-version PATH build still wins the tiebreak (see selectBestCodexCandidate).
-  if (process.platform === 'darwin') {
-    const macOSBundlePath = '/Applications/Codex.app/Contents/Resources/codex';
-    if (existsSync(macOSBundlePath) && !candidatePaths.includes(macOSBundlePath)) {
-      candidatePaths.push(macOSBundlePath);
-    }
-  }
+  // Candidate existence changed (or an explicit refresh cleared the cache):
+  // drop both the selected-version probe and any idle failure derived from the
+  // previous binary. Never disturb an active/pending app-server promise.
+  const hadResolution = resolvedBinaryCache !== null;
+  versionProbeCache = null;
+  if (hadResolution && !cached) lastAvailability = { kind: 'unknown' };
 
   let selected: string | null;
   if (candidatePaths.length <= 1) {
@@ -486,6 +541,10 @@ export function findCodexBinary(): string | null {
     // so a stale PATH binary can't shadow Codex.app (packaged P0 2026-06-01).
     const probed: CodexBinaryCandidate[] = candidatePaths.map((p) => ({ path: p, version: probeCodexVersion(p) }));
     selected = selectBestCodexCandidate(probed);
+    const selectedProbe = selected ? probed.find((candidate) => candidate.path === selected) : null;
+    if (selected && selectedProbe) {
+      versionProbeCache = { binary: selected, value: selectedProbe.version };
+    }
     console.info('[codex] selected binary', {
       binary: selected,
       reason: 'highest version among multiple candidates',
@@ -493,7 +552,7 @@ export function findCodexBinary(): string | null {
     });
   }
 
-  resolvedBinaryCache = { value: selected };
+  resolvedBinaryCache = { fingerprint, value: selected };
   return selected;
 }
 
@@ -545,7 +604,7 @@ export async function getCodexAppServer(): Promise<ManagedAppServer> {
     } catch (err) {
       cached = null;
       const reason = err instanceof Error ? err.message : String(err);
-      lastAvailability = { kind: 'spawn_failed', reason };
+      lastAvailability = { kind: 'spawn_failed', reason, binary };
       throw new Error(`Codex app-server spawn failed: ${reason}`);
     }
 
@@ -566,6 +625,7 @@ export async function getCodexAppServer(): Promise<ManagedAppServer> {
       lastAvailability = {
         kind: 'spawn_failed',
         reason: `exited with code=${code} signal=${signal}`,
+        binary,
       };
     });
 
@@ -575,13 +635,14 @@ export async function getCodexAppServer(): Promise<ManagedAppServer> {
         kind: 'ready',
         version: init.userAgent,
         codexHome: init.codexHome,
+        binary,
       };
       return { client, transport, availability: lastAvailability };
     } catch (err) {
       cached = null;
       await transport.close().catch(() => undefined);
       const reason = err instanceof Error ? err.message : String(err);
-      lastAvailability = { kind: 'spawn_failed', reason };
+      lastAvailability = { kind: 'spawn_failed', reason, binary };
       throw new Error(`Codex app-server initialize failed: ${reason}`);
     }
   })();
@@ -596,9 +657,28 @@ export async function getCodexAppServer(): Promise<ManagedAppServer> {
 export async function getCodexAvailability(): Promise<CodexAvailability> {
   if (lastAvailability.kind === 'ready') return lastAvailability;
   const binary = findCodexBinary();
-  if (!binary) return { kind: 'not_installed' };
-  if (lastAvailability.kind === 'unknown') return { kind: 'installed_idle', binary };
+  if (!binary) {
+    lastAvailability = { kind: 'not_installed' };
+    return lastAvailability;
+  }
+  if (lastAvailability.kind === 'unknown' || lastAvailability.kind === 'not_installed') {
+    lastAvailability = { kind: 'installed_idle', binary };
+    return lastAvailability;
+  }
   return lastAvailability;
+}
+
+/**
+ * Explicit user-requested rescan. This also catches an in-place CLI upgrade
+ * whose path/existence fingerprint did not change. A healthy or initializing
+ * app-server is deliberately left untouched and remains the source of truth.
+ */
+export async function refreshCodexAvailability(): Promise<CodexAvailability> {
+  if (cached) return getCodexAvailability();
+  resolvedBinaryCache = null;
+  versionProbeCache = null;
+  lastAvailability = { kind: 'unknown' };
+  return getCodexAvailability();
 }
 
 /**
@@ -608,7 +688,10 @@ export async function getCodexAvailability(): Promise<CodexAvailability> {
  */
 export async function disposeCodexAppServer(): Promise<void> {
   const current = cached;
-  if (!current) return;
+  if (!current) {
+    lastAvailability = { kind: 'unknown' };
+    return;
+  }
   cached = null;
   try {
     const { client } = await current;
@@ -652,4 +735,6 @@ async function readCodePilotVersion(): Promise<string> {
 export function __resetForTest(): void {
   cached = null;
   lastAvailability = { kind: 'unknown' };
+  resolvedBinaryCache = null;
+  versionProbeCache = null;
 }

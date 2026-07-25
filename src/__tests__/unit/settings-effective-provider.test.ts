@@ -10,7 +10,7 @@
  *      → falls back through `default_provider_id` setting → active
  *      provider, mirroring `resolveProvider({ providerId: pinned })`
  *      in `provider-resolver.ts:181-189`.
- *   4. Virtual provider (codex_account / openai-oauth / env) →
+ *   4. Virtual provider (codex_account / openai-oauth / xai-oauth / env) →
  *      preserved verbatim; resolver does NOT try to look these up
  *      as DB rows (they don't exist there).
  *
@@ -124,6 +124,12 @@ describe('resolveEffectiveProviderId — provider-level: virtual providers', () 
   it('openai-oauth pinned → returned verbatim', async () => {
     await withSettings({ globalDefault: 'openai-oauth' }, () => {
       assert.equal(resolveEffectiveProviderId(), 'openai-oauth');
+    });
+  });
+
+  it('xai-oauth pinned → returned verbatim', async () => {
+    await withSettings({ globalDefault: 'xai-oauth' }, () => {
+      assert.equal(resolveEffectiveProviderId(), 'xai-oauth');
     });
   });
 

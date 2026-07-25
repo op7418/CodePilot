@@ -35,6 +35,7 @@ export const sdkRuntime: AgentRuntime = {
     const ro = options.runtimeOptions || {};
     const sdkOptions: ClaudeStreamOptions = {
       prompt: options.prompt,
+      callScene: options.callScene,
       sessionId: options.sessionId,
       model: options.model,
       systemPrompt: options.systemPrompt,

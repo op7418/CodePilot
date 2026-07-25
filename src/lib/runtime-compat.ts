@@ -22,7 +22,9 @@ import { findMatchingPresetForRecord, type VendorPreset } from '@/lib/provider-c
 import type { RuntimeId } from '@/lib/runtime/runtime-id';
 
 export interface ProviderCompatRecord {
+  preset_key: string;
   provider_type: string;
+  protocol: string;
   base_url: string;
 }
 
@@ -90,7 +92,7 @@ export function getProviderCompat(record: ProviderCompatRecord): ProviderRuntime
       ? 'openrouter_anthropic_skin'
       : 'codepilot_only';
   }
-  if (preset.protocol === 'openai-compatible' || preset.protocol === 'google') {
+  if (preset.protocol === 'openai-compatible' || preset.protocol === 'xai' || preset.protocol === 'google') {
     return 'codepilot_only';
   }
   return 'unknown';
@@ -98,7 +100,7 @@ export function getProviderCompat(record: ProviderCompatRecord): ProviderRuntime
 
 /** Convenience for callers holding a full `ApiProvider`. */
 export function getProviderCompatFromApi(provider: ApiProvider): ProviderRuntimeCompat {
-  return getProviderCompat({ provider_type: provider.provider_type, base_url: provider.base_url });
+  return getProviderCompat(provider);
 }
 
 /**

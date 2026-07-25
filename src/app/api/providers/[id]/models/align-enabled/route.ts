@@ -21,10 +21,7 @@ export async function POST(
   if (!provider) {
     return NextResponse.json<ErrorResponse>({ error: 'Provider not found' }, { status: 404 });
   }
-  const catalog = getCatalogDefaultModelsForRecord({
-    provider_type: provider.provider_type,
-    base_url: provider.base_url,
-  });
+  const catalog = getCatalogDefaultModelsForRecord(provider);
   if (catalog.length === 0) {
     return NextResponse.json({
       providerId: id,

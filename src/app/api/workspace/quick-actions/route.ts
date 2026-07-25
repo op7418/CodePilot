@@ -82,12 +82,13 @@ export async function GET() {
       try {
         const { generateTextFromProvider } = await import('@/lib/text-generator');
         const { resolveProvider } = await import('@/lib/provider-resolver');
-        const resolved = resolveProvider({ useCase: 'small' });
+        const resolved = resolveProvider({ callScene: 'automatic_quick_actions', useCase: 'small' });
 
         if (resolved.hasCredentials) {
           const dailyContext = dailyMemories.map(d => d.content.slice(0, 200)).join('\n');
 
           const result = await generateTextFromProvider({
+            callScene: 'automatic_quick_actions',
             providerId: resolved.provider?.id || '',
             model: resolved.upstreamModel || resolved.model || 'haiku',
             system: 'Generate 1-2 short questions (5-15 words each) that the user might want to ask their AI assistant. Based on their recent activity.',

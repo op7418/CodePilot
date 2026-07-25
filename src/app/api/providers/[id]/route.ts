@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getProvider, updateProvider, deleteProvider, getDefaultProviderId, setDefaultProviderId, getAllProviders, getSetting, setSetting } from '@/lib/db';
+import { getProvider, updateProvider, deleteProvider, getDefaultProviderId, setDefaultProviderId, getAllProviders, getSetting, setSetting, alignEnabledWithCatalog } from '@/lib/db';
 import { invalidateCapabilityCache } from '@/lib/agent-sdk-capabilities';
-import { getEffectiveProviderProtocol, isValidProtocol } from '@/lib/provider-catalog';
+import { getEffectiveProviderProtocol, isValidProtocol, resolveProviderPresetIdentity, getCatalogDefaultModelsForRecord } from '@/lib/provider-catalog';
 import type { ProviderResponse, ErrorResponse, UpdateProviderRequest, ApiProvider } from '@/types';
 
 interface RouteContext {
@@ -81,7 +81,33 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       mergedProviderType ?? '',
       mergedProtocol,
       mergedBaseUrl ?? '',
+      body.preset_key !== undefined ? body.preset_key : existing.preset_key,
     );
+    const mergedPresetKey = body.preset_key !== undefined ? body.preset_key : existing.preset_key;
+    if (body.preset_key !== undefined && !body.preset_key && existing.preset_key) {
+      return NextResponse.json<ErrorResponse>(
+        { error: 'A managed preset identity can only be changed by selecting another preset', code: 'PRESET_IDENTITY_REQUIRED' },
+        { status: 400 },
+      );
+    }
+    // Validate the resulting managed identity on every edit, not only when
+    // preset_key itself is present in the body. Otherwise changing base_url or
+    // protocol could preserve a branded identity while redirecting its API key
+    // to an unrelated host.
+    if (mergedPresetKey) {
+      const identity = resolveProviderPresetIdentity({
+        preset_key: mergedPresetKey,
+        provider_type: mergedProviderType ?? '',
+        protocol: mergedProtocol ?? '',
+        base_url: mergedBaseUrl ?? '',
+      });
+      if (identity.status !== 'resolved' || identity.source !== 'preset_key') {
+        return NextResponse.json<ErrorResponse>(
+          { error: 'Preset identity does not match provider protocol/base URL', code: 'INVALID_PRESET_IDENTITY' },
+          { status: 400 },
+        );
+      }
+    }
     if (effectiveProtocol === 'anthropic' && !mergedBaseUrl?.trim()) {
       return NextResponse.json<ErrorResponse>(
         {
@@ -121,6 +147,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
       );
     }
 
+    const presetChanged = body.preset_key !== undefined
+      && body.preset_key !== existing.preset_key;
+    // A stable preset identity may be adopted incidentally when an old row is
+    // edited through its matching preset form. Do not treat that as consent to
+    // rewrite catalog-managed models. Reconciliation requires an independent,
+    // explicit UI/API intent (the ambiguous plan chooser sends this flag).
+    const shouldReconcileCatalog = presetChanged && body.reconcile_catalog === true;
+    delete body.reconcile_catalog;
     const updated = updateProvider(id, body);
     if (!updated) {
       return NextResponse.json<ErrorResponse>(
@@ -133,6 +167,14 @@ export async function PUT(request: NextRequest, context: RouteContext) {
     // key / model list) — drop it so the next query re-captures instead of
     // serving stale models for up to the cache TTL.
     invalidateCapabilityCache(id);
+
+    // A user-confirmed preset switch changes the authoritative subscription
+    // whitelist. Reconcile only catalog-managed rows: alignEnabledWithCatalog
+    // preserves manual rows, user_edited=1, and manual enable/hidden choices.
+    if (shouldReconcileCatalog && updated.preset_key) {
+      const catalog = getCatalogDefaultModelsForRecord(updated);
+      alignEnabledWithCatalog(updated.id, catalog);
+    }
 
     // Defensive: if the active-image row's type just moved out of media
     // (e.g. someone edits gemini-image → anthropic), clear the setting.

@@ -21,14 +21,26 @@ extraResources:
   - from: .next/standalone/
     to: standalone/
     filter:
-      - "**/*"
-      - "!node_modules"
-      - "!release"
+      # Root runtime files only. Keep this set disjoint from the dedicated
+      # node_modules/ and .next/ FileSets below: electron-builder copies
+      # extraResources concurrently, and overlapping destinations can race on
+      # Windows with EBUSY while signing/copying the same file.
+      - "server.js"
+      - "package.json"
+      - "cache-handler.js"
   - from: .next/standalone/node_modules/
     to: standalone/node_modules/
     filter: ["**/*"]
   - from: .next/standalone/.next/
     to: standalone/.next/
+    filter:
+      # electron-builder always filters a FileSet's root node_modules directory.
+      # Keep it explicitly disjoint here and copy it with the dedicated FileSet
+      # below so Next's hashed external-module aliases reach the packaged app.
+      - "**/*"
+      - "!node_modules{,/**/*}"
+  - from: .next/standalone/.next/node_modules/
+    to: standalone/.next/node_modules/
     filter: ["**/*"]
   - from: .next/static/
     to: standalone/.next/static/

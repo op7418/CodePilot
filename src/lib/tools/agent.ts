@@ -76,6 +76,7 @@ export function createAgentTool(ctx: {
 
       // Run sub-agent loop and collect the full response
       const stream = runAgentLoop({
+        callScene: 'interactive_chat',
         prompt,
         sessionId: `sub-${Date.now()}`, // ephemeral session
         providerId: ctx.providerId,

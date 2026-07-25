@@ -26,7 +26,12 @@ import { PUT as providerPUT } from '../../app/api/providers/[id]/route';
 
 // A generic third-party gateway with an arbitrary URL — the case that used to
 // fall through every matcher branch and land in `unknown`.
-const GW = { provider_type: 'openai-compatible', base_url: 'https://my-gateway.example.com/v1' };
+const GW = {
+  preset_key: '',
+  protocol: 'openai-compatible',
+  provider_type: 'openai-compatible',
+  base_url: 'https://my-gateway.example.com/v1',
+};
 
 describe('openai-compatible classification end-to-end (P0: must not reverse)', () => {
   it('an arbitrary-URL openai-compatible gateway claims the openai-compatible preset (not undefined → unknown)', () => {
@@ -51,8 +56,8 @@ describe('openai-compatible classification end-to-end (P0: must not reverse)', (
   });
 
   it('effective protocol of an openai-compatible provider_type is openai-compatible (even without a raw protocol)', () => {
-    assert.equal(getEffectiveProviderProtocol('openai-compatible', '', GW.base_url), 'openai-compatible');
-    assert.equal(getEffectiveProviderProtocol('openai-compatible', 'openai-compatible', GW.base_url), 'openai-compatible');
+    assert.equal(getEffectiveProviderProtocol('openai-compatible', '', GW.base_url, ''), 'openai-compatible');
+    assert.equal(getEffectiveProviderProtocol('openai-compatible', 'openai-compatible', GW.base_url, ''), 'openai-compatible');
   });
 });
 
@@ -115,12 +120,12 @@ describe('openai-compatible providers are not wiped (P0 no-delete migration)', (
 // ── Wiring source pins (client/JSX + runtime path can't be imported cleanly) ──
 
 describe('openai-compatible wiring source pins', () => {
-  it('renderer findMatchingPreset claims openai-compatible providers (mirrors the server matcher)', () => {
+  it('renderer findMatchingPreset delegates to the shared identity resolver', () => {
     const src = fs.readFileSync(path.resolve(__dirname, '../../components/settings/provider-presets.tsx'), 'utf8');
     assert.match(
       src,
-      /provider\.provider_type === "openai-compatible"[\s\S]{0,160}key === "openai-compatible"/,
-      'renderer matcher must claim openai-compatible to the openai-compatible preset',
+      /resolveProviderPresetIdentity\(provider\)/,
+      'renderer matcher must consume the same identity resolver as the server',
     );
   });
 

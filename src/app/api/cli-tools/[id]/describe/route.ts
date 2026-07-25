@@ -132,6 +132,7 @@ Respond in this exact JSON format (no markdown, no code fences, just raw JSON):
       let result: string;
       try {
         result = await generateTextViaSdk({
+          callScene: body.trigger === 'background' ? 'background_cli_describe' : 'user_cli_describe',
           providerId: providerId || undefined,
           model: requestModel || undefined,
           system: 'You are a technical documentation writer. Respond with raw JSON only, no markdown formatting.',

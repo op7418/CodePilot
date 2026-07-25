@@ -32,10 +32,7 @@ export async function GET(
   if (!provider) {
     return NextResponse.json<ErrorResponse>({ error: 'Provider not found' }, { status: 404 });
   }
-  const catalogDefaults = getCatalogDefaultModelsForRecord({
-    provider_type: provider.provider_type,
-    base_url: provider.base_url,
-  });
+  const catalogDefaults = getCatalogDefaultModelsForRecord(provider);
   if (catalogDefaults.length > 0) {
     seedCatalogModelsIfEmpty(id, catalogDefaults);
   }

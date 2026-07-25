@@ -96,10 +96,7 @@ export interface ProviderParityEntry {
  * in. Picker tooltip + Settings inventory both call this.
  */
 export function getProxyParityEntry(provider: ApiProvider): ProviderParityEntry {
-  const compat = getProviderCompat({
-    provider_type: provider.provider_type,
-    base_url: provider.base_url,
-  });
+  const compat = getProviderCompat(provider);
   const family = ADAPTER_FAMILY_BY_COMPAT[compat];
   const status = ADAPTER_STATUS_BY_COMPAT[compat];
   return {

@@ -36,7 +36,7 @@ import {
  * ("Provider not found") and reddens the Settings smoke. Add any future
  * virtual provider id here so the overview count loop keeps skipping them.
  */
-export const NON_DB_PROVIDER_IDS = new Set<string>(["env", "openai-oauth", "codex_account"]);
+export const NON_DB_PROVIDER_IDS = new Set<string>(["env", "openai-oauth", "xai-oauth", "codex_account"]);
 
 /** Whether a provider group is backed by a real api_providers DB row, so its
  *  provider_models can be counted via /api/providers/{id}/models?all=1. */

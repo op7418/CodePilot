@@ -25,6 +25,7 @@
 import type { ApiProvider } from '@/types';
 import { getSetting, getAllProviders } from '@/lib/db';
 import { isOAuthUsable } from '@/lib/openai-oauth-manager';
+import { isXaiOAuthUsable } from '@/lib/xai-oauth-manager';
 
 /**
  * True when a single DB provider has credentials CodePilot can dispatch on.
@@ -88,6 +89,12 @@ export function hasCodePilotProvider(): boolean {
   // synchronous precheck shared with native-runtime's own auth path.
   try {
     if (isOAuthUsable()) return true;
+  } catch {
+    return true;
+  }
+
+  try {
+    if (isXaiOAuthUsable()) return true;
   } catch {
     return true;
   }

@@ -25,6 +25,7 @@ import { buildCoreMessages } from './message-builder';
 import { sanitizeClaudeModelOptions } from './claude-model-options';
 import { buildAnthropicProviderOptions } from './agent-loop-anthropic-wire';
 import { buildSamplingIgnoredNotice } from './anthropic-sampling-notice';
+import { buildXaiProviderOptions } from './xai-provider-options';
 import { getMessages } from './db';
 import { wrapController } from './safe-stream';
 import { buildNativeErrorEventData } from './agent-loop-error-event';
@@ -37,12 +38,14 @@ import {
 } from './native-timeout';
 import { isAiSdkTraceEnabled, createRedactedTraceTelemetry } from './aisdk-trace';
 import type { ToolInvocationRecord } from './harness/auto-invoke-accounting';
+import type { ProviderCallScene } from './provider-call-policy';
 
 // ── Types ───────────────────────────────────────────────────────
 
 export interface AgentLoopOptions {
   /** User's prompt text */
   prompt: string;
+  callScene: ProviderCallScene;
   /** Session ID (for DB persistence and SSE metadata) */
   sessionId: string;
   /** Provider ID */
@@ -122,6 +125,7 @@ const KEEPALIVE_INTERVAL_MS = 15_000;
 export function runAgentLoop(options: AgentLoopOptions): ReadableStream<string> {
   const {
     prompt,
+    callScene,
     sessionId,
     providerId,
     sessionProviderId,
@@ -276,6 +280,7 @@ export function runAgentLoop(options: AgentLoopOptions): ReadableStream<string> 
 
         // 1. Create model
         const { languageModel, modelId, config, isThirdPartyProxy } = createModel({
+          callScene,
           providerId,
           sessionProviderId,
           model: modelOverride,
@@ -472,6 +477,12 @@ export function runAgentLoop(options: AgentLoopOptions): ReadableStream<string> 
                 reasoningEffort: 'medium',
                 textVerbosity: 'medium',
               },
+            };
+          }
+          if (config.sdkType === 'xai') {
+            providerOptions = {
+              ...providerOptions,
+              xai: buildXaiProviderOptions(sanitized.effort),
             };
           }
 

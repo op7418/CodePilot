@@ -20,9 +20,10 @@ describe('overview model-count loop skips virtual / non-DB providers', () => {
     assert.equal(isCountableDbProvider('codex_account'), false);
   });
 
-  it('also excludes env + openai-oauth (the other virtual providers)', () => {
+  it('also excludes env + OAuth virtual providers', () => {
     assert.equal(isCountableDbProvider('env'), false);
     assert.equal(isCountableDbProvider('openai-oauth'), false);
+    assert.equal(isCountableDbProvider('xai-oauth'), false);
   });
 
   it('still counts real DB providers', () => {
@@ -31,7 +32,7 @@ describe('overview model-count loop skips virtual / non-DB providers', () => {
   });
 
   it('NON_DB_PROVIDER_IDS is exactly the known virtual ids', () => {
-    assert.deepEqual([...NON_DB_PROVIDER_IDS].sort(), ['codex_account', 'env', 'openai-oauth']);
+    assert.deepEqual([...NON_DB_PROVIDER_IDS].sort(), ['codex_account', 'env', 'openai-oauth', 'xai-oauth']);
   });
 
   it('source: the count loop filters via isCountableDbProvider (not an ad-hoc !== chain)', () => {

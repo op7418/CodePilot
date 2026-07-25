@@ -10,7 +10,7 @@ CodePilot — 多模型 AI Agent 桌面客户端，基于 Electron + Next.js。
 
 - **作者** — 产品方向与决策、最终验收。
 - **Claude Code** — 一般任务是**生成代码**（实现、修改、修复）。审查 Codex 改动时按下方「语义验收与反假数据」逐条核对，不只看 diff 形状。
-- **Codex** — 负责**计划与测试**（执行计划、用例设计、回归验证）。
+- **Codex** — 默认负责**计划与测试**（执行计划、用例设计、回归验证）；用户在当前任务明确要求 Codex 实现时，可按 `AGENTS.md` 的临时授权规则承担该范围内的代码改动。
 
 **Claude Code 优先排查方向（Codex Runtime stop / abort 高发区）：** 接手 Codex Runtime 的中断 / 卡死类问题时，优先确认这四点（前两点常是同一根因——见 `src/lib/stream-session-manager.ts` 注释，composer 的 `isStreaming` gate ≡ `snapshot.phase === 'active'`）：
 
@@ -155,11 +155,11 @@ CodePilot — 多模型 AI Agent 桌面客户端，基于 Electron + Next.js。
 
 **修复闭环：** 接手 P1/P2 review finding、用户反馈、CDP 失败或测试失败时，按 `Signal → Triage → Fix → Verify → Guardrail` 处理；修复说明必须包含根因、改动、验证和防回归。不要只在聊天里关闭问题；需要沉淀的同类问题写入执行计划、tech-debt tracker 或 guardrail。
 
-**完成即回写进度（与 Codex 对齐协作）：** 执行计划里的任一 Phase / 子项做完后，必须立即把进度回写到对应执行计划文档，不能只在聊天里说"做完了"——Codex 负责审查与文档维护，只能据文档判断真实进度。回写三处且必须互相一致：
+**完成即回写进度（与 Codex 对齐协作）：** 执行计划里的任一 Phase / 子项做完后，必须立即把进度回写到对应执行计划文档，不能只在聊天里说"做完了"——审查者只能据文档判断真实进度。回写三处且必须互相一致：
 1. **执行清单**：对应 `[ ]` → `[x]`（部分完成的项标注"部分：已做 X，待 Y"）。
 2. **「状态总览」表**：更新该 Phase 状态（`📋 待开始` / `🚧 进行中` / `✅ 已完成`），并同步顶部 frontmatter 的总状态行。
 3. **决策日志**：追加一条，含 commit hash + 验证结论（测试数 / smoke 结果）+ 推翻或转 tech-debt 的结论。
-分工：Claude Code 负责实施 + 回写进度，Codex 负责审查与维护文档结构；状态表、清单勾选、决策日志三者出现不一致即视为状态失真，必须先对齐再继续。Phase 全部子项完成后把计划从 `active/` 移到 `completed/`。
+分工：默认由 Claude Code 负责实施 + 回写进度，Codex 负责审查与维护文档结构；若用户按 `AGENTS.md` 明确授权 Codex 实现，则 Codex 同样负责其改动对应的进度回写，后续审查仍需使用独立上下文。状态表、清单勾选、决策日志三者出现不一致即视为状态失真，必须先对齐再继续。Phase 全部子项完成后把计划从 `active/` 移到 `completed/`。
 
 ## 文档
 

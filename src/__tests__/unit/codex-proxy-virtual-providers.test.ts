@@ -3,7 +3,7 @@
  *
  * Background: `/api/providers/models?runtime=codex_runtime` surfaces
  * BOTH DB-backed providers AND virtual providers (`openai-oauth`,
- * `codex_account`). The Codex chat picker reads that list directly,
+ * `xai-oauth`, `codex_account`). The Codex chat picker reads that list directly,
  * so anything it shows MUST be resolvable by the proxy route. The
  * pre-fix bug: `handleProxyRequest` only looked up by `getProvider`
  * (DB-only), so a user picking openai-oauth under Codex Runtime hit
@@ -110,6 +110,29 @@ describe('handleProxyRequest — virtual providers resolve without provider_not_
     if (result.kind !== 'error') return;
     assert.notEqual(result.error.code, 'provider_not_found');
     assert.match(result.error.message, /test-stub/);
+  });
+
+  it('xai-oauth: reaches the openai_compatible proxy adapter with the virtual id intact', async () => {
+    stubObserved = undefined;
+    const result = await handleProxyRequest({
+      targetProviderId: 'xai-oauth',
+      sessionId: '',
+      workspacePath: '',
+      body: { ...validBody, model: 'grok-4.5' },
+      signal: new AbortController().signal,
+    });
+    const observed = stubObserved as
+      | { providerId: string; modelHint: string | undefined; resolvedHasCredentials: boolean }
+      | undefined;
+    assert.ok(observed, 'xai-oauth must resolve and reach the proxy adapter');
+    assert.equal(observed.providerId, 'xai-oauth');
+    assert.equal(observed.modelHint, 'grok-4.5');
+    assert.equal(observed.resolvedHasCredentials, true);
+    assert.equal(result.kind, 'error');
+    if (result.kind === 'error') {
+      assert.notEqual(result.error.code, 'provider_not_found');
+      assert.match(result.error.message, /test-stub/);
+    }
   });
 
   it('codex_account: surfaces routing-bug error (NOT provider_not_found)', async () => {

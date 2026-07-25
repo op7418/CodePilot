@@ -308,13 +308,19 @@ function emit(stream: ActiveStream, type: StreamEvent['type']) {
 
 function scheduleGC(stream: ActiveStream) {
   if (stream.gcTimer) clearTimeout(stream.gcTimer);
-  stream.gcTimer = setTimeout(() => {
+  const timer = setTimeout(() => {
     const map = getStreamsMap();
     const current = map.get(stream.sessionId);
     if (current === stream && current.snapshot.phase !== 'active') {
       map.delete(stream.sessionId);
     }
   }, GC_DELAY_MS);
+  stream.gcTimer = timer;
+  // This module is also exercised in Node-based unit/SSR processes. A
+  // five-minute client-side retention timer must not keep those processes
+  // alive after all work is complete; browsers use numeric timers and are
+  // unaffected by this Node-only unref.
+  if (typeof timer === 'object' && 'unref' in timer) timer.unref();
 }
 
 function cleanupTimers(stream: ActiveStream) {

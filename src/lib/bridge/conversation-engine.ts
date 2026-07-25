@@ -299,6 +299,7 @@ export async function processMessage(
 
     const stream = streamClaude({
       prompt: text,
+      callScene: 'bridge',
       sessionId,
       // Session ownership — plumb the ownership token so this bridge turn's Query
       // registers/unregisters and clearSdkSessionIfOwner run under A's owner-gate

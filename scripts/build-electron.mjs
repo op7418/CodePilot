@@ -1,6 +1,7 @@
 import { build } from 'esbuild';
 import fs from 'fs';
 import path from 'path';
+import { sanitizeStandaloneOutput } from './clean-electron-build.mjs';
 
 // Replace symlinks in standalone with real copies so electron-builder can package them
 function resolveStandaloneSymlinks() {
@@ -24,6 +25,11 @@ function resolveStandaloneSymlinks() {
 }
 
 async function buildElectron() {
+  // Fail before electron-builder sees the standalone tree. Dynamic filesystem
+  // tracing must never pull local agent/worktree state or stale release apps
+  // into a distributable artifact.
+  sanitizeStandaloneOutput(process.cwd());
+
   // Clean dist-electron/ before every build to prevent stale artifacts
   // from leaking into app.asar (caused v0.34 crash on upgrade).
   if (fs.existsSync('dist-electron')) {

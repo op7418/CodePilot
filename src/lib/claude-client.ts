@@ -75,6 +75,7 @@ import {
 import { emitReviewEvent } from './permission/review-audit';
 import { probeExternalMcp } from './permission/external-mcp';
 import { detectTransport, isNativeCompatible } from './provider-transport';
+import { assertProviderCallAllowed, type ProviderCallScene } from './provider-call-policy';
 import os from 'os';
 import fs from 'fs';
 import path from 'path';
@@ -423,6 +424,7 @@ function buildFallbackContext(params: {
 }
 
 export interface GenerateTextViaSdkParams {
+  callScene: ProviderCallScene;
   providerId?: string;
   /** Provider snapshot captured by a fail-closed upstream caller. When set,
    *  this is the authority for the wire configuration and no resolver runs. */
@@ -567,8 +569,10 @@ export function prepareGenerateTextViaSdkCall(
   abortController: AbortController,
 ): PreparedGenerateTextViaSdkCall {
   const resolved = params.resolvedProvider ?? resolveForClaudeCode(undefined, {
+    callScene: params.callScene,
     providerId: params.providerId,
   });
+  assertProviderCallAllowed(resolved.provider, params.callScene);
 
   // Same provider-owned auth isolation as the main streaming path: when an
   // explicit DB provider is selected, this auxiliary call must NOT pick up
@@ -667,7 +671,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
   // is exactly what openai-oauth speaks). Forcing Native here is the
   // pre-fix bug that returned `Session is pinned to codex_runtime
   // but resolver returned "native"`.
-  const isNonAnthropicProvider = effectiveProvider === 'openai-oauth';
+  const isNonAnthropicProvider = effectiveProvider === 'openai-oauth' || effectiveProvider === 'xai-oauth';
 
   // Phase 5 review round 5 (2026-05-13) — Codex Account models flow
   // ONLY through Codex Runtime's app-server. ClaudeCode SDK / Native
@@ -724,6 +728,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
     // Only attempt transport-based SDK forcing when CLI is enabled
     try {
       const { transport } = detectTransport({
+        callScene: options.callScene,
         providerId: options.providerId,
         sessionProviderId: options.sessionProviderId,
       });
@@ -862,6 +867,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
   return runtime.stream({
     // Universal fields
     prompt: options.prompt,
+    callScene: options.callScene,
     sessionId: options.sessionId,
     model: options.model,
     systemPrompt: options.systemPrompt,
@@ -979,6 +985,7 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
       // intended. We do NOT fall back to getActiveProvider() here — that's handled
       // inside resolveForClaudeCode() only when no resolution was attempted at all.
       const resolved = resolveForClaudeCode(options.provider, {
+        callScene: options.callScene,
         providerId: options.providerId,
         sessionProviderId: options.sessionProviderId,
       });
@@ -2481,7 +2488,7 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
 
         // Look up preset meta for recovery action URLs
         const presetForMeta = resolved.provider?.base_url
-          ? (await import('./provider-catalog')).findPresetForLegacy(resolved.provider.base_url, resolved.provider.provider_type, resolved.protocol)
+          ? (await import('./provider-catalog')).findPresetForLegacy(resolved.provider.base_url, resolved.provider.provider_type, resolved.protocol, resolved.provider.preset_key)
           : undefined;
 
         // Classify the error using structured pattern matching
@@ -2876,6 +2883,7 @@ export interface ConnectionTestResult {
  * from keychain/OAuth credentials leaking into the test.
  */
 export async function testProviderConnection(config: {
+  callScene: 'connection_test';
   apiKey: string;
   baseUrl: string;
   protocol: string;
@@ -2891,7 +2899,7 @@ export async function testProviderConnection(config: {
   // Look up preset for default model
   const preset = config.presetKey
     ? getPreset(config.presetKey)
-    : (config.baseUrl ? findPresetForLegacy(config.baseUrl, 'custom', config.protocol as import('./provider-catalog').Protocol) : undefined);
+    : (config.baseUrl ? findPresetForLegacy(config.baseUrl, 'custom', config.protocol as import('./provider-catalog').Protocol, '') : undefined);
 
   // Determine model to use in test request
   const model = config.modelName
@@ -2926,6 +2934,9 @@ export async function testProviderConnection(config: {
   // official Anthropic API. Route to a dedicated OpenAI-shape probe.
   if (config.protocol === 'openai-compatible') {
     return testOpenAICompatibleConnection(config);
+  }
+  if (config.protocol === 'xai') {
+    return testXaiConnection(config);
   }
 
   // Reject third-party / custom Anthropic providers without a base URL.
@@ -3025,6 +3036,73 @@ export async function testProviderConnection(config: {
       providerMeta: config.providerMeta,
     });
 
+    return {
+      success: false,
+      error: {
+        code: classified.category,
+        message: classified.userMessage,
+        suggestion: classified.actionHint,
+        recoveryActions: classified.recoveryActions,
+      },
+    };
+  }
+}
+
+/** Cheap, non-generating xAI API-key probe against the official model endpoint. */
+async function testXaiConnection(config: {
+  apiKey: string;
+  baseUrl: string;
+  providerName?: string;
+  providerMeta?: { apiKeyUrl?: string; docsUrl?: string; pricingUrl?: string };
+}): Promise<ConnectionTestResult> {
+  const baseUrl = (config.baseUrl || 'https://api.x.ai/v1').replace(/\/+$/, '');
+  if (baseUrl !== 'https://api.x.ai/v1') {
+    return {
+      success: false,
+      error: {
+        code: 'INVALID_ENDPOINT',
+        message: 'xAI API Key connection tests only send credentials to https://api.x.ai/v1',
+        suggestion: 'Choose the branded xAI API Key preset or restore its official Base URL',
+      },
+    };
+  }
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 15_000);
+
+  try {
+    const response = await fetch(`${baseUrl}/models/grok-4.5`, {
+      method: 'GET',
+      headers: { Authorization: `Bearer ${config.apiKey}` },
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+    if (response.ok) return { success: true };
+
+    let errorBody = '';
+    try { errorBody = await response.text(); } catch { /* ignore */ }
+    const classified = classifyError({
+      error: new Error(`HTTP ${response.status}: ${errorBody.slice(0, 500)}`),
+      providerName: config.providerName || 'xAI',
+      baseUrl,
+      providerMeta: config.providerMeta,
+    });
+    return {
+      success: false,
+      error: {
+        code: classified.category,
+        message: classified.userMessage,
+        suggestion: classified.actionHint,
+        recoveryActions: classified.recoveryActions,
+      },
+    };
+  } catch (err) {
+    clearTimeout(timeoutId);
+    const classified = classifyError({
+      error: err,
+      providerName: config.providerName || 'xAI',
+      baseUrl,
+      providerMeta: config.providerMeta,
+    });
     return {
       success: false,
       error: {

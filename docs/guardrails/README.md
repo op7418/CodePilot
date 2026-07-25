@@ -10,16 +10,16 @@
 - [`ProviderManagement.md`](./ProviderManagement.md) — Settings > Providers 信息架构、preset 匹配、provider_models 表关系、删除安全。改 `ProviderManager.tsx` / `ProviderCard.tsx` / `provider-presets.tsx` / `provider-catalog.ts` / `/api/providers/*` 前必读
 - [`ModelDiscovery.md`](./ModelDiscovery.md) — discover-models 三步流（probe / confirm / apply）+ user_edited 守护 + classification 分类。改 `model-discovery.ts` / `applyDiscoveryDiff` / refresh dialog 前必读
 - [`ComposerModelSelection.md`](./ComposerModelSelection.md) — useProviderModels resolved pair 契约 + ChatView 三道 send gate + new chat page 自治路径。改 `useProviderModels.ts` / `MessageInput.tsx` / `ChatView.tsx` / `chat/page.tsx` / `useAssistantTrigger.ts` 前必读
+- [`i18n.md`](./i18n.md) — typed dictionary / 局部双语 pair / 风险与计费承诺一致性。改任何 UI 文案前必读
+- [`DatabaseSchema.md`](./DatabaseSchema.md) — additive migration、conservative backfill、`preset_key` 稳定身份。改 schema 前必读
+- [`Onboarding.md`](./Onboarding.md) — OpenAI/xAI OAuth refresh、原子 bundle、loopback/device flow、bearer host 防泄漏。改凭据相关代码前必读
+- [`ElectronMain.md`](./ElectronMain.md) — Electron 构建/packaged server 与 OAuth loopback 跨平台门禁。改 `electron/*`、打包脚本或 browser OAuth 前必读
 
-### Stub（development-harness-optimization Step 4 起的八类高风险入口；首次真实改动时由实施 Agent 填充）
+### Stub（尚未被真实改动激活的高风险入口；首次 on-touch 时由实施 Agent 填充）
 
-- [`i18n.md`](./i18n.md) — `src/i18n/en.ts` / `src/i18n/zh.ts` 双语同步契约。改任何 UI 文案前必读
-- [`DatabaseSchema.md`](./DatabaseSchema.md) — `src/lib/db.ts` schema 迁移安全（必须 backfill 不能 DELETE 用户数据）。改 schema 前必读
 - [`PermissionBoundary.md`](./PermissionBoundary.md) — `mutationLevel` + `PERMISSION_SAFE_TOOLS` 跨 Runtime 暴露一致性（Phase 5e 安全洞修复）。改权限相关代码前必读
 - [`StreamSession.md`](./StreamSession.md) — 双入口（page.tsx 首消息 / ChatView.tsx 后续）独立管理 effort/thinking + snapshot 生命周期。改 `claude-client.ts` / `stream-session-manager.ts` / `useSSEStream.ts` 前必读
 - [`MCP.md`](./MCP.md) — MCP server 加载 / provider resolution / 持久化跨多 API 路由。改 `/api/plugins/mcp/*` 前必读
-- [`Onboarding.md`](./Onboarding.md) — OAuth refresh 必须用 `ensureTokenFresh()` 不能 sync 捕获 / cc-switch shadow 凭据路径。改凭据相关代码前必读
-- [`ElectronMain.md`](./ElectronMain.md) — 主进程行为（外链拦截 / 窗口管理 / 菜单栏常驻 / better-sqlite3 ABI rebuild）。改 `electron/*` / `scripts/build-electron.mjs` / `scripts/after-pack.js` 前必读
 - [`Release.md`](./Release.md) — RELEASE_NOTES 格式 / 版本号 / tag / CI 自动发版严格顺序（不能删 tag 否则 Release 变 Draft）。发版前必读
 
 ## 写作规范

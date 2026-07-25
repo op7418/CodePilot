@@ -42,6 +42,7 @@ import { generateText, streamText, tool, type LanguageModel, type ModelMessage, 
 import { z } from 'zod';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import { createXai } from '@ai-sdk/xai';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible';
 import { withChatImageDataUrlFetch } from '../../lib/openai-chat-image-normalizer';
 
@@ -69,6 +70,7 @@ const VERSIONS = {
   ai: pkgVersion('ai'),
   '@ai-sdk/anthropic': pkgVersion('@ai-sdk/anthropic'),
   '@ai-sdk/openai': pkgVersion('@ai-sdk/openai'),
+  '@ai-sdk/xai': pkgVersion('@ai-sdk/xai'),
   '@ai-sdk/openai-compatible': pkgVersion('@ai-sdk/openai-compatible'),
 };
 
@@ -82,7 +84,7 @@ interface CapturedRequest {
   body: any;
 }
 
-type ResponseKind = 'anthropic' | 'anthropic-stream' | 'openai-chat' | 'openai-responses';
+type ResponseKind = 'anthropic' | 'anthropic-stream' | 'openai-chat' | 'openai-responses' | 'xai-responses-stream';
 
 function cannedResponse(kind: ResponseKind): Response {
   switch (kind) {
@@ -153,6 +155,33 @@ function cannedResponse(kind: ResponseKind): Response {
         }),
         { status: 200, headers: { 'content-type': 'application/json' } },
       );
+    case 'xai-responses-stream': {
+      const response = {
+        id: 'resp_xai_fixture',
+        object: 'response',
+        created_at: 1,
+        model: 'grok-4.5',
+        status: 'completed',
+        output: [],
+        usage: {
+          input_tokens: 1,
+          input_tokens_details: { cached_tokens: 0 },
+          output_tokens: 1,
+          output_tokens_details: { reasoning_tokens: 0 },
+          total_tokens: 2,
+        },
+      };
+      const events = [
+        { type: 'response.created', response: { ...response, status: 'in_progress' } },
+        { type: 'response.output_text.delta', item_id: 'msg_xai_fixture', output_index: 0, content_index: 0, delta: 'ok' },
+        { type: 'response.output_text.done', item_id: 'msg_xai_fixture', output_index: 0, content_index: 0, text: 'ok' },
+        { type: 'response.completed', response },
+      ];
+      return new Response(events.map(event => `data: ${JSON.stringify(event)}\n\n`).join('') + 'data: [DONE]\n\n', {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    }
   }
 }
 
@@ -290,6 +319,15 @@ function appOpenAIResponses(fetchImpl: typeof fetch): LanguageModel {
   // whatever the SDK produced, so a plain capture fetch is body-faithful.
   const openai = createOpenAI({ apiKey: FAKE_KEY, fetch: fetchImpl });
   return openai.responses('gpt-5.1-codex');
+}
+
+function appXaiResponses(fetchImpl: typeof fetch): LanguageModel {
+  const xai = createXai({
+    apiKey: FAKE_KEY,
+    baseURL: 'https://api.x.ai/v1',
+    fetch: fetchImpl,
+  });
+  return xai.responses('grok-4.5');
 }
 
 function gatewayOpenAIChat(fetchImpl: typeof fetch): LanguageModel {
@@ -611,6 +649,74 @@ describe('provider request shape — OpenAI Responses API (Codex path)', () => {
     const file = content.find((p: { type: string }) => p.type === 'input_file');
     assert.ok(file, 'expected input_file part');
     checkFixture('openai-responses-file-pdf', RESPONSES_META, req);
+  });
+});
+
+// ── xAI Responses wire (Grok 4.5 API Key / OAuth shared path) ───
+
+const XAI_RESPONSES_META = {
+  package: '@ai-sdk/xai',
+  version: VERSIONS['@ai-sdk/xai'],
+  mirrors: 'src/lib/ai-provider.ts sdkType=xai branch + src/lib/agent-loop.ts providerOptions.xai',
+};
+
+const XAI_PROVIDER_OPTIONS = {
+  xai: { store: false, reasoningEffort: 'high' as const },
+};
+
+describe('provider request shape — xAI Responses API', () => {
+  it('uses the branded /responses endpoint and xAI reasoning/store fields', async () => {
+    const req = await captureGenerate('openai-responses', appXaiResponses, {
+      system: SYSTEM,
+      prompt: PROMPT,
+      providerOptions: XAI_PROVIDER_OPTIONS,
+    });
+    assert.equal(req.url, 'https://api.x.ai/v1/responses');
+    assert.equal(req.body.model, 'grok-4.5');
+    assert.equal(req.body.reasoning?.effort, 'high');
+    assert.equal(req.body.store, false);
+    checkFixture('xai-responses-reasoning-effort', XAI_RESPONSES_META, req);
+  });
+
+  it('serializes function tools and auto tool choice on xAI Responses', async () => {
+    const req = await captureGenerate('openai-responses', appXaiResponses, {
+      system: SYSTEM,
+      prompt: PROMPT,
+      tools: TOOLS,
+      toolChoice: 'auto',
+      providerOptions: XAI_PROVIDER_OPTIONS,
+    });
+    assert.equal(req.body.tools?.length, 1);
+    assert.equal(req.body.tools[0].name, 'read_file');
+    assert.equal(req.body.tool_choice, 'auto');
+    checkFixture('xai-responses-tool-choice-auto', XAI_RESPONSES_META, req);
+  });
+
+  it('streamText uses the same xAI Responses body with stream=true', async () => {
+    const req = await captureStream('xai-responses-stream', appXaiResponses, {
+      system: SYSTEM,
+      prompt: PROMPT,
+      providerOptions: XAI_PROVIDER_OPTIONS,
+    });
+    assert.equal(req.url, 'https://api.x.ai/v1/responses');
+    assert.equal(req.body.stream, true);
+    assert.equal(req.body.store, false);
+    checkFixture('xai-responses-stream', XAI_RESPONSES_META, req);
+  });
+
+  it('surfaces xAI error payloads instead of returning an empty success', async () => {
+    const xai = createXai({
+      apiKey: FAKE_KEY,
+      baseURL: 'https://api.x.ai/v1',
+      fetch: (async () => new Response(
+        JSON.stringify({ error: { message: 'synthetic xAI rejection', type: 'invalid_request_error' } }),
+        { status: 400, headers: { 'content-type': 'application/json' } },
+      )) as typeof fetch,
+    });
+    await assert.rejects(
+      () => generateText({ model: xai.responses('grok-4.5'), prompt: PROMPT }),
+      /synthetic xAI rejection/,
+    );
   });
 });
 

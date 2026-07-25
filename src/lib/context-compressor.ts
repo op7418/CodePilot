@@ -281,6 +281,7 @@ export async function compressConversation(params: CompressParams): Promise<Comp
     // global default. Without this, a session that overrides the default
     // provider would get auxiliary models from the wrong credentials.
     const auxiliary = resolveAuxiliaryModel('compact', {
+      callScene: 'active_turn_compact',
       providerId,
       sessionProviderId: providerId,
       sessionModel,
@@ -330,6 +331,7 @@ Summary:`;
     // SDK subprocess for transport (compatible with third-party proxies),
     // model + provider selected via resolveAuxiliaryModel's 5-tier chain.
     const result = await generateTextViaSdk({
+      callScene: 'active_turn_compact',
       providerId: effectiveProviderId || undefined,
       model: effectiveModel,
       system,

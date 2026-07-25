@@ -67,6 +67,7 @@ export async function POST(request: NextRequest) {
     const meta = preset?.meta;
 
     const result = await testProviderConnection({
+      callScene: 'connection_test',
       apiKey: effectiveApiKey,
       baseUrl: baseUrl || '',
       protocol: protocol || 'anthropic',

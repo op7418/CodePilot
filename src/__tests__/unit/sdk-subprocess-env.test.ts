@@ -71,7 +71,7 @@ describe('prepareSdkSubprocessEnv — uniform provider-group ownership', () => {
 
     const setup = prepareSdkSubprocessEnv({
       provider: {
-        id: 'kimi', name: 'Kimi', provider_type: 'anthropic', protocol: 'anthropic',
+        id: 'kimi', name: 'Kimi', preset_key: 'kimi', provider_type: 'anthropic', protocol: 'anthropic',
         base_url: 'https://kimi.example.com', api_key: 'sk-real-kimi',
         is_active: 1, sort_order: 0, extra_env: '{}', headers_json: '{}',
         env_overrides_json: '', role_models_json: '{}', notes: '', options_json: '{}',
@@ -115,7 +115,7 @@ describe('prepareSdkSubprocessEnv — uniform provider-group ownership', () => {
 
     const setup = prepareSdkSubprocessEnv({
       provider: {
-        id: 'p1', name: 'P', provider_type: 'anthropic', protocol: 'anthropic',
+        id: 'p1', name: 'P', preset_key: '', provider_type: 'anthropic', protocol: 'anthropic',
         base_url: 'https://p.example.com', api_key: 'sk-p',
         is_active: 1, sort_order: 0, extra_env: '{}', headers_json: '{}',
         env_overrides_json: '', role_models_json: '{}', notes: '', options_json: '{}',

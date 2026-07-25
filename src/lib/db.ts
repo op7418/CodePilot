@@ -149,6 +149,7 @@ function initDb(db: Database.Database): void {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       provider_type TEXT NOT NULL DEFAULT 'anthropic',
+      preset_key TEXT NOT NULL DEFAULT '',
       base_url TEXT NOT NULL DEFAULT '',
       api_key TEXT NOT NULL DEFAULT '',
       is_active INTEGER NOT NULL DEFAULT 0,
@@ -539,6 +540,7 @@ function migrateDb(db: Database.Database): void {
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
       provider_type TEXT NOT NULL DEFAULT 'anthropic',
+      preset_key TEXT NOT NULL DEFAULT '',
       base_url TEXT NOT NULL DEFAULT '',
       api_key TEXT NOT NULL DEFAULT '',
       is_active INTEGER NOT NULL DEFAULT 0,
@@ -550,10 +552,15 @@ function migrateDb(db: Database.Database): void {
     );
   `);
 
-  // Add new provider fields (protocol, headers, env_overrides, role_models)
+  // Add provider fields. preset_key is the stable product identity; URL and
+  // protocol are insufficient because multiple Qwen Token Plan products share
+  // the same endpoint.
   {
     const providerCols = db.prepare("PRAGMA table_info(api_providers)").all() as { name: string }[];
     const provColNames = providerCols.map(c => c.name);
+    if (!provColNames.includes('preset_key')) {
+      safeAddColumn(db, "ALTER TABLE api_providers ADD COLUMN preset_key TEXT NOT NULL DEFAULT ''");
+    }
     if (!provColNames.includes('protocol')) {
       safeAddColumn(db, "ALTER TABLE api_providers ADD COLUMN protocol TEXT NOT NULL DEFAULT ''");
     }
@@ -621,6 +628,12 @@ function migrateDb(db: Database.Database): void {
         ELSE 'recommended'
       END`);
   }
+
+  // Stable preset identity migration. Only rows whose identity is provable
+  // are backfilled. Token Plan personal/team share one URL, so an uncertain
+  // legacy row deliberately keeps preset_key='' and is surfaced for user
+  // confirmation instead of inheriting catalog array order.
+  backfillProviderPresetKeys(db);
 
   // Ensure media_generations table exists for databases created before this migration
   db.exec(`
@@ -1003,7 +1016,7 @@ function migrateDb(db: Database.Database): void {
         // require tripped Turbopack's NFT into tracing the whole project.
         const updateStmt = db.prepare("UPDATE api_providers SET protocol = ? WHERE id = ?");
         for (const row of legacyCustom) {
-          const protocol = inferProtocolFromLegacy('custom', row.base_url || '');
+          const protocol = inferProtocolFromLegacy('custom', row.base_url || '', '');
           updateStmt.run(protocol, row.id);
         }
       }
@@ -1166,6 +1179,74 @@ function migrateDb(db: Database.Database): void {
     );
     CREATE INDEX IF NOT EXISTS idx_notification_deliveries_event_id ON notification_deliveries(event_id);
   `);
+}
+
+const BAILIAN_CODING_PLAN_URL = 'https://coding.dashscope.aliyuncs.com/apps/anthropic';
+const QWEN_TOKEN_PLAN_URL = 'https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic';
+const LEGACY_QWEN_TEAM_MODELS = new Set(['qwen3.6-plus', 'glm-5', 'MiniMax-M2.5']);
+
+/** Exported for migration contract tests. Production callers should use getDb(). */
+export function backfillProviderPresetKeys(dbInstance: Database.Database): void {
+  const columns = dbInstance.prepare("PRAGMA table_info(api_providers)").all() as Array<{ name: string }>;
+  if (!columns.some(c => c.name === 'preset_key')) return;
+
+  const migrate = dbInstance.transaction(() => {
+    dbInstance.prepare(`
+      UPDATE api_providers
+      SET preset_key = 'bailian'
+      WHERE preset_key = ''
+        AND base_url = ?
+        AND (protocol = 'anthropic' OR protocol = '' OR protocol IS NULL)
+    `).run(BAILIAN_CODING_PLAN_URL);
+
+    const tokenRows = dbInstance.prepare(`
+      SELECT id, role_models_json
+      FROM api_providers
+      WHERE preset_key = ''
+        AND base_url = ?
+        AND (protocol = 'anthropic' OR protocol = '' OR protocol IS NULL)
+    `).all(QWEN_TOKEN_PLAN_URL) as Array<{ id: string; role_models_json: string }>;
+
+    const modelStmt = dbInstance.prepare(`
+      SELECT model_id, source, user_edited
+      FROM provider_models
+      WHERE provider_id = ?
+    `);
+    const updateTeam = dbInstance.prepare(`
+      UPDATE api_providers
+      SET preset_key = 'bailian-token-plan-cn'
+      WHERE id = ? AND preset_key = ''
+    `);
+
+    for (const row of tokenRows) {
+      let roles: Record<string, unknown>;
+      try {
+        const parsed = JSON.parse(row.role_models_json || '{}');
+        roles = parsed && typeof parsed === 'object' ? parsed : {};
+      } catch {
+        continue;
+      }
+      const roleFingerprint = ['default', 'sonnet', 'opus', 'haiku']
+        .every(role => roles[role] === 'qwen3.6-plus');
+      if (!roleFingerprint) continue;
+
+      const modelRows = modelStmt.all(row.id) as Array<{
+        model_id: string;
+        source: string;
+        user_edited: number;
+      }>;
+      const managedIds = new Set(
+        modelRows
+          .filter(model => model.source !== 'manual' && model.user_edited === 0)
+          .map(model => model.model_id),
+      );
+      const exactManagedCatalog = managedIds.size === LEGACY_QWEN_TEAM_MODELS.size
+        && [...LEGACY_QWEN_TEAM_MODELS].every(id => managedIds.has(id));
+      if (exactManagedCatalog) updateTeam.run(row.id);
+    }
+  });
+
+  migrate();
 }
 
 // ==========================================
@@ -1896,12 +1977,13 @@ export function createProvider(data: CreateProviderRequest): ApiProvider {
   const sortOrder = (maxRow.max_order ?? -1) + 1;
 
   db.prepare(
-    `INSERT INTO api_providers (id, name, provider_type, protocol, base_url, api_key, is_active, sort_order, extra_env, headers_json, env_overrides_json, role_models_json, options_json, notes, created_at, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    `INSERT INTO api_providers (id, name, provider_type, preset_key, protocol, base_url, api_key, is_active, sort_order, extra_env, headers_json, env_overrides_json, role_models_json, options_json, notes, created_at, updated_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
   ).run(
     id,
     data.name,
     data.provider_type || 'anthropic',
+    data.preset_key || '',
     data.protocol || '',
     data.base_url || '',
     data.api_key || '',
@@ -1928,6 +2010,7 @@ export function updateProvider(id: string, data: UpdateProviderRequest): ApiProv
   const now = new Date().toISOString().replace('T', ' ').split('.')[0];
   const name = data.name ?? existing.name;
   const providerType = data.provider_type ?? existing.provider_type;
+  const presetKey = data.preset_key ?? existing.preset_key;
   const protocol = data.protocol ?? existing.protocol;
   const baseUrl = data.base_url ?? existing.base_url;
   const apiKey = data.api_key ?? existing.api_key;
@@ -1940,10 +2023,10 @@ export function updateProvider(id: string, data: UpdateProviderRequest): ApiProv
   const sortOrder = data.sort_order ?? existing.sort_order;
 
   db.prepare(
-    `UPDATE api_providers SET name = ?, provider_type = ?, protocol = ?, base_url = ?, api_key = ?,
+    `UPDATE api_providers SET name = ?, provider_type = ?, preset_key = ?, protocol = ?, base_url = ?, api_key = ?,
      extra_env = ?, headers_json = ?, env_overrides_json = ?, role_models_json = ?, options_json = ?,
      notes = ?, sort_order = ?, updated_at = ? WHERE id = ?`
-  ).run(name, providerType, protocol, baseUrl, apiKey, extraEnv, headersJson, envOverridesJson, roleModelsJson, optionsJson, notes, sortOrder, now, id);
+  ).run(name, providerType, presetKey, protocol, baseUrl, apiKey, extraEnv, headersJson, envOverridesJson, roleModelsJson, optionsJson, notes, sortOrder, now, id);
 
   return getProvider(id);
 }

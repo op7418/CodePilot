@@ -279,6 +279,8 @@ export async function buildCodexProviderModelGroup(
     provider_id: 'codex_account',
     provider_name: 'Codex Account',
     provider_type: 'codex',
+    preset_key: 'codex-account',
+    protocol: 'openai-compatible',
     compat: 'codex_account',
     models: modelOptions,
   };

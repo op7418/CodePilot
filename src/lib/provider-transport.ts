@@ -14,6 +14,7 @@
  */
 
 import { resolveProvider, type ResolvedProvider } from './provider-resolver';
+import type { ProviderCallScene } from './provider-call-policy';
 
 export type TransportCapability = 'standard-messages' | 'claude-code-compat' | 'cloud-managed';
 
@@ -21,10 +22,12 @@ export type TransportCapability = 'standard-messages' | 'claude-code-compat' | '
  * Detect the transport capability of the current provider.
  */
 export function detectTransport(opts: {
+  callScene: ProviderCallScene;
   providerId?: string;
   sessionProviderId?: string;
 }): { transport: TransportCapability; resolved: ResolvedProvider } {
   const resolved = resolveProvider({
+    callScene: opts.callScene,
     providerId: opts.providerId,
     sessionProviderId: opts.sessionProviderId,
   });
@@ -42,6 +45,7 @@ function inferTransport(resolved: ResolvedProvider): TransportCapability {
 
   // Non-anthropic protocols → standard
   if (protocol === 'openrouter' || protocol === 'openai-compatible') return 'standard-messages';
+  if (protocol === 'xai') return 'standard-messages';
   if (protocol === 'google' || protocol === 'gemini-image') return 'standard-messages';
   if (protocol === 'openai-image') return 'standard-messages';
 

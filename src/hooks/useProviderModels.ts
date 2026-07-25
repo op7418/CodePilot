@@ -220,6 +220,8 @@ export function useProviderModels(
           provider_id: 'env',
           provider_name: 'Anthropic',
           provider_type: 'anthropic',
+          preset_key: '',
+          protocol: 'anthropic',
           models: DEFAULT_MODEL_OPTIONS,
         }]);
         setDefaultProviderId('');

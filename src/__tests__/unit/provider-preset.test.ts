@@ -112,15 +112,15 @@ describe('Preset Schema Validation', () => {
     const models = getDefaultModelsForProvider('openai-compatible', 'https://api.atlascloud.ai/v1');
     assert.deepEqual(models.map(m => m.modelId), ['qwen/qwen3.5-flash', 'deepseek-ai/deepseek-v4-pro']);
 
-    const match = findMatchingPresetForRecord({
+    const atlasRecord = {
+      preset_key: 'atlascloud',
       provider_type: 'openai-compatible',
+      protocol: 'openai-compatible',
       base_url: 'https://api.atlascloud.ai/v1',
-    });
+    };
+    const match = findMatchingPresetForRecord(atlasRecord);
     assert.equal(match?.key, 'atlascloud');
-    assert.equal(
-      getProviderCompat({ provider_type: 'openai-compatible', base_url: 'https://api.atlascloud.ai/v1' }),
-      'codepilot_only',
-    );
+    assert.equal(getProviderCompat(atlasRecord), 'codepilot_only');
   });
 });
 
@@ -134,7 +134,7 @@ describe('toClaudeCodeEnv: env shape after CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST 
 
     const resolvedWithProvider = {
       provider: {
-        id: 'test', name: 'Test', provider_type: 'anthropic', protocol: 'anthropic',
+        id: 'test', name: 'Test', preset_key: 'anthropic-official', provider_type: 'anthropic', protocol: 'anthropic',
         base_url: 'https://api.anthropic.com', api_key: 'sk-test',
         is_active: 1, sort_order: 0, extra_env: '{}', headers_json: '{}',
         env_overrides_json: '', role_models_json: '{}', notes: '', options_json: '{}',
@@ -277,7 +277,7 @@ describe('getDefaultModelsForProvider — provider-catalog flow', () => {
 
   it('effective protocol: raw anthropic wins over inference', () => {
     assert.equal(
-      getEffectiveProviderProtocol('custom', 'anthropic', ''),
+      getEffectiveProviderProtocol('custom', 'anthropic', '', ''),
       'anthropic',
       'non-empty valid raw protocol should be honored as-is',
     );
@@ -288,18 +288,18 @@ describe('getDefaultModelsForProvider — provider-catalog flow', () => {
     // They must resolve to 'anthropic' so write-path validation and doctor
     // diagnostics treat them the same as an explicit 'anthropic' POST.
     assert.equal(
-      getEffectiveProviderProtocol('anthropic', '', ''),
+      getEffectiveProviderProtocol('anthropic', '', '', ''),
       'anthropic',
     );
     assert.equal(
-      getEffectiveProviderProtocol('anthropic', undefined, ''),
+      getEffectiveProviderProtocol('anthropic', undefined, '', ''),
       'anthropic',
     );
   });
 
   it('effective protocol: bedrock provider_type without raw protocol still classifies as bedrock', () => {
     assert.equal(
-      getEffectiveProviderProtocol('bedrock', '', ''),
+      getEffectiveProviderProtocol('bedrock', '', '', ''),
       'bedrock',
     );
   });
@@ -307,7 +307,7 @@ describe('getDefaultModelsForProvider — provider-catalog flow', () => {
   it('effective protocol: unknown raw protocol falls back to inference', () => {
     // A stray / legacy non-Protocol string in raw shouldn't pass through.
     assert.equal(
-      getEffectiveProviderProtocol('anthropic', 'random-garbage', ''),
+      getEffectiveProviderProtocol('anthropic', 'random-garbage', '', ''),
       'anthropic',
     );
   });

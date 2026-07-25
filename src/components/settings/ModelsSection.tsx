@@ -196,8 +196,7 @@ function isSyncableProvider(provider: ApiProvider): { ok: boolean; reasonZh?: st
   // primary task is search-and-add, not maintenance of upstream-state
   // bookkeeping; the search dialog auto-fetches on open and lives
   // entirely inside the Add Model flow now.
-  const record = { provider_type: provider.provider_type, base_url: provider.base_url };
-  const policy = canReliablyFetchModels(record);
+  const policy = canReliablyFetchModels(provider);
   if (policy.reliable) return { ok: true };
   return { ok: false, reasonZh: policy.reasonZh, reasonEn: policy.reasonEn };
 }
@@ -463,7 +462,7 @@ export function ModelsSection() {
     // right thing on N plan providers" instead of those rows looking
     // mysteriously absent from the toast bookkeeping.
     const skippedPlanCount = providers.filter(p =>
-      isCatalogOnlyPlanProviderRecord({ provider_type: p.provider_type, base_url: p.base_url })
+      isCatalogOnlyPlanProviderRecord(p)
     ).length;
     if (targets.length === 0) {
       showToast({
@@ -531,7 +530,7 @@ export function ModelsSection() {
         // and "hidden" into the summary toast, which would lie about
         // what validate actually did (it changes no enable state, only
         // verifies presence upstream).
-        if (isOpenRouterProviderRecord({ provider_type: p.provider_type, base_url: p.base_url })) {
+        if (isOpenRouterProviderRecord(p)) {
           try {
             const res = await fetch(`/api/providers/${p.id}/validate-models`, { method: 'POST' });
             if (!res.ok) {
@@ -1051,10 +1050,7 @@ export function ModelsSection() {
     if (runtimeFilter !== 'all') {
       bundlesOut = bundlesOut
         .map(b => {
-          const providerCompat = getProviderCompat({
-            provider_type: b.provider.provider_type,
-            base_url: b.provider.base_url,
-          });
+          const providerCompat = getProviderCompat(b.provider);
           // Filter rows by checking each model's compat against the
           // selected provider tier. The `runtimeFilter` value is a
           // provider-tier label (e.g. `claude_code_verified`); a row
@@ -1438,10 +1434,7 @@ export function ModelsSection() {
         const defaultRoleModel = defaultRoleId
           ? fullModels.find(m => m.model_id === defaultRoleId)
           : undefined;
-        const providerCompat = getProviderCompat({
-          provider_type: provider.provider_type,
-          base_url: provider.base_url,
-        });
+        const providerCompat = getProviderCompat(provider);
         return (
         <section
           key={provider.id}
@@ -1541,7 +1534,7 @@ export function ModelsSection() {
                     tidy" empty state never shows for normal users. The
                     server-side WHERE clause still guarantees `manual_*`
                     / `user_edited` rows are never touched. */}
-                {isOpenRouterProviderRecord({ provider_type: provider.provider_type, base_url: provider.base_url })
+                {isOpenRouterProviderRecord(provider)
                   && (bundles[provider.id] ?? []).some(m => m.enable_source === 'recommended' && m.user_edited === 0) && (
                     <button
                       type="button"
@@ -1601,11 +1594,10 @@ export function ModelsSection() {
                   // anthropic-compat brands and Anthropic official all
                   // fall to the manual dialog where users type
                   // modelId + displayName by hand.
-                  const record = { provider_type: provider.provider_type, base_url: provider.base_url };
-                  if (canSearchUpstreamModels(record).reliable) {
+                  if (canSearchUpstreamModels(provider).reliable) {
                     setOpenRouterSearchTarget({ id: provider.id, name: provider.name });
                   } else {
-                    const isPlan = isCatalogOnlyPlanProviderRecord(record);
+                    const isPlan = isCatalogOnlyPlanProviderRecord(provider);
                     setAddDialog({ providerId: provider.id, providerName: provider.name, kind: isPlan ? 'plan' : 'manual' });
                     setNewModelId('');
                     setNewDisplayName('');
@@ -1988,7 +1980,7 @@ export function ModelsSection() {
             const target = openRouterSearchTarget;
             const provider = providers.find(p => p.id === target.id);
             const isPlan = provider
-              ? isCatalogOnlyPlanProviderRecord({ provider_type: provider.provider_type, base_url: provider.base_url })
+              ? isCatalogOnlyPlanProviderRecord(provider)
               : false;
             setOpenRouterSearchTarget(null);
             setAddDialog({ providerId: target.id, providerName: target.name, kind: isPlan ? 'plan' : 'manual' });
@@ -2038,10 +2030,7 @@ export function ModelsSection() {
             if (!addDialog || addDialog.kind !== 'manual') return null;
             const provider = providers.find(p => p.id === addDialog.providerId);
             if (!provider) return null;
-            const policy = canReliablyFetchModels({
-              provider_type: provider.provider_type,
-              base_url: provider.base_url,
-            });
+            const policy = canReliablyFetchModels(provider);
             if (!policy.reliable) return null;
             return (
               <div className="mt-2 -mb-1 text-[11px] text-muted-foreground">

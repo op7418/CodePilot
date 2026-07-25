@@ -351,6 +351,7 @@ async function runLoopScenario(loopFn: LoopFn, opts: ScenarioOptions): Promise<L
   const scripted = installScriptedFetch(opts.script);
   try {
     const stream = loopFn({
+      callScene: 'interactive_chat',
       prompt: opts.prompt,
       sessionId: session.id,
       model: MODEL,

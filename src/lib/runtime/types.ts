@@ -7,6 +7,7 @@
  */
 
 import type { MCPServerConfig } from '@/types';
+import type { ProviderCallScene } from '../provider-call-policy';
 
 /**
  * The single contract all Agent Runtimes must fulfil.
@@ -47,6 +48,7 @@ export interface AgentRuntime {
 export interface RuntimeStreamOptions {
   // ── Core (all runtimes) ──
   prompt: string;
+  callScene: ProviderCallScene;
   sessionId: string;
   model?: string;
   systemPrompt?: string;

@@ -47,6 +47,7 @@ import type {
   ResponsesRequestBody,
   ProxyResult,
 } from './types';
+import { buildXaiProviderOptions } from '@/lib/xai-provider-options';
 
 /** JSON value type matching ai-sdk's SharedV3ProviderOptions inner. */
 type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
@@ -68,7 +69,8 @@ export function createUnifiedAdapter(family: string): ResponsesAdapter {
     // 1. Resolve the LanguageModel via the same factory native uses.
     //    Pass the RAW targetProviderId from the inbound header — NOT
     //    `resolved.provider?.id` — so virtual providers like
-    //    `openai-oauth` (which have `resolved.provider === undefined`)
+    //    `openai-oauth` / `xai-oauth` (which have
+    //    `resolved.provider === undefined`)
     //    flow through to ai-provider.ts's per-virtual-id branches
     //    (createOpenAI with Codex endpoint + OAuth fetch, etc.).
     //    Dropping the id here was the original Phase 5b P0 bug: the
@@ -77,6 +79,7 @@ export function createUnifiedAdapter(family: string): ResponsesAdapter {
     let languageModel: LanguageModel;
     try {
       const created = createModel({
+        callScene: 'interactive_chat',
         providerId: input.targetProviderId,
         model: input.body.model,
       });
@@ -556,6 +559,10 @@ export function buildProviderOptions(
   // `store: false` so this is safe to set unconditionally on every
   // openai-flavoured call we make.
   out.openai = { ...(out.openai ?? {}), store: body.store ?? false };
+  // xAI Responses has its own `store` contract. @ai-sdk/xai defaults it to
+  // true; CodePilot does not use previousResponseId, so the shared xAI helper
+  // explicitly disables upstream retention for this channel.
+  out.xai = buildXaiProviderOptions(body.reasoning?.effort);
 
   const effort = body.reasoning?.effort;
   if (effort) {

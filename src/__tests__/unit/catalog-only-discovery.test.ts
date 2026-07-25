@@ -28,20 +28,32 @@ import { classifyProvider, discoverModels } from '../../lib/model-discovery';
 import {
   getPreset,
   isCatalogOnlyDiscoveryProvider,
-  isCatalogOnlyDiscoveryRecord,
+  isCatalogOnlyDiscoveryRecord as isCatalogOnlyDiscoveryRecordResolved,
   isCatalogOnlyPlanProvider,
-  canReliablyFetchModels,
-  canSearchUpstreamModels,
-  findMatchingPresetForRecord,
+  canReliablyFetchModels as canReliablyFetchModelsResolved,
+  canSearchUpstreamModels as canSearchUpstreamModelsResolved,
+  findMatchingPresetForRecord as findMatchingPresetForRecordResolved,
   getDefaultModelsForProvider,
   PresetSchema,
 } from '../../lib/provider-catalog';
-import { getProviderCompat } from '../../lib/runtime-compat';
+import { getProviderCompat as getProviderCompatResolved } from '../../lib/runtime-compat';
 
 const CLINE_PASS_URL = 'https://api.cline.bot/api/v1';
 const OPENCODE_OPENAI_URL = 'https://opencode.ai/zen/go/v1';
 const OPENCODE_ANTHROPIC_URL = 'https://opencode.ai/zen/go';
 const NEW_KEYS = ['cline-pass', 'opencode-go-openai', 'opencode-go-anthropic'] as const;
+type LegacyRecord = { provider_type: string; base_url: string; preset_key?: string; protocol?: string };
+const identity = (record: LegacyRecord) => ({
+  preset_key: record.preset_key ?? '',
+  protocol: record.protocol ?? record.provider_type,
+  provider_type: record.provider_type,
+  base_url: record.base_url,
+});
+const isCatalogOnlyDiscoveryRecord = (record: LegacyRecord) => isCatalogOnlyDiscoveryRecordResolved(identity(record));
+const canReliablyFetchModels = (record: LegacyRecord) => canReliablyFetchModelsResolved(identity(record));
+const canSearchUpstreamModels = (record: LegacyRecord) => canSearchUpstreamModelsResolved(identity(record));
+const findMatchingPresetForRecord = (record: LegacyRecord) => findMatchingPresetForRecordResolved(identity(record));
+const getProviderCompat = (record: LegacyRecord) => getProviderCompatResolved(identity(record));
 
 describe('catalog-only presets — shape', () => {
   for (const key of NEW_KEYS) {

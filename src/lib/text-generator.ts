@@ -1,8 +1,10 @@
 import { streamText } from 'ai';
 import { createModel } from './ai-provider';
 import type { ResolvedProvider } from './provider-resolver';
+import { assertProviderCallAllowed, type ProviderCallScene } from './provider-call-policy';
 
 export interface StreamTextParams {
+  callScene: ProviderCallScene;
   providerId: string;
   /** Exact provider snapshot supplied by fail-closed background calls. */
   resolvedProvider?: ResolvedProvider;
@@ -50,7 +52,9 @@ export async function* pumpTextStream(
 }
 
 export async function* streamTextFromProvider(params: StreamTextParams): AsyncIterable<string> {
+  assertProviderCallAllowed(params.resolvedProvider?.provider, params.callScene);
   const { languageModel } = createModel({
+    callScene: params.callScene,
     providerId: params.providerId,
     resolvedProvider: params.resolvedProvider,
     model: params.model,

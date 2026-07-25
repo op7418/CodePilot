@@ -94,7 +94,9 @@
 | 来源 | 原因 | Fallback |
 |---|---|---|
 | OpenAI OAuth | 浏览器 web session，不暴露 OAuth 端点的模型列表 | SDK 内置默认 |
+| xAI OAuth | 订阅 virtual provider；没有可证明订阅可用范围的 model-list 合同 | catalog 内置 `grok-4.5` |
 | Claude Code env | 环境变量驱动，模型由 SDK 内置定义 | SDK / catalog 内置默认 |
+| xAI API Key（首版） | `/models` 全量不等于 CodePilot 已验证的 Responses 产品范围 | catalog 内置 `grok-4.5` |
 | 没匹配上预设、用户自填 base_url 的 custom 行 | 没有协议线索 | catalog + 手动 `provider_models` 表 |
 | Coding Plan / Token Plan 套餐型（见下表） | 套餐白名单 ≠ 上游全量推理目录 | catalog 内置白名单 + 「添加自定义模型」补 SKU |
 
@@ -105,8 +107,9 @@
 | 预设 key | 协议 | 套餐类型 | 套餐白名单（catalog 已内置） |
 |---|---|---|---|
 | `volcengine` | anthropic | coding_plan | doubao-seed-2.0-{code,pro,lite} / doubao-seed-code / minimax-m2.5 / glm-4.7 / deepseek-v3.2 / kimi-k2.5 / ark-code-latest（控制台管理 / Auto） |
-| `bailian` | anthropic | coding_plan | qwen3.6-plus / qwen3.5-plus / qwen3-max-2026-01-23 / qwen3-coder-{next,plus} / kimi-k2.5 / glm-{5,4.7} / MiniMax-M2.5 |
-| `bailian-token-plan-cn` | anthropic | token_plan | qwen3.6-plus / glm-5 / MiniMax-M2.5（DeepSeek V3.2 文档明确不支持 Anthropic 协议，故不入 preset）|
+| `bailian` | anthropic | coding_plan | `qwen3.7-plus` / `qwen3.6-plus` / `qwen3.5-plus` / `qwen3-max-2026-01-23` / `qwen3-coder-next` / `qwen3-coder-plus` / `kimi-k2.5` / `glm-5` / `glm-4.7` / `MiniMax-M2.5`（10 个；2026-07-21 核对） |
+| `qwen-token-plan-personal-cn` | anthropic | token_plan 个人版 | `qwen3.8-max-preview` / `qwen3.7-max` / `qwen3.7-plus` / `qwen3.6-flash` / `glm-5.2` / `deepseek-v4-pro`（6 个；2026-07-21 核对） |
+| `bailian-token-plan-cn` | anthropic | token_plan 团队版 | `qwen3.8-max-preview` / `qwen3.7-max` / `qwen3.7-plus` / `qwen3.6-plus` / `qwen3.6-flash` / `deepseek-v4-pro` / `deepseek-v4-flash` / `deepseek-v3.2` / `kimi-k2.7-code` / `kimi-k2.6` / `kimi-k2.5` / `glm-5.2` / `glm-5.1` / `glm-5` / `MiniMax-M2.5`（15 个；2026-07-21 核对） |
 | `glm-cn` / `glm-global` | anthropic | coding_plan | catalog 内置 |
 | `minimax-cn` / `minimax-global` | anthropic | token_plan | MiniMax-M2.7 |
 | `xiaomi-mimo-token-plan` | anthropic | token_plan | MiMo-V2-Pro |
@@ -115,7 +118,8 @@
 
 - **套餐白名单 ≠ 上游全量目录**：火山官方文档明确区分 "Coding Plan Model Name"（写进 ANTHROPIC_MODEL）与 Ark 在线推理 Model ID（同 host `/v1/models` 返回的 100+ 模型空间，含 image/embedding/audio/被废弃的旧版本）。百炼 FAQ 也说"非支持列表模型会报错"。
 - **probe 出来的模型用不了**：用户选了套餐外的 SKU 调用即返回 4xx + 可能产生额外计费。
-- **vendor 自己也在改名**：Bailian 当前推荐 `MiniMax-M2.5`，独立 MiniMax 已升至 `MiniMax-M2.7`；前者由阿里云套餐定义，后者由 MiniMax 自己维护。catalog 必须按各自官方页对应。
+- **vendor 自己也在改名**：Bailian 当前目录与独立 provider 目录不是同一事实源。catalog 必须按各套餐官方页逐字符维护，不能因另一个 provider 升级就替换套餐白名单。
+- **同 URL 也不能证明套餐身份**：Token Plan 个人版/团队版共享 `https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic`。目录选择必须使用持久化 `preset_key`；legacy 缺失 key 返回 ambiguous 并要求用户确认。
 
 按量付费的 anthropic-compat 品牌（`kimi` / `moonshot` / `xiaomi-mimo` / `deepseek`）不在 gate 范围内 — 整张推理目录就是它们真实可用的集合，probe 是合理的。
 
@@ -142,7 +146,7 @@
 
 > Codex「Models / Providers 体验收敛」要求"如果服务商本身不支持可靠拉取模型，就不要显示「刷新模型」按钮"。这张表是单一事实基线：每个 preset 当前 `classifyProvider` 的归类 + Codex 4-category 框架下的位置 + 是否应显示「刷新模型」+ 用户添加路径。
 >
-> **结论**：22 个 preset 中，有 9 个能可靠拉取（ollama / litellm / openrouter / 三家 image official / 几家可发现的 anthropic-compat），13 个不能或不应拉取。原本所有 `experimental` 都展示「刷新模型」按钮，会让用户误以为按一下就有新结果——本轮对应收敛是只在 `reliable=true` 的 preset 上展示按钮。
+> **结论（2026-05-06 数量为历史快照）**：可靠性判断不能从 preset 总数推断；后续新增的 Qwen 两套餐与 xAI 同样显式走 catalog-only。UI 只在 `reliable=true` 时展示刷新按钮。
 
 | Preset key | classifyProvider | Codex 类别 | 拉取可靠？ | 刷新按钮 | 用户添加路径 |
 |---|---|---|---|---|---|
@@ -157,7 +161,8 @@
 | `xiaomi-mimo` | experimental (PAYG) | Codex: 套餐型 / 实测: PAYG | ❌ 同 Kimi | ❌ 不显示 | 「添加模型」补 SKU |
 | `xiaomi-mimo-token-plan` | unsupported (类别 D token_plan) | 套餐型 / CodePlan | ❌ 套餐白名单 | ❌ 不显示 | 「添加模型」补 SKU |
 | `bailian` | unsupported (类别 D 套餐 coding_plan) | 套餐型 / CodePlan | ❌ 同 Volcengine 逻辑 | ❌ 不显示 | 「添加模型」补 SKU |
-| `bailian-token-plan-cn` | unsupported (类别 D 套餐 token_plan) | 套餐型 / CodePlan | ❌ 团队版 Key 不安全做共享 probe；与 Coding Plan 不通用 | ❌ 不显示 | 「添加模型」补 SKU |
+| `qwen-token-plan-personal-cn` / `bailian-token-plan-cn` | unsupported (类别 D 套餐 token_plan) | 套餐型 / Token Plan | ❌ 套餐白名单 ≠ 上游全量；两版共享 URL，必须用 identity 区分 | ❌ 不显示 | 各自 catalog + 「添加模型」补 SKU |
+| `xai` / `xai-oauth` | unsupported (catalog-only) | 官方 API / OAuth virtual provider | ❌ 首版只承诺已验证的 `grok-4.5` Responses | ❌ 不显示 | catalog 单模型；不从全量目录扩张 |
 | `deepseek` | experimental (PAYG, fixedCatalog) | 不可发现（catalog 是官方阵容） | ❌ catalog v4 family 即官方阵容；/v1/models 会暴露 v3.x 旧 SKU | ❌ 不显示 | catalog 三 SKU + 手动 |
 | `bedrock` | experimental | 不可发现（SDK only） | ❌ SigV4 签名 + AWS SDK；不能从渲染端 HTTP probe | ❌ 不显示 | catalog（Bedrock 区域阵容）+ 手动 |
 | `vertex` | experimental | 不可发现（SDK only） | ❌ ADC + project/region；同样需 SDK | ❌ 不显示 | catalog + 手动 |
@@ -171,19 +176,20 @@
 
 `canReliablyFetchModels(record): { reliable: boolean; reason: string }`（位于 `src/lib/provider-catalog.ts`）封装上述决策，是 ProviderManager / ModelsSection / 任何展示「刷新模型」按钮的 UI 调用点的**单一**真相源。Phase 1 Step 2 收敛后所有 UI gate 走这个 helper，不再各自判断。
 
-### 套餐型 / 白名单型服务商 — 来源指针清单（Phase 1 Step 2 — UI 已落地、catalog 主动复核待补）
+### 套餐型 / 白名单型服务商 — 来源指针清单（Qwen/Bailian 于 2026-07-21 主动复核）
 
-> ⚠️ **本轮没有逐 provider 复访官方页面**。下表给出的是当前代码内置 `defaultModels` + 各 preset `meta.docsUrl` / `meta.apiKeyUrl` 中可访问的官方入口指针，没有"今天对照过官方公告"。Phase 1 Step 2 的 UI 工作（"已不在当前推荐目录"行级徽章 + Add Model dialog 套餐型文案 + Refresh All summary 跳过提示）已落地；catalog 阵容本身的主动核准列入待补 — 见下方"未做、待跟踪"段。
+> 2026-07-21 的 `qwen-token-plan-and-grok-access` 计划已主动复核阿里云百炼 Coding Plan、Qwen Token Plan 个人版/团队版；来源与产品边界见 `docs/research/qwen-token-plan-grok-oauth-2026-07-21.md`。下表其他 provider 仍只是来源指针，不能据此声称当日核准。
 >
-> 工程现状：catalog 阵容最近一次代码层修订是 Round 215（commit `0be0eab` "feat(provider-models): auto-discover after Add Service + 5-state enable_source"，2026-05-06 之前），那一轮对 DeepSeek、Volcengine、Bailian 的 `defaultModels` 做了升级。Step 2 没有再改 catalog 数据，只是把它当作 UI 徽章的判定依据使用。
+> 工程现状：除上述三个 Qwen/Bailian preset 外，其余阵容的最近核验状态仍按原记录和 tech-debt #16 管理。
 >
-> 国内套餐型官方页多为 JS 渲染中文页，本会话内的 fetch 工具无法稳定抓到当前白名单文本；仅靠 docsUrl 做指针不能等同于"今天复核"。强行打"已核准"标会把"沿用上一轮资料"伪装成事实核准，所以本轮明确**不**这么标。
+> 仅靠 docsUrl 指针不能等同于主动复核；表中只有明确标注“2026-07-21 核对”的三行可作当前 Qwen/Bailian 白名单事实源。
 
 | Provider | preset key | 官方入口（preset.meta） | 当前内置 `defaultModels` | UI 徽章范围 | 自定义添加 |
 |---|---|---|---|---|---|
 | 火山方舟 Coding Plan | `volcengine` | docsUrl: docs.bigmodel.cn 体系 / apiKeyUrl: volcengine.com 控制台 | `doubao-seed-2.0-{code,pro,lite}` / `doubao-seed-code` / `minimax-m2.5` / `glm-4.7` / `deepseek-v3.2` / `kimi-k2.5` + `ark-code-latest`（控制台管理 / Auto） | ✓ 套餐型 → `shouldShowLegacyCatalogBadge` 命中 | ✓ Models 页 "添加模型" → 套餐型 dialog |
-| 阿里云百炼 Coding Plan | `bailian` | docsUrl: bailian.console.aliyun.com / apiKeyUrl: dashscope-coding 文档 | `qwen3.6-plus` / `qwen3.5-plus` / `qwen3-max-2026-01-23` / `qwen3-coder-{next,plus}` / `kimi-k2.5` / `glm-{5,4.7}` / `MiniMax-M2.5` | ✓ 套餐型 | ✓ |
-| 阿里云百炼 Token Plan 团队版 | `bailian-token-plan-cn` | docsUrl: help.aliyun.com/zh/model-studio/token-plan / apiKeyUrl: bailian.console.aliyun.com（团队版 Key 与 Coding Plan / 普通 DashScope Key 不通用，host 走 `token-plan.cn-beijing.maas.aliyuncs.com`，仅华北2北京）| `qwen3.6-plus` / `glm-5` / `MiniMax-M2.5`（DeepSeek V3.2 不支持 Anthropic 协议，故不列入 preset）| ✓ 套餐型 | ✓ |
+| 阿里云百炼 Coding Plan | `bailian` | `https://help.aliyun.com/zh/model-studio/coding-plan`；2026-07-21 核对 | 10 个：`qwen3.7-plus` / `qwen3.6-plus` / `qwen3.5-plus` / `qwen3-max-2026-01-23` / `qwen3-coder-next` / `qwen3-coder-plus` / `kimi-k2.5` / `glm-5` / `glm-4.7` / `MiniMax-M2.5` | ✓ 套餐型 | ✓ |
+| 千问 Token Plan 个人版 | `qwen-token-plan-personal-cn` | `https://platform.qianwenai.com/docs/token-plan/personal/token-plan-personal-overview`；2026-07-21 核对 | 6 个：`qwen3.8-max-preview` / `qwen3.7-max` / `qwen3.7-plus` / `qwen3.6-flash` / `glm-5.2` / `deepseek-v4-pro` | ✓ 套餐型 | ✓ |
+| 千问 Token Plan 团队版 | `bailian-token-plan-cn` | `https://platform.qianwenai.com/docs/token-plan/team/token-plan-team-overview`；2026-07-21 核对 | 15 个：`qwen3.8-max-preview` / `qwen3.7-max` / `qwen3.7-plus` / `qwen3.6-plus` / `qwen3.6-flash` / `deepseek-v4-pro` / `deepseek-v4-flash` / `deepseek-v3.2` / `kimi-k2.7-code` / `kimi-k2.6` / `kimi-k2.5` / `glm-5.2` / `glm-5.1` / `glm-5` / `MiniMax-M2.5` | ✓ 套餐型 | ✓ |
 | 智谱 GLM Coding Plan（CN） | `glm-cn` | docs.bigmodel.cn/cn/coding-plan/tool/claude / bigmodel.cn API Keys | 3 alias：sonnet→GLM-5-Turbo, opus→GLM-5.1, haiku→GLM-4.5-Air | ✓ 套餐型 | ✓ |
 | 智谱 GLM Coding Plan（Global） | `glm-global` | docs.z.ai/devpack/tool/claude / z.ai apikey | 同 GLM CN | ✓ 套餐型 | ✓ |
 | MiniMax Coding（CN） | `minimax-cn` | platform.minimaxi.com / agent.minimaxi.com | 1 SKU：`MiniMax-M2.7` | ✓ 套餐型 | ✓ |
@@ -198,7 +204,7 @@
 
 ### 未做、待跟踪
 
-1. **catalog 主动核准（建议下一轮专门做）**：逐个 provider 对照官方 Coding Plan / Token Plan 文档（视情况用浏览器抓取或人工读图）核对当前白名单 SKU，更新代码内置 `defaultModels` 并在本节"当前内置"列旁添加"最后核对 YYYY-MM-DD + 来源 URL 截图"。触发条件：(a) 多用户反馈某 SKU 不可用 / 不见了；(b) 某 provider 公告新模型超过 30 天未跟进；(c) 进入下一个 release 前的 catalog 收尾。tech-debt tracker 已开 #16 跟踪。
+1. **其余 catalog 主动核准**：Qwen/Bailian 三项已于 2026-07-21 收口；volcengine / GLM / MiniMax / Xiaomi / DeepSeek 等仍需逐 provider 对照官方页面。触发条件与证据要求见 tech-debt #16。
 2. **Kimi / Moonshot / Xiaomi MiMo PAYG 的 catalog 启动种子是否调整为更宽**：目前 1 alias 偏窄，是否要改成更友好的"先发现一次"启动 UX，留给 Step 4「授权登录与自定义模型入口」一起评估。
 
 ## OpenRouter — search-and-add（已实现，2026-05-06）

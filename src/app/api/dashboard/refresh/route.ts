@@ -3,6 +3,7 @@ import { readDashboard, updateWidget } from '@/lib/dashboard-store';
 import { resolveGlobs, readSourceFiles } from '@/lib/dashboard-file-reader';
 import { executeCLISource } from '@/lib/dashboard-cli-reader';
 import { generateTextViaSdk } from '@/lib/claude-client';
+import { ProviderCallPolicyError } from '@/lib/provider-call-policy';
 import type { DashboardWidget } from '@/types/dashboard';
 
 const REFRESH_SYSTEM_PROMPT = `You are updating a dashboard widget with fresh data. Your job is to preserve the visual design, layout, colors, and style of the original widget EXACTLY, and only update the data-driven content.
@@ -13,7 +14,11 @@ Rules:
 3. Only change text content, numbers, data points, labels — things that reflect the underlying data.
 4. If the data hasn't meaningfully changed, output the original HTML unchanged.`;
 
-async function refreshWidget(workDir: string, widget: DashboardWidget): Promise<DashboardWidget | null> {
+async function refreshWidget(
+  workDir: string,
+  widget: DashboardWidget,
+  callScene: 'user_dashboard_refresh' | 'automatic_dashboard_refresh',
+): Promise<DashboardWidget | null> {
   // MCP tool data sources can only be refreshed via conversation MCP tools
   if (widget.dataSource.type === 'mcp_tool') return null;
 
@@ -24,7 +29,7 @@ async function refreshWidget(workDir: string, widget: DashboardWidget): Promise<
     const { content: cliOutput, exitCode } = executeCLISource(widget.dataSource.command, workDir);
     if (exitCode !== 0) return null;
     const prompt = `Original widget HTML:\n\`\`\`\n${widget.widgetCode.slice(0, 8000)}\n\`\`\`\n\nData contract: ${widget.dataContract}\n\nCurrent CLI output (${widget.dataSource.command}):\n${cliOutput.slice(0, 40000)}\n\nProduce the updated widget HTML. Output ONLY the raw HTML string.`;
-    const result = await generateTextViaSdk({ system: REFRESH_SYSTEM_PROMPT, prompt });
+    const result = await generateTextViaSdk({ callScene, system: REFRESH_SYSTEM_PROMPT, prompt });
     let updatedCode = result.trim();
     if (updatedCode.startsWith('```')) {
       updatedCode = updatedCode.replace(/^```(?:html)?\s*\n?/, '').replace(/\n?```\s*$/, '');
@@ -54,6 +59,7 @@ async function refreshWidget(workDir: string, widget: DashboardWidget): Promise<
   const prompt = `Original widget HTML:\n\`\`\`\n${widget.widgetCode.slice(0, 8000)}\n\`\`\`\n\nData contract: ${widget.dataContract}\n\nCurrent data from source files:\n${fileContent.slice(0, 40000)}\n\nProduce the updated widget HTML. Output ONLY the raw HTML string.`;
 
   const result = await generateTextViaSdk({
+    callScene,
     system: REFRESH_SYSTEM_PROMPT,
     prompt,
   });
@@ -77,6 +83,9 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const { workingDirectory, widgetId } = body;
+    const callScene = body.trigger === 'automatic'
+      ? 'automatic_dashboard_refresh' as const
+      : 'user_dashboard_refresh' as const;
 
     if (!workingDirectory) {
       return NextResponse.json({ error: 'Missing workingDirectory' }, { status: 400 });
@@ -87,11 +96,16 @@ export async function POST(req: NextRequest) {
       ? config.widgets.filter(w => w.id === widgetId)
       : config.widgets;
 
-    const results: { id: string; updated: boolean; widget?: DashboardWidget }[] = [];
+    const results: {
+      id: string;
+      updated: boolean;
+      widget?: DashboardWidget;
+      error?: { code: string; message: string };
+    }[] = [];
 
     for (const widget of widgetsToRefresh) {
       try {
-        const updated = await refreshWidget(workingDirectory, widget);
+        const updated = await refreshWidget(workingDirectory, widget, callScene);
         results.push({
           id: widget.id,
           updated: !!updated,
@@ -99,7 +113,14 @@ export async function POST(req: NextRequest) {
         });
       } catch (e) {
         console.warn(`[dashboard/refresh] Failed to refresh widget ${widget.id}:`, e);
-        results.push({ id: widget.id, updated: false, widget });
+        results.push({
+          id: widget.id,
+          updated: false,
+          widget,
+          error: e instanceof ProviderCallPolicyError
+            ? { code: e.code, message: e.message }
+            : { code: 'REFRESH_FAILED', message: e instanceof Error ? e.message : String(e) },
+        });
       }
     }
 

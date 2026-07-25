@@ -73,10 +73,7 @@ export async function POST(
   // Build the auto-enable predicate. The preset (may be undefined for
   // unknown custom URLs) feeds the catalog whitelist; the runtime compat
   // tier feeds the Claude-alias fallback.
-  const preset = findMatchingPresetForRecord({
-    provider_type: provider.provider_type,
-    base_url: provider.base_url,
-  });
+  const preset = findMatchingPresetForRecord(provider);
   const providerCompat = getProviderCompatFromApi(provider);
   const isRecommended = (modelId: string) => isRecommendedModel(modelId, preset, providerCompat);
 

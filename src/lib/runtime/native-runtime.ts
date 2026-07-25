@@ -11,6 +11,7 @@ import { buildSystemPrompt } from '../agent-system-prompt';
 import { resolveProvider } from '../provider-resolver';
 import { syncMcpConnections, disposeAll as disposeMcp } from '../mcp-connection-manager';
 import { isOAuthUsable } from '../openai-oauth-manager';
+import { isXaiOAuthUsable } from '../xai-oauth-manager';
 import { wrapController } from '../safe-stream';
 
 // Track active AbortControllers for interrupt support
@@ -40,6 +41,7 @@ export const nativeRuntime: AgentRuntime = {
 
     const stream = runAgentLoop({
       prompt: options.prompt,
+      callScene: options.callScene,
       sessionId: options.sessionId,
       providerId: options.providerId,
       sessionProviderId: options.sessionProviderId,
@@ -98,13 +100,17 @@ export const nativeRuntime: AgentRuntime = {
     // A lightweight check — don't resolve the full provider, just check if
     // there's any configured provider, env-based credentials, or OpenAI OAuth.
     try {
-      const resolved = resolveProvider({});
+      const resolved = resolveProvider({ callScene: 'connection_test' });
       if (resolved.hasCredentials || !!resolved.provider) return true;
     } catch { /* fall through */ }
 
     // Also check OpenAI OAuth — it's a virtual provider not in the DB
     try {
       if (isOAuthUsable()) return true;
+    } catch { /* module not available */ }
+
+    try {
+      if (isXaiOAuthUsable()) return true;
     } catch { /* module not available */ }
 
     return false;

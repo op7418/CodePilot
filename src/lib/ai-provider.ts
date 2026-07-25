@@ -21,6 +21,7 @@ import {
 } from 'ai';
 import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
+import { createXai } from '@ai-sdk/xai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createVertexAnthropic } from '@ai-sdk/google-vertex/anthropic';
@@ -31,12 +32,15 @@ import {
   toAiSdkConfig,
 } from './provider-resolver';
 import { ensureTokenFresh } from './openai-oauth-manager';
+import { createXaiOAuthFetch } from './xai-oauth-manager';
 import { hasClaudeSettingsCredentials } from './claude-settings';
 import { withChatImageDataUrlFetch } from './openai-chat-image-normalizer';
+import { assertProviderCallAllowed, type ProviderCallScene } from './provider-call-policy';
 
 // ── Public API ──────────────────────────────────────────────────
 
 export interface CreateModelOptions {
+  callScene: ProviderCallScene;
   providerId?: string;
   sessionProviderId?: string;
   /** Provider snapshot captured by a fail-closed upstream caller. When set,
@@ -58,13 +62,15 @@ export interface CreateModelResult {
 /**
  * Resolve provider + model and create a Vercel AI SDK LanguageModel instance.
  */
-export function createModel(opts: CreateModelOptions = {}): CreateModelResult {
+export function createModel(opts: CreateModelOptions): CreateModelResult {
   const resolved = opts.resolvedProvider ?? resolveProvider({
+    callScene: opts.callScene,
     providerId: opts.providerId,
     sessionProviderId: opts.sessionProviderId,
     model: opts.model,
     sessionModel: opts.sessionModel,
   });
+  assertProviderCallAllowed(resolved.provider, opts.callScene);
 
   if (!resolved.hasCredentials && !resolved.provider) {
     // If the user has credentials in ~/.claude/settings.json (e.g. cc-switch)
@@ -310,6 +316,18 @@ function createLanguageModel(config: AiSdkConfig, isThirdPartyProxy: boolean): L
       // gateways implement /v1/chat/completions, not /v1/responses, so
       // `.chat()` is the correct + portable wire here.
       return openai.chat(config.modelId);
+    }
+
+    case 'xai': {
+      const xai = createXai({
+        apiKey: config.useXaiOAuth ? 'xai-oauth' : config.apiKey,
+        baseURL: config.baseUrl || 'https://api.x.ai/v1',
+        ...(hasHeaders ? { headers: config.headers } : {}),
+        ...(config.useXaiOAuth ? { fetch: createXaiOAuthFetch() } : {}),
+      });
+      // Grok 4.5 is intentionally wired through xAI Responses, not the
+      // provider's OpenAI-compatible Chat Completions surface.
+      return xai.responses(config.modelId);
     }
 
     case 'google': {

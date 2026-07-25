@@ -30,6 +30,7 @@ import {
 } from '@/lib/provider-catalog';
 import { classifyError, type ClassifiedError } from '@/lib/error-classifier';
 import { getOAuthStatus } from '@/lib/openai-oauth-manager';
+import { getXaiOAuthStatus } from '@/lib/xai-oauth-manager';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type { Options, SDKResultSuccess } from '@anthropic-ai/claude-agent-sdk';
 import os from 'os';
@@ -230,21 +231,35 @@ async function runAuthProbe(): Promise<ProbeResult> {
     }
   } catch { /* OpenAI OAuth not available */ }
 
+  let xaiOAuthOk = false;
+  try {
+    const xaiStatus = getXaiOAuthStatus();
+    if (xaiStatus.authenticated) {
+      xaiOAuthOk = true;
+      findings.push({
+        severity: xaiStatus.needsRefresh ? 'warn' : 'ok',
+        code: 'auth.xai-oauth',
+        message: `xAI OAuth authenticated${xaiStatus.email ? ` (${xaiStatus.email})` : ''}`,
+        ...(xaiStatus.needsRefresh ? { detail: 'Token is near expiry and will be refreshed on next use' } : {}),
+      });
+    }
+  } catch { /* xAI OAuth not available */ }
+
   if (!envApiKey && !envAuthToken && !dbAuthToken) {
     // Check if there are any configured providers with keys
     const providers = getAllProviders();
     const withKeys = providers.filter(p => !!p.api_key);
-    if (withKeys.length === 0 && !openaiOAuthOk) {
+    if (withKeys.length === 0 && !openaiOAuthOk && !xaiOAuthOk) {
       findings.push({
         severity: 'error',
         code: 'auth.no-credentials',
-        message: 'No API credentials found (environment, DB settings, providers, or OpenAI OAuth)',
+        message: 'No API credentials found (environment, DB settings, providers, OpenAI OAuth, or xAI OAuth)',
       });
-    } else if (withKeys.length === 0 && openaiOAuthOk) {
+    } else if (withKeys.length === 0 && (openaiOAuthOk || xaiOAuthOk)) {
       findings.push({
         severity: 'ok',
-        code: 'auth.openai-oauth-only',
-        message: 'No Anthropic credentials, but OpenAI OAuth is available',
+        code: 'auth.oauth-only',
+        message: `No Anthropic credentials, but ${openaiOAuthOk && xaiOAuthOk ? 'OpenAI and xAI OAuth are' : openaiOAuthOk ? 'OpenAI OAuth is' : 'xAI OAuth is'} available`,
       });
     } else {
       findings.push({
@@ -366,6 +381,7 @@ async function runProviderProbe(): Promise<ProbeResult> {
       p.provider_type,
       p.protocol,
       p.base_url,
+      p.preset_key,
     );
 
     // Protocols that legitimately have no base_url:
@@ -446,7 +462,7 @@ async function runProviderProbe(): Promise<ProbeResult> {
       // Check if a matched preset provides its own model names (not ANTHROPIC_DEFAULT_MODELS).
       // If the preset has sdkProxyOnly or has its own models, the preset itself handles naming.
       // But for generic anthropic-thirdparty or unmatched presets, warn.
-      const matchedPreset = findPresetForLegacy(p.base_url, p.provider_type, protocol as Protocol);
+      const matchedPreset = findPresetForLegacy(p.base_url, p.provider_type, protocol as Protocol, p.preset_key);
       const presetHandlesModels = matchedPreset && (
         matchedPreset.key === 'anthropic-official' ||
         matchedPreset.defaultRoleModels?.default ||
@@ -463,7 +479,7 @@ async function runProviderProbe(): Promise<ProbeResult> {
     }
 
     // Check B: sdkProxyOnly provider warning
-    const matchedPreset = findPresetForLegacy(p.base_url, p.provider_type, protocol as Protocol);
+    const matchedPreset = findPresetForLegacy(p.base_url, p.provider_type, protocol as Protocol, p.preset_key);
     if (matchedPreset?.sdkProxyOnly) {
       findings.push({
         severity: 'ok',
@@ -756,7 +772,7 @@ async function runLiveProbe(): Promise<ProbeResult> {
   // 1. Resolve the current provider
   let resolved;
   try {
-    resolved = resolveForClaudeCode();
+    resolved = resolveForClaudeCode(undefined, { callScene: 'connection_test' });
   } catch (err) {
     findings.push({
       severity: 'warn',
@@ -996,8 +1012,8 @@ function attachRepairsToFindings(probes: ProbeResult[]): void {
             // Detect current auth style from preset catalog (not extra_env)
             const targetProvider = getProvider(targetPid);
             if (targetProvider) {
-              const protocol = (targetProvider.protocol || inferProtocolFromLegacy(targetProvider.provider_type, targetProvider.base_url)) as Protocol;
-              const preset = findPresetForLegacy(targetProvider.base_url, targetProvider.provider_type, protocol);
+              const protocol = (targetProvider.protocol || inferProtocolFromLegacy(targetProvider.provider_type, targetProvider.base_url, targetProvider.preset_key)) as Protocol;
+              const preset = findPresetForLegacy(targetProvider.base_url, targetProvider.provider_type, protocol, targetProvider.preset_key);
               const currentlyUsingToken = preset?.authStyle === 'auth_token';
               params.authStyle = currentlyUsingToken ? 'api-key' : 'auth-token';
             }

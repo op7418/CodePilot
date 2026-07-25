@@ -251,6 +251,11 @@ jobs:
           echo "better-sqlite3=$SQLITE" | tee -a build-meta-macos-arm64.txt
           [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 .node not found in bundle"; exit 1; }
           ELECTRON_RUN_AS_NODE=1 "$BIN" -e "require(process.argv[1]); console.log('better-sqlite3 OK under Electron, modules ABI=' + process.versions.modules)" "$SQLITE" | tee -a build-meta-macos-arm64.txt
+      - name: Verify packaged server startup
+        run: |
+          set -euo pipefail
+          APP=$(find release -maxdepth 4 -name "CodePilot.app" -type d | head -1)
+          node scripts/verify-packaged-server.mjs "$APP/Contents/MacOS/CodePilot" "$APP/Contents/Resources"
       - name: Checksums
         run: cd release && shasum -a 256 CodePilot-*-arm64.dmg CodePilot-*-arm64*.zip 2>/dev/null | tee checksums-macos-arm64.sha256
       - uses: actions/upload-artifact@v4
@@ -311,6 +316,12 @@ jobs:
           [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 .node not found in win-unpacked"; exit 1; }
           BIN=$(find release/win-unpacked -maxdepth 1 -name "CodePilot.exe" | head -1)
           ELECTRON_RUN_AS_NODE=1 "$BIN" -e "require(process.argv[1]); console.log('better-sqlite3 OK under Electron, modules ABI=' + process.versions.modules)" "$SQLITE" | tee -a build-meta-windows-x64.txt
+      - name: Verify packaged server startup
+        shell: bash
+        run: |
+          set -euo pipefail
+          BIN=$(find release/win-unpacked -maxdepth 1 -name "CodePilot.exe" | head -1)
+          node scripts/verify-packaged-server.mjs "$BIN" "$(dirname "$BIN")/resources"
       - name: Checksums
         shell: bash
         run: cd release && sha256sum CodePilot.Setup.*.exe 2>/dev/null | tee checksums-windows-x64.sha256

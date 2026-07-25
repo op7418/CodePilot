@@ -3,7 +3,7 @@
 import type { ReactNode } from "react";
 import { HardDrives } from "@/components/ui/icon";
 import type { ApiProvider } from "@/types";
-import { VENDOR_PRESETS, isValidProtocol } from "@/lib/provider-catalog";
+import { VENDOR_PRESETS, resolveProviderPresetIdentity } from "@/lib/provider-catalog";
 import type { VendorPreset } from "@/lib/provider-catalog";
 import { getProviderIconKey, type ProviderIconKey } from "@/lib/provider-icon-rule";
 import Anthropic from "@lobehub/icons/es/Anthropic";
@@ -23,6 +23,7 @@ import Bailian from "@lobehub/icons/es/Bailian";
 import XiaomiMiMo from "@lobehub/icons/es/XiaomiMiMo";
 import Ollama from "@lobehub/icons/es/Ollama";
 import OpenAI from "@lobehub/icons/es/OpenAI";
+import XAI from "@lobehub/icons/es/XAI";
 
 // ---------------------------------------------------------------------------
 // Brand icon resolver
@@ -44,6 +45,7 @@ const ICON_BY_KEY: Record<ProviderIconKey, ReactNode> = {
   "xiaomi-mimo": <XiaomiMiMo size={18} />,
   ollama: <Ollama size={18} />,
   openai: <OpenAI size={18} />,
+  xai: <XAI size={18} />,
   deepseek: <DeepSeek size={18} />,
   bedrock: <Bedrock size={18} />,
   google: <Google size={18} />,
@@ -101,6 +103,7 @@ function resolveIcon(iconKey: string): ReactNode {
     'xiaomi-mimo': <XiaomiMiMo size={18} />,
     ollama: <Ollama size={18} />,
     openai: <OpenAI size={18} />,
+    xai: <XAI size={18} />,
     deepseek: <DeepSeek size={18} />,
     cline: <Cline size={18} />,
     opencode: <OpenCode size={18} />,
@@ -123,6 +126,7 @@ function toQuickPreset(vp: VendorPreset): QuickPreset {
       : vp.protocol === 'gemini-image' ? 'gemini-image'
       : vp.protocol === 'openai-image' ? 'openai-image'
       : vp.protocol === 'openai-compatible' ? 'openai-compatible'
+      : vp.protocol === 'xai' ? 'xai'
       : 'anthropic',
     protocol: vp.protocol,
     authStyle: vp.authStyle,
@@ -131,7 +135,9 @@ function toQuickPreset(vp: VendorPreset): QuickPreset {
     fields: vp.fields as QuickPreset['fields'],
     category: vp.category,
     meta: vp.meta,
-    defaultModelId: vp.defaultRoleModels?.default ?? vp.defaultModels?.[0]?.upstreamModelId,
+    defaultModelId: vp.defaultRoleModels?.default
+      ?? vp.defaultModels?.[0]?.upstreamModelId
+      ?? vp.defaultModels?.[0]?.modelId,
   };
 }
 
@@ -181,52 +187,7 @@ export function getOpenAIImageModel(provider: ApiProvider): string {
 // ---------------------------------------------------------------------------
 
 export function findMatchingPreset(provider: ApiProvider): QuickPreset | undefined {
-  // Exact base_url match (most specific) — protocol-aware so a legacy OpenCode
-  // Go Anthropic record (base .../zen/go/v1) doesn't match the OpenAI half that
-  // now lives at that base. Mirrors findMatchingPresetForRecord; rows with a
-  // legacy/blank protocol keep the plain base match.
-  if (provider.base_url) {
-    const byBase = QUICK_PRESETS.filter(p => p.base_url && p.base_url === provider.base_url);
-    const wire = provider.protocol || provider.provider_type;
-    const match = byBase.find(p => p.protocol === wire)
-      ?? (isValidProtocol(wire) ? undefined : byBase[0]);
-    if (match) return match;
-  }
-  // Type-based fallback for known types
-  if (provider.provider_type === "bedrock") return QUICK_PRESETS.find(p => p.key === "bedrock");
-  if (provider.provider_type === "vertex") return QUICK_PRESETS.find(p => p.key === "vertex");
-  if (provider.provider_type === "openrouter") return QUICK_PRESETS.find(p => p.key === "openrouter");
-  // Media providers: official vs third-party share provider_type; tie-break
-  // by whether the stored base_url is the official one. Anything else goes to
-  // the third-party preset so the edit dialog exposes the base_url field.
-  if (provider.provider_type === "gemini-image") {
-    const official = QUICK_PRESETS.find(p => p.key === "gemini-image");
-    if (official && provider.base_url && provider.base_url !== official.base_url) {
-      return QUICK_PRESETS.find(p => p.key === "gemini-image-thirdparty");
-    }
-    return official;
-  }
-  if (provider.provider_type === "openai-image") {
-    const official = QUICK_PRESETS.find(p => p.key === "openai-image");
-    if (official && provider.base_url && provider.base_url !== official.base_url) {
-      return QUICK_PRESETS.find(p => p.key === "openai-image-thirdparty");
-    }
-    return official;
-  }
-  if (provider.provider_type === "anthropic" && provider.base_url === "https://api.anthropic.com") {
-    return QUICK_PRESETS.find(p => p.key === "anthropic-official");
-  }
-  // Anthropic-type with custom base_url → anthropic-thirdparty
-  if (provider.provider_type === "anthropic" && provider.base_url) {
-    return QUICK_PRESETS.find(p => p.key === "anthropic-thirdparty");
-  }
-  // Generic OpenAI-compatible third-party gateway → generic openai-compatible
-  // preset. Mirrors the server-side findMatchingPresetForRecord branch so the
-  // settings page and runtime-compat agree: the provider groups under
-  // Third-party and classifies as codepilot_only (CodePilot + Codex), not
-  // unknown.
-  if (provider.provider_type === "openai-compatible") {
-    return QUICK_PRESETS.find(p => p.key === "openai-compatible");
-  }
-  return undefined;
+  const resolution = resolveProviderPresetIdentity(provider);
+  if (resolution.status !== 'resolved') return undefined;
+  return QUICK_PRESETS.find(p => p.key === resolution.preset.key);
 }

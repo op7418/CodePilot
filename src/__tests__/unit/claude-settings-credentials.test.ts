@@ -238,7 +238,7 @@ describe('cc-switch end-to-end (no CodePilot provider, settings.json only)', () 
     let result;
     let err: Error | undefined;
     try {
-      result = createModel({});
+      result = createModel({ callScene: 'interactive_chat' });
     } catch (e) {
       err = e as Error;
     }

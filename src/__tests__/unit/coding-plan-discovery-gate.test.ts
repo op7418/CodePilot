@@ -19,7 +19,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { classifyProvider, discoverModels } from '../../lib/model-discovery';
-import { isCatalogOnlyPlanProvider, isCatalogOnlyPlanProviderRecord, getPreset } from '../../lib/provider-catalog';
+import { isCatalogOnlyPlanProvider, isCatalogOnlyPlanProviderRecord as isCatalogOnlyPlanProviderRecordResolved, getPreset } from '../../lib/provider-catalog';
+
+const isCatalogOnlyPlanProviderRecord = (record: { provider_type: string; base_url: string; preset_key?: string }) =>
+  isCatalogOnlyPlanProviderRecordResolved({
+    preset_key: record.preset_key ?? '',
+    protocol: record.provider_type,
+    ...record,
+  });
 
 describe('classifyProvider — Coding Plan / Token Plan gate', () => {
   // ── Gate-affected presets — should classify as `unsupported` ──
@@ -129,6 +136,8 @@ describe('isCatalogOnlyPlanProvider — single source of truth helper', () => {
   for (const key of [
     'volcengine',
     'bailian',
+    'qwen-token-plan-personal-cn',
+    'bailian-token-plan-cn',
     'glm-cn',
     'glm-global',
     'minimax-cn',
@@ -168,6 +177,8 @@ describe('isCatalogOnlyPlanProviderRecord — UI-safe record-aware check', () =>
   for (const key of [
     'volcengine',
     'bailian',
+    'qwen-token-plan-personal-cn',
+    'bailian-token-plan-cn',
     'glm-cn',
     'glm-global',
     'minimax-cn',
@@ -181,7 +192,11 @@ describe('isCatalogOnlyPlanProviderRecord — UI-safe record-aware check', () =>
       // gets saved with — the matcher must recover the real preset via
       // base_url, not provider_type.
       assert.equal(
-        isCatalogOnlyPlanProviderRecord({ provider_type: 'anthropic', base_url: preset.baseUrl }),
+        isCatalogOnlyPlanProviderRecord({
+          provider_type: 'anthropic',
+          base_url: preset.baseUrl,
+          preset_key: preset.key,
+        }),
         true,
       );
     });

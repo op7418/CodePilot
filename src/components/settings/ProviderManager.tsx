@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useCallback, type ReactNode } from "react";
+import { useState, useEffect, useCallback, useRef, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import {
   AlertDialog,
@@ -43,7 +43,7 @@ import { useTranslation } from "@/hooks/useTranslation";
 import type { TranslationKey } from "@/i18n";
 import { runAutoDiscoverForProvider } from "@/lib/auto-discover-models";
 import { showToast } from "@/hooks/useToast";
-import { isCatalogOnlyPlanProviderRecord, isOpenRouterProviderRecord, getProviderAccessType, type AccessType } from "@/lib/provider-catalog";
+import { isCatalogOnlyPlanProviderRecord, isOpenRouterProviderRecord, getProviderAccessType, resolveProviderPresetIdentity, type AccessType } from "@/lib/provider-catalog";
 import { sanitizeEndpointForDisplay, type SanitizeTranslator } from "@/lib/provider-endpoint-sanitize";
 import { ProviderOptionsSection } from "./ProviderOptionsSection";
 import { cn } from "@/lib/utils";
@@ -65,13 +65,13 @@ import {
 // remaining anthropic-thirdparty wildcard + relay/local presets fall to
 // "third-party / relay". Image providers stay in their own bucket.
 const OFFICIAL_DIRECT_API_KEYS = new Set([
-  'anthropic-official', 'deepseek', 'bedrock', 'vertex',
+  'anthropic-official', 'deepseek', 'xai', 'bedrock', 'vertex',
 ]);
 const CODING_PLAN_KEYS = new Set([
   'glm-cn', 'glm-global', 'kimi', 'moonshot',
   'minimax-cn', 'minimax-global', 'volcengine',
   'xiaomi-mimo', 'xiaomi-mimo-token-plan',
-  'bailian', 'bailian-token-plan-cn',
+  'bailian', 'qwen-token-plan-personal-cn', 'bailian-token-plan-cn',
   'cline-pass', 'opencode-go-openai', 'opencode-go-anthropic',
 ]);
 
@@ -133,6 +133,12 @@ export function ProviderManager() {
   const [connectPreset, setConnectPreset] = useState<QuickPreset | null>(null);
   const [connectDialogOpen, setConnectDialogOpen] = useState(false);
   const [presetEditProvider, setPresetEditProvider] = useState<ApiProvider | null>(null);
+  const [presetChoiceProvider, setPresetChoiceProvider] = useState<ApiProvider | null>(null);
+  // Identity adoption and catalog reconciliation are separate intents. A
+  // legacy row may acquire its stable preset_key during an ordinary edit,
+  // but catalog-managed model rows move only after the user explicitly picks
+  // a plan in the ambiguous-identity chooser.
+  const [reconcilePresetCatalogOnSave, setReconcilePresetCatalogOnSave] = useState(false);
 
   // Delete confirmation state
   const [deleteTarget, setDeleteTarget] = useState<ApiProvider | null>(null);
@@ -142,6 +148,28 @@ export function ProviderManager() {
   const [openaiAuth, setOpenaiAuth] = useState<{ authenticated: boolean; email?: string; plan?: string } | null>(null);
   const [openaiLoggingIn, setOpenaiLoggingIn] = useState(false);
   const [openaiError, setOpenaiError] = useState<string | null>(null);
+
+  type XaiOAuthUiStatus = {
+    enabled: boolean;
+    authenticated: boolean;
+    email?: string;
+    needsRefresh?: boolean;
+    disabledReason?: string;
+    error?: string;
+    accountUrl: string;
+  };
+  const [xaiAuth, setXaiAuth] = useState<XaiOAuthUiStatus | null>(null);
+  const [xaiLoggingIn, setXaiLoggingIn] = useState(false);
+  const [xaiError, setXaiError] = useState<string | null>(null);
+  const [xaiLoginDialogOpen, setXaiLoginDialogOpen] = useState(false);
+  const [xaiLoginMethod, setXaiLoginMethod] = useState<'browser' | 'device' | null>(null);
+  const [xaiDevice, setXaiDevice] = useState<{
+    userCode: string;
+    verificationUri: string;
+    verificationUriComplete?: string;
+    expiresIn: number;
+  } | null>(null);
+  const xaiPollTimerRef = useRef<number | null>(null);
 
   // Codex Account state — Phase 5 Phase 6 IA correction (2026-05-14).
   // Mirrors the openai-oauth pattern: virtual provider surfaces here
@@ -343,6 +371,14 @@ export function ProviderManager() {
       .catch(() => {});
   }, []);
 
+  const fetchXaiOAuthStatus = useCallback(async () => {
+    try {
+      const response = await fetch('/api/xai-oauth/status', { cache: 'no-store' });
+      if (response.ok) setXaiAuth(await response.json());
+    } catch { /* best effort */ }
+  }, []);
+  useEffect(() => { void fetchXaiOAuthStatus(); }, [fetchXaiOAuthStatus]);
+
   // Fetch Codex Account state + rate limits. Re-runs on provider-changed
   // events so login / logout updates the card without a page refresh.
   const fetchCodexAccount = useCallback(async () => {
@@ -386,11 +422,17 @@ export function ProviderManager() {
   }, [fetchModels]);
 
   const handleEdit = (provider: ApiProvider) => {
+    const identity = resolveProviderPresetIdentity(provider);
+    if (identity.status === 'ambiguous') {
+      setPresetChoiceProvider(provider);
+      return;
+    }
     // Try to match provider to a quick preset for a cleaner edit experience
     const matchedPreset = findMatchingPreset(provider);
     if (matchedPreset) {
       // Clear stale generic-form state to prevent handleEditSave picking the wrong target
       setEditingProvider(null);
+      setReconcilePresetCatalogOnSave(false);
       setConnectPreset(matchedPreset);
       setPresetEditProvider(provider);
       setConnectDialogOpen(true);
@@ -408,7 +450,10 @@ export function ProviderManager() {
     const res = await fetch(`/api/providers/${target.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(data),
+      body: JSON.stringify({
+        ...data,
+        ...(reconcilePresetCatalogOnSave ? { reconcile_catalog: true } : {}),
+      }),
     });
     if (!res.ok) {
       const errData = await res.json().catch(() => ({}));
@@ -416,6 +461,7 @@ export function ProviderManager() {
     }
     const result = await res.json();
     setProviders((prev) => prev.map((p) => (p.id === target.id ? result.provider : p)));
+    setReconcilePresetCatalogOnSave(false);
     window.dispatchEvent(new Event("provider-changed"));
   };
 
@@ -445,14 +491,13 @@ export function ProviderManager() {
     //     tell the user how to add more (search-and-add path).
     //   - Other: standard auto-discover. The user just typed a Key, the
     //     implicit expectation is "show me what I can use".
-    const recordProbe = { provider_type: newProvider.provider_type, base_url: newProvider.base_url };
-    if (isCatalogOnlyPlanProviderRecord(recordProbe)) {
+    if (isCatalogOnlyPlanProviderRecord(newProvider)) {
       showToast({
         type: 'success',
         message: t('provider.autoDiscover.catalogOnly' as TranslationKey, { name: newProvider.name }),
         duration: 6000,
       });
-    } else if (isOpenRouterProviderRecord(recordProbe)) {
+    } else if (isOpenRouterProviderRecord(newProvider)) {
       showToast({
         type: 'success',
         message: t('provider.autoDiscover.openrouterAddOnly' as TranslationKey, { name: newProvider.name }),
@@ -464,6 +509,7 @@ export function ProviderManager() {
   };
 
   const handleOpenPresetDialog = (preset: QuickPreset) => {
+    setReconcilePresetCatalogOnSave(false);
     setConnectPreset(preset);
     setPresetEditProvider(null); // ensure create mode
     setConnectDialogOpen(true);
@@ -602,6 +648,110 @@ export function ProviderManager() {
     } catch { /* ignore */ }
   };
 
+  const cancelXaiOAuthAttempt = useCallback(() => {
+    if (xaiPollTimerRef.current !== null) {
+      window.clearInterval(xaiPollTimerRef.current);
+      xaiPollTimerRef.current = null;
+    }
+    setXaiLoggingIn(false);
+    setXaiLoginMethod(null);
+    setXaiDevice(null);
+    // Best effort from the UI, fail closed on the server. The manager's abort
+    // checks guarantee a late device response cannot persist after this call.
+    void fetch('/api/xai-oauth/cancel', { method: 'POST' });
+  }, []);
+
+  const pollXaiOAuthCompletion = useCallback((timeoutMs: number) => {
+    if (xaiPollTimerRef.current !== null) window.clearInterval(xaiPollTimerRef.current);
+    const deadline = Date.now() + timeoutMs;
+    const timer = window.setInterval(async () => {
+      if (Date.now() >= deadline) {
+        cancelXaiOAuthAttempt();
+        setXaiError(isZh ? 'xAI 登录超时，请重试' : 'xAI login timed out. Please try again.');
+        return;
+      }
+      try {
+        const response = await fetch('/api/xai-oauth/status', { cache: 'no-store' });
+        if (!response.ok) return;
+        const status = await response.json() as XaiOAuthUiStatus;
+        setXaiAuth(status);
+        if (status.error) {
+          window.clearInterval(timer);
+          xaiPollTimerRef.current = null;
+          setXaiLoggingIn(false);
+          setXaiLoginMethod(null);
+          setXaiError(status.error);
+          return;
+        }
+        if (status.authenticated) {
+          window.clearInterval(timer);
+          xaiPollTimerRef.current = null;
+          setXaiLoggingIn(false);
+          setXaiLoginMethod(null);
+          setXaiLoginDialogOpen(false);
+          setXaiDevice(null);
+          fetchModels();
+          window.dispatchEvent(new Event('provider-changed'));
+        }
+      } catch { /* keep polling */ }
+    }, 2000);
+    xaiPollTimerRef.current = timer;
+  }, [cancelXaiOAuthAttempt, fetchModels, isZh]);
+
+  useEffect(() => () => {
+    if (xaiPollTimerRef.current !== null) window.clearInterval(xaiPollTimerRef.current);
+  }, []);
+
+  const handleXaiLogin = useCallback(async (method: 'browser' | 'device') => {
+    setXaiLoggingIn(true);
+    setXaiLoginMethod(method);
+    setXaiError(null);
+    setXaiDevice(null);
+    try {
+      const response = await fetch(`/api/xai-oauth/start?method=${method}`);
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || 'Failed to start xAI login');
+      if (method === 'browser') {
+        window.open(data.authUrl, '_blank', 'noopener,noreferrer');
+      } else {
+        setXaiDevice({
+          userCode: data.userCode,
+          verificationUri: data.verificationUri,
+          verificationUriComplete: data.verificationUriComplete,
+          expiresIn: data.expiresIn,
+        });
+      }
+      // Match the client deadline to the actual server flow. Browser login has
+      // a five-minute manager deadline; device codes normally live for ten
+      // minutes and must not be cancelled halfway through their advertised
+      // lifetime. The small margin lets the final status poll observe the
+      // manager's terminal state before the UI performs its safety cancel.
+      const serverLifetimeMs = method === 'device' && typeof data.expiresIn === 'number'
+        ? data.expiresIn * 1000
+        : 5 * 60 * 1000;
+      pollXaiOAuthCompletion(serverLifetimeMs + 5_000);
+    } catch (error) {
+      setXaiLoggingIn(false);
+      setXaiLoginMethod(null);
+      setXaiError(error instanceof Error ? error.message : 'xAI login failed');
+    }
+  }, [pollXaiOAuthCompletion]);
+
+  const handleXaiLogout = useCallback(async () => {
+    try {
+      await fetch('/api/xai-oauth/status', { method: 'DELETE' });
+      setXaiAuth(previous => ({
+        enabled: previous?.enabled ?? true,
+        authenticated: false,
+        accountUrl: previous?.accountUrl || 'https://accounts.x.ai',
+      }));
+      setXaiLoginMethod(null);
+      setXaiDevice(null);
+      fetchModels();
+      window.dispatchEvent(new Event('provider-changed'));
+    } catch { /* best effort */ }
+  }, [fetchModels]);
+
   // ── Codex Account login / logout ──
   // Login is a two-step UX: POST kicks off the flow and returns an
   // authUrl; we show that URL as an explicit click-to-open link (no
@@ -620,15 +770,23 @@ export function ProviderManager() {
       const json = await res.json();
       if (!res.ok || json?.error) {
         setCodexError(typeof json?.error === 'string' ? json.error : `HTTP ${res.status}`);
-        return;
+        return false;
       }
-      setCodexLoginStart(json?.login ?? null);
+      if (!json?.login) {
+        setCodexError(isZh
+          ? 'Codex 登录未返回有效会话，请重试。'
+          : 'Codex login did not return a login session. Please retry.');
+        return false;
+      }
+      setCodexLoginStart(json.login);
+      return true;
     } catch (err) {
       setCodexError(err instanceof Error ? err.message : String(err));
+      return false;
     } finally {
       setCodexLoggingIn(false);
     }
-  }, []);
+  }, [isZh]);
 
   const handleCodexLoginCancel = useCallback(async () => {
     if (codexLoginStart && codexLoginStart.type !== 'apiKey') {
@@ -707,6 +865,11 @@ export function ProviderManager() {
         // 'thirdparty' (the user-configured custom anthropic-compat
         // gateway case).
         const categorizeProvider = (p: ApiProvider): 'official' | 'codeplan' | 'thirdparty' => {
+          const identity = resolveProviderPresetIdentity(p);
+          if (
+            identity.status === 'ambiguous'
+            && identity.candidateKeys.every(key => CODING_PLAN_KEYS.has(key))
+          ) return 'codeplan';
           const matched = findMatchingPreset(p);
           if (!matched) return 'thirdparty';
           if (OFFICIAL_DIRECT_API_KEYS.has(matched.key)) return 'official';
@@ -726,7 +889,7 @@ export function ProviderManager() {
         const hasCodePlan = codePlanDbProviders.length > 0;
         const hasThirdparty = thirdpartyDbProviders.length > 0;
         const hasImage = imageDbProviders.length > 0;
-        const isCompletelyEmpty = sorted.length === 0 && !hasEnvClaude && !openaiAuth?.authenticated;
+        const isCompletelyEmpty = sorted.length === 0 && !hasEnvClaude && !openaiAuth?.authenticated && !xaiAuth?.authenticated;
 
         // Total = enabled + hidden in provider_models (or catalog size when
         // the table is empty). Mirrors the "synced" semantics rather than the
@@ -744,15 +907,18 @@ export function ProviderManager() {
         // LLM 第三方 (DB API key) provider card — keeps Anthropic-official options block beneath
         const renderLlmDbProviderCard = (provider: ApiProvider) => {
           const matched = findMatchingPreset(provider);
-          const status: ProviderCardStatus = provider.api_key ? 'available' : 'needs-config';
+          const identity = resolveProviderPresetIdentity(provider);
+          const needsPresetChoice = identity.status === 'ambiguous';
+          const status: ProviderCardStatus = needsPresetChoice
+            ? 'needs-config'
+            : provider.api_key ? 'available' : 'needs-config';
           // Step 4 文案收口: 把工程枚举 (Auth Token / API Key) 映射成
           // 用户面接入方式分类（套餐 Token / API Key / 授权登录 / 本地服务
           // / 中转网关 / 云账号凭证），见 `getProviderAccessType` 注释。
-          const accessType = getProviderAccessType({
-            provider_type: provider.provider_type,
-            base_url: provider.base_url,
-          });
-          const authMethod = t(ACCESS_TYPE_I18N[accessType]);
+          const accessType = getProviderAccessType(provider);
+          const authMethod = needsPresetChoice
+            ? (isZh ? '套餐类型待确认' : 'Plan type needs confirmation')
+            : t(ACCESS_TYPE_I18N[accessType]);
           const totalCount = getTotalModelCount(provider.id);
           const enabledCount = getEnabledModelCount(provider.id);
           const lastRefreshedAt = getLastRefreshedAt(provider.id);
@@ -805,7 +971,10 @@ export function ProviderManager() {
                   icon: getProviderIcon(provider.name, provider.base_url),
                   name: provider.name,
                   status,
-                  compat: getProviderCompat({ provider_type: provider.provider_type, base_url: provider.base_url }),
+                  statusLabel: needsPresetChoice
+                    ? (isZh ? '请选择套餐类型' : 'Choose plan type')
+                    : undefined,
+                  compat: getProviderCompat(provider),
                   info,
                 }}
                 onEdit={() => handleEdit(provider)}
@@ -982,7 +1151,7 @@ export function ProviderManager() {
                     actually connected. The unsigned entry lives in the Add
                     Service full-screen flow, so the default page stays
                     "已连接服务" only and the empty-state can still trigger. */}
-                {(openaiAuth?.authenticated || codexAccount?.kind === 'logged_in') && (
+                {(openaiAuth?.authenticated || xaiAuth?.authenticated || codexAccount?.kind === 'logged_in') && (
                   <section className="space-y-3">
                     <h4 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
                       {t('provider.categoryOAuth')}
@@ -1003,6 +1172,30 @@ export function ProviderManager() {
                             ],
                           }}
                           onDelete={handleOpenAILogout}
+                        />
+                      )}
+                      {xaiAuth?.authenticated && (
+                        <ProviderCard
+                          isZh={isZh}
+                          data={{
+                            icon: getProviderIcon('xAI Grok', 'https://api.x.ai/v1'),
+                            name: isZh ? 'xAI Grok OAuth' : 'xAI Grok OAuth',
+                            status: 'available',
+                            statusLabel: isZh ? '已登录' : 'Signed in',
+                            compat: 'codepilot_only',
+                            info: [
+                              { label: isZh ? '额度渠道' : 'Billing source', value: 'SuperGrok-compatible OAuth' },
+                              ...(xaiAuth.email ? [{ label: isZh ? '账号' : 'Account', value: xaiAuth.email }] : []),
+                            ],
+                          }}
+                          primaryAction={
+                            <Button asChild variant="ghost" size="sm" className="h-8 px-3 text-xs">
+                              <a href={xaiAuth.accountUrl} target="_blank" rel="noreferrer">
+                                {isZh ? '管理账号' : 'Manage account'}
+                              </a>
+                            </Button>
+                          }
+                          onDelete={handleXaiLogout}
                         />
                       )}
                       {codexAccount?.kind === 'logged_in' && (
@@ -1168,7 +1361,7 @@ export function ProviderManager() {
               // OAuth entries — synthetic (not preset-based). Always shown so the
               // category stays visible; already-connected entries are rendered
               // disabled with a "已登录" tag instead of being hidden.
-              type OAuthEntry = { key: string; name: string; description: string; descriptionZh: string; icon: ReactNode; onClick: () => void; connected?: boolean };
+              type OAuthEntry = { key: string; name: string; description: string; descriptionZh: string; icon: ReactNode; onClick: () => void; connected?: boolean; loading?: boolean; disabled?: boolean };
               const oauthEntries: OAuthEntry[] = [
                 {
                   key: 'openai-oauth',
@@ -1178,6 +1371,25 @@ export function ProviderManager() {
                   icon: getProviderIcon('OpenAI', ''),
                   onClick: () => { setAddServiceOpen(false); handleOpenAILogin(); },
                   connected: !!openaiAuth?.authenticated,
+                },
+                {
+                  key: 'xai-oauth',
+                  name: 'xAI Grok OAuth',
+                  description: xaiAuth?.disabledReason
+                    || 'SuperGrok-compatible browser or device login; depends on xAI upstream policy. API Key remains available.',
+                  descriptionZh: xaiAuth?.disabledReason
+                    || '兼容 SuperGrok 的浏览器/设备码登录，依赖 xAI 上游策略；可改用 API Key。',
+                  icon: getProviderIcon('xAI Grok', 'https://api.x.ai/v1'),
+                  onClick: () => {
+                    setAddServiceOpen(false);
+                    setXaiLoginMethod(null);
+                    setXaiDevice(null);
+                    setXaiError(null);
+                    setXaiLoginDialogOpen(true);
+                  },
+                  connected: !!xaiAuth?.authenticated,
+                  loading: xaiLoggingIn,
+                  disabled: xaiAuth?.enabled === false,
                 },
                 {
                   // Phase 5 Phase 6 IA correction (2026-05-14) — Codex
@@ -1191,8 +1403,16 @@ export function ProviderManager() {
                   description: 'Sign in to Codex with ChatGPT Plus/Pro — gpt-5.5 etc.',
                   descriptionZh: '登录 Codex（ChatGPT Plus/Pro 账户）— 可使用 gpt-5.5 等',
                   icon: getProviderIcon('OpenAI', ''),
-                  onClick: () => { setAddServiceOpen(false); void handleCodexLogin(); },
+                  // Keep the picker open until the app-server accepts the
+                  // login request. On failure, the error below remains in the
+                  // user's current context instead of disappearing with it.
+                  onClick: () => {
+                    void handleCodexLogin().then((started) => {
+                      if (started) setAddServiceOpen(false);
+                    });
+                  },
                   connected: codexAccount?.kind === 'logged_in',
+                  loading: codexLoggingIn,
                 },
               ];
 
@@ -1214,11 +1434,12 @@ export function ProviderManager() {
               const renderOAuthButton = (entry: OAuthEntry) => (
                 <button
                   key={entry.key}
-                  onClick={entry.connected ? undefined : entry.onClick}
-                  disabled={entry.connected}
+                  onClick={entry.connected || entry.loading || entry.disabled ? undefined : entry.onClick}
+                  disabled={entry.connected || entry.loading || entry.disabled}
+                  aria-busy={entry.loading || undefined}
                   className={cn(
                     "flex items-center gap-3 rounded-md bg-muted/40 px-4 py-3 text-left transition-colors",
-                    entry.connected ? "opacity-60 cursor-default" : "hover:bg-muted",
+                    entry.connected || entry.loading || entry.disabled ? "opacity-60 cursor-default" : "hover:bg-muted",
                   )}
                 >
                   <div className="shrink-0 size-9 rounded-md bg-card flex items-center justify-center">{entry.icon}</div>
@@ -1228,6 +1449,16 @@ export function ProviderManager() {
                       {entry.connected && (
                         <span className="inline-flex items-center rounded-full bg-status-success-muted px-1.5 py-0.5 text-[10px] font-medium text-status-success-foreground">
                           {isZh ? '已登录' : 'Signed in'}
+                        </span>
+                      )}
+                      {entry.loading && (
+                        <span className="text-[10px] font-normal text-muted-foreground">
+                          {isZh ? '连接中…' : 'Connecting…'}
+                        </span>
+                      )}
+                      {entry.disabled && (
+                        <span className="text-[10px] font-normal text-muted-foreground">
+                          {isZh ? '已关闭' : 'Disabled'}
                         </span>
                       )}
                     </div>
@@ -1247,6 +1478,16 @@ export function ProviderManager() {
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {oauthEntries.map(renderOAuthButton)}
                       </div>
+                      {codexError && (
+                        <p className="mt-2 text-[11px] text-destructive" role="alert">
+                          {codexError}
+                        </p>
+                      )}
+                      {xaiError && (
+                        <p className="mt-2 text-[11px] text-destructive" role="alert">
+                          {xaiError}
+                        </p>
+                      )}
                     </div>
                   )}
 
@@ -1383,6 +1624,50 @@ export function ProviderManager() {
       </Dialog>
 
       {/* Edit dialog (full form for editing existing providers) */}
+      <Dialog
+        open={!!presetChoiceProvider}
+        onOpenChange={(open) => { if (!open) setPresetChoiceProvider(null); }}
+      >
+        <DialogContent className="sm:max-w-lg">
+          <DialogHeader>
+            <DialogTitle>{isZh ? '请选择套餐类型' : 'Choose the plan type'}</DialogTitle>
+            <DialogDescription>
+              {isZh
+                ? '这个旧配置使用个人版与团队版共用的地址，CodePilot 无法从地址或 Key 判断套餐。选择实际购买的类型后，目录管理的模型会更新为该套餐白名单；手动添加或手动编辑的模型会保留。'
+                : 'This legacy configuration uses an endpoint shared by Personal and Team plans. CodePilot cannot infer the product from the endpoint or key. Choosing your plan updates catalog-managed models to its allowlist; manually added or edited models are preserved.'}
+            </DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-3 mt-2">
+            {presetChoiceProvider && (() => {
+              const resolution = resolveProviderPresetIdentity(presetChoiceProvider);
+              if (resolution.status !== 'ambiguous') return null;
+              return QUICK_PRESETS
+                .filter(preset => resolution.candidateKeys.includes(preset.key))
+                .map(preset => (
+                  <button
+                    key={preset.key}
+                    className="rounded-md border border-border/60 bg-muted/30 px-4 py-3 text-left hover:bg-muted transition-colors"
+                    onClick={() => {
+                      const provider = presetChoiceProvider;
+                      setPresetChoiceProvider(null);
+                      setEditingProvider(null);
+                      setReconcilePresetCatalogOnSave(true);
+                      setConnectPreset(preset);
+                      setPresetEditProvider(provider);
+                      setConnectDialogOpen(true);
+                    }}
+                  >
+                    <span className="block text-sm font-medium">{preset.name}</span>
+                    <span className="block text-xs text-muted-foreground mt-1">
+                      {isZh ? preset.descriptionZh : preset.description}
+                    </span>
+                  </button>
+                ));
+            })()}
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <ProviderForm
         open={formOpen}
         onOpenChange={setFormOpen}
@@ -1398,7 +1683,10 @@ export function ProviderManager() {
         open={connectDialogOpen}
         onOpenChange={(open) => {
           setConnectDialogOpen(open);
-          if (!open) setPresetEditProvider(null);
+          if (!open) {
+            setPresetEditProvider(null);
+            setReconcilePresetCatalogOnSave(false);
+          }
         }}
         onSave={presetEditProvider ? handleEditSave : handlePresetAdd}
         editProvider={presetEditProvider}
@@ -1573,6 +1861,85 @@ export function ProviderManager() {
               );
             })()}
           </div>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog
+        open={xaiLoginDialogOpen}
+        onOpenChange={(open) => {
+          setXaiLoginDialogOpen(open);
+          if (!open && xaiLoggingIn) {
+            cancelXaiOAuthAttempt();
+          }
+        }}
+      >
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{isZh ? '登录 xAI Grok OAuth' : 'Sign in to xAI Grok OAuth'}</DialogTitle>
+            <DialogDescription>
+              {isZh
+                ? '这是兼容接入，复用公开 Grok CLI OAuth client，可能受 xAI 上游策略调整影响。xAI API Key 是独立且更稳定的备用渠道。'
+                : 'This compatibility login reuses the public Grok CLI OAuth client and may be affected by xAI policy changes. xAI API Key remains a separate, more stable fallback.'}
+            </DialogDescription>
+          </DialogHeader>
+
+          {xaiLoginMethod === null ? (
+            <div className="grid gap-3 py-3 sm:grid-cols-2">
+              <Button
+                variant="default"
+                disabled={xaiLoggingIn}
+                onClick={() => void handleXaiLogin('browser')}
+              >
+                {isZh ? '浏览器登录' : 'Browser login'}
+              </Button>
+              <Button
+                variant="outline"
+                disabled={xaiLoggingIn}
+                onClick={() => void handleXaiLogin('device')}
+              >
+                {isZh ? '设备码登录' : 'Device-code login'}
+              </Button>
+            </div>
+          ) : xaiLoginMethod === 'browser' ? (
+            <div className="rounded-md border border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
+              {isZh
+                ? '浏览器授权页面已打开。请在浏览器中完成登录；此流程不需要设备码，完成后窗口会自动收起。'
+                : 'The browser authorization page is open. Complete sign-in there; no device code is required, and this dialog will close automatically.'}
+            </div>
+          ) : xaiDevice ? (
+            <div className="space-y-3 py-3">
+              <p className="text-sm text-muted-foreground">
+                {isZh ? '打开验证页面并输入设备码：' : 'Open the verification page and enter this device code:'}
+              </p>
+              <div className="rounded-md bg-muted px-4 py-3 text-center font-mono text-xl tracking-widest">
+                {xaiDevice.userCode}
+              </div>
+              <a
+                href={xaiDevice.verificationUriComplete || xaiDevice.verificationUri}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex items-center gap-1 text-sm text-primary hover:underline"
+              >
+                {xaiDevice.verificationUri}
+                <ArrowSquareOut size={14} />
+              </a>
+              <p className="text-xs text-muted-foreground">
+                {isZh ? `设备码约 ${Math.ceil(xaiDevice.expiresIn / 60)} 分钟后过期。` : `The code expires in about ${Math.ceil(xaiDevice.expiresIn / 60)} minutes.`}
+              </p>
+            </div>
+          ) : (
+            <p className="py-3 text-sm text-muted-foreground">
+              {isZh ? '正在获取设备码…' : 'Requesting a device code…'}
+            </p>
+          )}
+
+          {xaiLoggingIn && (
+            <p className="flex items-center gap-2 text-xs text-muted-foreground">
+              <SpinnerGap size={13} className="animate-spin" />
+              {isZh ? '等待 xAI 授权完成…' : 'Waiting for xAI authorization…'}
+            </p>
+          )}
+          {xaiError && <p className="text-xs text-destructive" role="alert">{xaiError}</p>}
         </DialogContent>
       </Dialog>
 

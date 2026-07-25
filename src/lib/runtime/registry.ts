@@ -179,7 +179,7 @@ export function predictNativeRuntime(providerId?: string): boolean {
   // codex_runtime branch above already short-circuits when the global
   // default is Codex; the check here covers the residual case where
   // openai-oauth is the active provider and the global isn't Codex.
-  if (providerId === 'openai-oauth') return true;
+  if (providerId === 'openai-oauth' || providerId === 'xai-oauth') return true;
 
   // cli_enabled=false → native for the legacy pair (codex already handled)
   if (getSetting('cli_enabled') === 'false') return true;

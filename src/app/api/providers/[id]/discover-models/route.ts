@@ -77,10 +77,7 @@ export async function POST(
     return NextResponse.json<ErrorResponse>({ error: 'Provider not found' }, { status: 404 });
   }
 
-  const matched = findMatchingPresetForRecord({
-    provider_type: provider.provider_type,
-    base_url: provider.base_url,
-  });
+  const matched = findMatchingPresetForRecord(provider);
   const authStyle: 'api_key' | 'auth_token' | undefined = (() => {
     const fromPreset = matched?.authStyle;
     if (fromPreset === 'api_key' || fromPreset === 'auth_token') return fromPreset;
@@ -202,10 +199,7 @@ export async function GET(
   if (!provider) {
     return NextResponse.json<ErrorResponse>({ error: 'Provider not found' }, { status: 404 });
   }
-  const matched = findMatchingPresetForRecord({
-    provider_type: provider.provider_type,
-    base_url: provider.base_url,
-  });
+  const matched = findMatchingPresetForRecord(provider);
   const c = classifyProvider({
     protocol: matched?.protocol ?? provider.provider_type ?? 'unknown',
     presetKey: matched?.key,

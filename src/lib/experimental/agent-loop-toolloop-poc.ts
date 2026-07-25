@@ -171,6 +171,7 @@ export function runToolLoopAgentPoc(options: AgentLoopOptions): ReadableStream<s
 
         // 1. Create model (same factory as agent-loop)
         const { languageModel, modelId, config, isThirdPartyProxy } = createModel({
+          callScene: 'interactive_chat',
           providerId,
           sessionProviderId,
           model: modelOverride,

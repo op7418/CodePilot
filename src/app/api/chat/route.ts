@@ -138,7 +138,7 @@ export async function POST(request: NextRequest) {
         requestProviderId: provider_id || undefined,
         requestModel: model || undefined,
       },
-      { runtime: effectiveSessionRuntime },
+      { runtime: effectiveSessionRuntime, callScene: 'interactive_chat' },
     );
     if (resolved.invalidReason) {
       releaseSessionLock(session_id, lockId);
@@ -757,6 +757,7 @@ export async function POST(request: NextRequest) {
     });
     const stream = streamClaude({
       prompt: content,
+      callScene: 'interactive_chat',
       sessionId: session_id,
       // Session-lock ownership token minted above (crypto.randomBytes). Plumbed
       // so this turn's Query registers/unregisters under the lock owner (I1 gate).
@@ -826,6 +827,7 @@ export async function POST(request: NextRequest) {
     // live const by the time the interval closes over it, and lockRenewalInterval
     // is assigned before any 60s tick or settle can run clearRenewal.
     let renewalCount = 0;
+    // eslint-disable-next-line prefer-const -- intentional forward declaration for the mutual closures described above
     let lockRenewalInterval: ReturnType<typeof setInterval>;
 
     // codex-stop-recovery Phase 3 — Stop/abort watchdog resources. Declared

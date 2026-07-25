@@ -24,17 +24,34 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
 import {
-  isModelInCurrentCatalog,
-  isCatalogOnlyPlanProviderRecord,
-  isOpenRouterProviderRecord,
-  getCatalogDefaultModelsForRecord,
-  shouldShowLegacyCatalogBadge,
-  canSearchUpstreamModels,
-  canReliablyFetchModels,
-  findMatchingPresetForRecord,
+  isModelInCurrentCatalog as isModelInCurrentCatalogResolved,
+  isCatalogOnlyPlanProviderRecord as isCatalogOnlyPlanProviderRecordResolved,
+  isOpenRouterProviderRecord as isOpenRouterProviderRecordResolved,
+  getCatalogDefaultModelsForRecord as getCatalogDefaultModelsForRecordResolved,
+  shouldShowLegacyCatalogBadge as shouldShowLegacyCatalogBadgeResolved,
+  canSearchUpstreamModels as canSearchUpstreamModelsResolved,
+  canReliablyFetchModels as canReliablyFetchModelsResolved,
+  findMatchingPresetForRecord as findMatchingPresetForRecordResolved,
   getPreset,
-  getProviderAccessType,
+  getProviderAccessType as getProviderAccessTypeResolved,
 } from "../../lib/provider-catalog";
+
+type LegacyRecord = { provider_type: string; base_url: string; preset_key?: string; protocol?: string };
+const identity = (record: LegacyRecord) => ({
+  preset_key: record.preset_key ?? '',
+  protocol: record.protocol ?? record.provider_type,
+  provider_type: record.provider_type,
+  base_url: record.base_url,
+});
+const isModelInCurrentCatalog = (record: LegacyRecord, modelId: string) => isModelInCurrentCatalogResolved(identity(record), modelId);
+const isCatalogOnlyPlanProviderRecord = (record: LegacyRecord) => isCatalogOnlyPlanProviderRecordResolved(identity(record));
+const isOpenRouterProviderRecord = (record: LegacyRecord) => isOpenRouterProviderRecordResolved(identity(record));
+const getCatalogDefaultModelsForRecord = (record: LegacyRecord) => getCatalogDefaultModelsForRecordResolved(identity(record));
+const shouldShowLegacyCatalogBadge = (record: LegacyRecord, modelId: string) => shouldShowLegacyCatalogBadgeResolved(identity(record), modelId);
+const canSearchUpstreamModels = (record: LegacyRecord) => canSearchUpstreamModelsResolved(identity(record));
+const canReliablyFetchModels = (record: LegacyRecord) => canReliablyFetchModelsResolved(identity(record));
+const findMatchingPresetForRecord = (record: LegacyRecord) => findMatchingPresetForRecordResolved(identity(record));
+const getProviderAccessType = (record: LegacyRecord) => getProviderAccessTypeResolved(identity(record));
 
 describe("isModelInCurrentCatalog", () => {
   it("returns true for a model that IS in the catalog (DeepSeek v4 family)", () => {
@@ -230,7 +247,7 @@ describe("shouldShowLegacyCatalogBadge — authoritative-catalog gate", () => {
   });
 });
 
-describe("Bailian Token Plan 团队版 — separate channel from Coding Plan", () => {
+describe("Qwen Token Plan products — explicit identity and current catalogs", () => {
   // The two Bailian plans share the vendor brand but diverge on host, key
   // family, and SKU whitelist. This block locks in:
   //   1. Coding Plan (existing) is preserved unchanged (Qwen + Kimi + GLM
@@ -246,6 +263,8 @@ describe("Bailian Token Plan 团队版 — separate channel from Coding Plan", (
     base_url: "https://coding.dashscope.aliyuncs.com/apps/anthropic",
   };
   const tokenPlan = {
+    preset_key: "bailian-token-plan-cn",
+    protocol: "anthropic",
     provider_type: "anthropic",
     base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic",
   };
@@ -276,41 +295,43 @@ describe("Bailian Token Plan 团队版 — separate channel from Coding Plan", (
     assert.equal(result.reliable, false);
   });
 
-  it("Token Plan defaultModels excludes deepseek-v3.2 (docs say not supported on Anthropic)", () => {
+  it("Team plan has the exact current 15-model text whitelist", () => {
     const preset = getPreset("bailian-token-plan-cn");
     assert.ok(preset, "Token Plan preset must exist");
     const ids = preset!.defaultModels.map(m => m.modelId);
     assert.deepEqual(
       ids,
-      ["qwen3.6-plus", "glm-5", "MiniMax-M2.5"],
-      "Token Plan whitelist must be exactly these three Anthropic-protocol models",
+      [
+        "qwen3.8-max-preview", "qwen3.7-max", "qwen3.7-plus", "qwen3.6-plus",
+        "qwen3.6-flash", "deepseek-v4-pro", "deepseek-v4-flash", "deepseek-v3.2",
+        "kimi-k2.7-code", "kimi-k2.6", "kimi-k2.5", "glm-5.2", "glm-5.1",
+        "glm-5", "MiniMax-M2.5",
+      ],
+      "Team Token Plan whitelist must stay byte-for-byte aligned with the official text lineup",
     );
-    assert.ok(!ids.includes("deepseek-v3.2"), "deepseek-v3.2 must NOT be in Token Plan defaults");
-    assert.ok(!ids.includes("deepseek-v3.2-exp"), "deepseek-v3.2-exp must NOT be in Token Plan defaults");
   });
 
-  it("Token Plan defaultRoleModels all point to qwen3.6-plus (per docs sample config)", () => {
+  it("Team Token Plan role mapping follows the current Qwen example", () => {
     const preset = getPreset("bailian-token-plan-cn");
     assert.ok(preset?.defaultRoleModels, "Token Plan preset must define defaultRoleModels");
-    assert.equal(preset!.defaultRoleModels!.default, "qwen3.6-plus");
-    assert.equal(preset!.defaultRoleModels!.sonnet, "qwen3.6-plus");
-    assert.equal(preset!.defaultRoleModels!.opus, "qwen3.6-plus");
-    assert.equal(preset!.defaultRoleModels!.haiku, "qwen3.6-plus");
+    assert.equal(preset!.defaultRoleModels!.default, "qwen3.8-max-preview");
+    assert.equal(preset!.defaultRoleModels!.sonnet, "qwen3.8-max-preview");
+    assert.equal(preset!.defaultRoleModels!.opus, "qwen3.8-max-preview");
+    assert.equal(preset!.defaultRoleModels!.haiku, "qwen3.6-flash");
+    assert.equal(preset!.defaultEnvOverrides.CLAUDE_CODE_SUBAGENT_MODEL, "qwen3.7-max");
   });
 
-  it("Coding Plan preset is preserved unchanged (still 9-SKU lineup)", () => {
-    // Regression guard: adding Token Plan must not have edited the
-    // existing Coding Plan SKUs. Anchor on a couple of canonical entries.
+  it("Coding Plan has the exact current 10-SKU lineup", () => {
     const preset = getPreset("bailian");
     assert.ok(preset, "Coding Plan preset must still exist under key 'bailian'");
     const ids = preset!.defaultModels.map(m => m.modelId);
     assert.equal(preset!.baseUrl, "https://coding.dashscope.aliyuncs.com/apps/anthropic");
     assert.equal(preset!.meta?.billingModel, "coding_plan");
-    assert.ok(ids.includes("qwen3.6-plus"), "Coding Plan must still list qwen3.6-plus");
-    assert.ok(ids.includes("kimi-k2.5"), "Coding Plan must still list kimi-k2.5");
-    assert.ok(ids.includes("glm-5"), "Coding Plan must still list glm-5");
-    assert.ok(ids.includes("MiniMax-M2.5"), "Coding Plan must still list MiniMax-M2.5");
-    assert.equal(ids.length, 9, "Coding Plan SKU count must remain 9");
+    assert.deepEqual(ids, [
+      "qwen3.7-plus", "qwen3.6-plus", "qwen3.5-plus", "qwen3-max-2026-01-23",
+      "qwen3-coder-next", "qwen3-coder-plus", "kimi-k2.5", "glm-5", "glm-4.7",
+      "MiniMax-M2.5",
+    ]);
   });
 
   it("legacy badge does NOT fire for Token Plan canonical SKU", () => {
@@ -319,11 +340,11 @@ describe("Bailian Token Plan 团队版 — separate channel from Coding Plan", (
     assert.equal(shouldShowLegacyCatalogBadge(tokenPlan, "MiniMax-M2.5"), false);
   });
 
-  it("legacy badge fires for off-whitelist SKU on Token Plan (e.g. deepseek-v3.2)", () => {
+  it("legacy badge fires for an off-whitelist Team SKU", () => {
     // Plan-provider authoritative catalog → anything outside the whitelist
     // should be flagged. This covers the case where a user manually adds
     // deepseek-v3.2 thinking it works on Token Plan via Anthropic protocol.
-    assert.equal(shouldShowLegacyCatalogBadge(tokenPlan, "deepseek-v3.2"), true);
+    assert.equal(shouldShowLegacyCatalogBadge(tokenPlan, "deepseek-v3.2-exp"), true);
   });
 });
 
@@ -343,7 +364,12 @@ describe("getProviderAccessType — Step 4 user-facing taxonomy", () => {
 
   it("Token Plan provider (Bailian Token Plan 团队版) → subscription_token", () => {
     assert.equal(
-      getProviderAccessType({ provider_type: "anthropic", base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic" }),
+      getProviderAccessType({
+        preset_key: "bailian-token-plan-cn",
+        protocol: "anthropic",
+        provider_type: "anthropic",
+        base_url: "https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic",
+      }),
       "subscription_token",
     );
   });

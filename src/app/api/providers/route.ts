@@ -5,6 +5,7 @@ import {
   isValidProtocol,
   isOpenRouterProviderRecord,
   getCatalogDefaultModelsForRecord,
+  resolveProviderPresetIdentity,
 } from '@/lib/provider-catalog';
 import type { ProviderResponse, ErrorResponse, CreateProviderRequest, ApiProvider } from '@/types';
 
@@ -77,7 +78,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json<ErrorResponse>(
         {
           error: `Unknown protocol '${body.protocol}'. Supported protocols: ${[...[...new Set([
-            'anthropic', 'openai-compatible', 'openrouter', 'bedrock', 'vertex', 'google', 'gemini-image', 'openai-image',
+            'anthropic', 'openai-compatible', 'xai', 'openrouter', 'bedrock', 'vertex', 'google', 'gemini-image', 'openai-image',
           ])]].join(', ')}.`,
           code: 'INVALID_PROTOCOL',
         },
@@ -101,7 +102,23 @@ export async function POST(request: NextRequest) {
       body.provider_type ?? '',
       body.protocol,
       body.base_url ?? '',
+      body.preset_key ?? '',
     );
+
+    if (body.preset_key) {
+      const identity = resolveProviderPresetIdentity({
+        preset_key: body.preset_key,
+        provider_type: body.provider_type ?? '',
+        protocol: body.protocol ?? '',
+        base_url: body.base_url ?? '',
+      });
+      if (identity.status !== 'resolved' || identity.source !== 'preset_key') {
+        return NextResponse.json<ErrorResponse>(
+          { error: 'Preset identity does not match provider protocol/base URL', code: 'INVALID_PRESET_IDENTITY' },
+          { status: 400 },
+        );
+      }
+    }
     if (effectiveProtocol === 'anthropic' && !body.base_url?.trim()) {
       return NextResponse.json<ErrorResponse>(
         {

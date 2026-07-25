@@ -25,9 +25,16 @@ import {
   discoverModels,
 } from '../../lib/model-discovery';
 import {
-  isOpenRouterProviderRecord,
+  isOpenRouterProviderRecord as isOpenRouterProviderRecordResolved,
   getCatalogDefaultModelsForRecord,
 } from '../../lib/provider-catalog';
+
+const isOpenRouterProviderRecord = (record: { provider_type: string; base_url: string }) =>
+  isOpenRouterProviderRecordResolved({
+    preset_key: '',
+    protocol: record.provider_type,
+    ...record,
+  });
 import {
   createProvider,
   deleteProvider,

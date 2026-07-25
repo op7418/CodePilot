@@ -6,6 +6,7 @@ import { getDefaultModelsForProvider, getEffectiveProviderProtocol, findPresetFo
 import type { Protocol } from '@/lib/provider-catalog';
 import type { ErrorResponse, ProviderModelGroup } from '@/types';
 import { getOAuthStatus } from '@/lib/openai-oauth-manager';
+import { getXaiOAuthStatus } from '@/lib/xai-oauth-manager';
 import {
   getProviderCompat,
   getModelCompat,
@@ -221,6 +222,8 @@ export async function GET(request: NextRequest) {
         provider_id: 'env',
         provider_name: 'Claude Code',
         provider_type: 'anthropic',
+        preset_key: '',
+        protocol: 'anthropic',
         compat: 'claude_code_ready',
         // #632 item 1 — env is the Claude Code (Anthropic) group, but it can
         // route through a third-party proxy via settings.anthropic_base_url /
@@ -277,6 +280,7 @@ export async function GET(request: NextRequest) {
         provider.provider_type,
         provider.protocol,
         provider.base_url,
+        provider.preset_key,
       );
 
       // Skip media-only providers in chat model selector
@@ -437,7 +441,7 @@ export async function GET(request: NextRequest) {
       });
 
       // Detect SDK-proxy-only providers via preset match
-      const preset = findPresetForLegacy(provider.base_url, provider.provider_type, protocol);
+      const preset = findPresetForLegacy(provider.base_url, provider.provider_type, protocol, provider.preset_key);
       const sdkProxyOnly = preset?.sdkProxyOnly === true;
 
       // total_count is the user-visible "synced model count" on Provider cards.
@@ -452,13 +456,12 @@ export async function GET(request: NextRequest) {
         provider_id: provider.id,
         provider_name: provider.name,
         provider_type: provider.provider_type,
+        preset_key: provider.preset_key,
+        protocol: provider.protocol,
         ...(sdkProxyOnly ? { sdkProxyOnly: true } : {}),
         total_count: totalCount,
         last_refreshed_at: lastRefreshedAt,
-        compat: getProviderCompat({
-          provider_type: provider.provider_type,
-          base_url: provider.base_url,
-        }),
+        compat: getProviderCompat(provider),
         // #632 item 1 — only an anthropic-protocol provider on a third-party
         // base_url reports the Claude SDK's bogus ~200K default context_window.
         // Non-anthropic protocols (Codex's real modelContextWindow, etc.) report
@@ -477,11 +480,28 @@ export async function GET(request: NextRequest) {
           provider_id: 'openai-oauth',
           provider_name: `OpenAI${oauthStatus.plan ? ` (${oauthStatus.plan})` : ''}`,
           provider_type: 'openai-oauth',
+          preset_key: 'openai-oauth',
+          protocol: 'openai-compatible',
           compat: 'codepilot_only',
           models: OPENAI_OAUTH_MODELS,
         });
       }
     } catch { /* OpenAI OAuth module not available */ }
+
+    try {
+      const xaiStatus = getXaiOAuthStatus();
+      if (xaiStatus.enabled && xaiStatus.authenticated) {
+        groups.push({
+          provider_id: 'xai-oauth',
+          provider_name: 'xAI Grok OAuth',
+          provider_type: 'xai-oauth',
+          preset_key: 'xai-oauth',
+          protocol: 'xai',
+          compat: 'codepilot_only',
+          models: [{ value: 'grok-4.5', label: 'Grok 4.5' }],
+        });
+      }
+    } catch { /* xAI OAuth module not available */ }
 
     // Phase 5 Phase 2 (2026-05-13) — Codex Account virtual provider.
     //

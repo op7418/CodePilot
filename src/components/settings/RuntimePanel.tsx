@@ -440,7 +440,6 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
   // so the panel can keep state in sync with the user's environment.
   const [codexAvailability, setCodexAvailability] = useState<CodexAvailability>({ kind: "unknown" });
   const [codexStatusLoading, setCodexStatusLoading] = useState(false);
-  const [codexStatusTick, setCodexStatusTick] = useState(0);
   useEffect(() => {
     let cancelled = false;
     setCodexStatusLoading(true);
@@ -463,9 +462,32 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
     return () => {
       cancelled = true;
     };
-  }, [codexStatusTick]);
-  const refreshCodexStatus = useCallback(() => setCodexStatusTick((t) => t + 1), []);
+  }, []);
+  const refreshCodexStatus = useCallback(async () => {
+    setCodexStatusLoading(true);
+    try {
+      // POST explicitly invalidates idle resolution/version/failure caches.
+      // The server keeps a healthy running app-server pinned, so this is safe
+      // to use while chats are active.
+      const res = await fetch("/api/codex/status", {
+        method: "POST",
+        cache: "no-store",
+      });
+      const json = await res.json();
+      if (json?.availability) {
+        setCodexAvailability(json.availability as CodexAvailability);
+      }
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      setCodexAvailability({ kind: "spawn_failed", reason });
+    } finally {
+      setCodexStatusLoading(false);
+    }
+  }, []);
   const codexConnected = codexAvailability.kind === "ready";
+  const codexBinary = "binary" in codexAvailability
+    ? codexAvailability.binary ?? null
+    : null;
 
   // ── Model options (env provider) — applies when Claude Code 引擎 selected ──
   const [thinkingMode, setThinkingMode] = useState("adaptive");
@@ -1024,14 +1046,14 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
       return {
         state: "blocked",
         reason: isZh
-          ? "未在 PATH 上检测到 codex 命令"
-          : "codex binary not detected on PATH",
+          ? "未检测到可用的 Codex CLI"
+          : "No usable Codex CLI was detected",
         impact: isZh
           ? "Codex Runtime 整体无法启用：Codex 账户模型（gpt-5.5 等）和 CodePilot 服务商经 proxy 接入两条路径都会发送失败"
           : "Codex Runtime is fully blocked: both Codex Account models (gpt-5.5 etc.) and CodePilot providers via the proxy will fail at send time",
         recovery: isZh
-          ? "按 Codex 官方指引安装 codex CLI，或设置 CODEX_BIN 指向自定义路径"
-          : "Install codex CLI per the official guide, or set CODEX_BIN to point at a custom binary",
+          ? "安装或更新 ChatGPT/Codex 客户端、Codex CLI，或设置 CODEX_BIN 指向自定义路径"
+          : "Install or update the ChatGPT/Codex app, Codex CLI, or point CODEX_BIN at a custom binary",
       };
     }
     if (codexAvailability.kind === "too_old") {
@@ -1053,7 +1075,7 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
         impact: isZh
           ? "Codex Runtime 整体不可用（Codex 账户模型 + CodePilot 服务商经 proxy 接入都受影响）；查看终端日志获取详细错误"
           : "Codex Runtime is fully unavailable (both Codex Account models and CodePilot providers via the proxy are blocked); check terminal logs for details",
-        recovery: isZh ? "点右上角刷新重试，或重启 CodePilot" : "Click refresh in the top right, or restart CodePilot",
+        recovery: isZh ? "点右上角刷新，重新扫描已安装的 CLI" : "Click refresh to rescan installed CLIs",
       };
     }
     if (codexAvailability.kind === "installed_idle") {
@@ -1796,6 +1818,16 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
               </Button>
             </div>
           </div>
+          {codexBinary && (
+            <div className="py-2.5 flex items-start justify-between gap-3">
+              <span className="text-[11px] text-muted-foreground shrink-0">
+                {isZh ? "CLI 来源" : "CLI source"}
+              </span>
+              <span className="text-xs text-muted-foreground font-mono break-all text-right">
+                {codexBinary}
+              </span>
+            </div>
+          )}
           {codexAvailability.kind === "ready" && (
             <div className="py-2.5 flex items-center justify-between gap-3">
               <span className="text-[11px] text-muted-foreground shrink-0">

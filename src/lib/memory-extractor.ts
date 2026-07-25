@@ -86,7 +86,7 @@ export async function extractMemories(
   try {
     const { generateTextFromProvider } = await import('./text-generator');
     const { resolveProvider } = await import('./provider-resolver');
-    const resolved = resolveProvider({ useCase: 'small' });
+    const resolved = resolveProvider({ callScene: 'automatic_memory_extract', useCase: 'small' });
 
     if (!resolved.hasCredentials) return;
 
@@ -96,6 +96,7 @@ export async function extractMemories(
     ).join('\n\n');
 
     const result = await generateTextFromProvider({
+      callScene: 'automatic_memory_extract',
       providerId: resolved.provider?.id || '',
       model: resolved.upstreamModel || resolved.model || 'haiku',
       system: 'You extract durable memories from conversations. Only extract information worth remembering long-term: decisions, preferences, important facts, commitments, deadlines. NOT transient details or small talk.',

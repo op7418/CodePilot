@@ -1,0 +1,43 @@
+{
+  "meta": {
+    "package": "@ai-sdk/xai",
+    "version": "4.0.18",
+    "mirrors": "src/lib/ai-provider.ts sdkType=xai branch + src/lib/agent-loop.ts providerOptions.xai",
+    "ai": "7.0.11"
+  },
+  "request": {
+    "url": "https://api.x.ai/v1/responses",
+    "method": "POST",
+    "headers": {
+      "authorization": "[REDACTED]",
+      "content-type": "application/json",
+      "user-agent": "ai-sdk/xai/4.0.18 ai-sdk/provider-utils/5.0.12 runtime/node.js/22"
+    },
+    "body": {
+      "model": "grok-4.5",
+      "input": [
+        {
+          "role": "system",
+          "content": "You are a synthetic capability probe. Reply with the word ok."
+        },
+        {
+          "role": "user",
+          "content": [
+            {
+              "type": "input_text",
+              "text": "capability probe ping"
+            }
+          ]
+        }
+      ],
+      "reasoning": {
+        "effort": "high"
+      },
+      "store": false,
+      "include": [
+        "reasoning.encrypted_content"
+      ],
+      "stream": true
+    }
+  }
+}

@@ -1,6 +1,6 @@
 {
   "name": "codepilot",
-  "version": "0.58.1",
+  "version": "0.59.1",
   "private": true,
   "license": "BUSL-1.1",
   "workspaces": [
@@ -32,7 +32,7 @@
     "lint:docs-drift": "node scripts/lint-docs-drift.mjs",
     "prepare": "node -e \"try{require('husky')()}catch(e){}\"",
     "electron:dev": "node scripts/build-electron-dev.mjs && concurrently -k -n next,esbuild,electron \"next dev\" \"node scripts/build-electron-dev.mjs --watch\" \"wait-on http://localhost:${PORT:-3000} && electron .\"",
-    "electron:build": "next build && node scripts/build-electron.mjs",
+    "electron:build": "node scripts/clean-electron-build.mjs && next build && node scripts/build-electron.mjs",
     "electron:pack": "npm run electron:build && electron-builder --config electron-builder.yml",
     "electron:pack:mac": "npm run electron:build && electron-builder --mac --config electron-builder.yml",
     "electron:pack:win": "npm run electron:build && electron-builder --win --config electron-builder.yml",
@@ -52,6 +52,7 @@
     "@ai-sdk/google": "^4.0.6",
     "@ai-sdk/google-vertex": "^5.0.8",
     "@ai-sdk/openai": "^4.0.5",
+    "@ai-sdk/xai": "^4.0.18",
     "@anthropic-ai/claude-agent-sdk": "^0.2.111",
     "@codemirror/lang-markdown": "^6.5.0",
     "@codemirror/lang-yaml": "^6.1.3",

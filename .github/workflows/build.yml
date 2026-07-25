@@ -170,7 +170,7 @@ jobs:
           npm run electron:build
           npx electron-builder --mac --arm64 --x64 --config electron-builder.yml --publish never
 
-      - name: Verify packaged version and native ABI
+      - name: Verify packaged version, native ABI, and server startup
         env:
           EXPECTED_VERSION: ${{ needs.verify-source.outputs.version }}
         run: |
@@ -193,6 +193,7 @@ jobs:
           SQLITE=$(find "$APP/Contents/Resources" -path "*better-sqlite3*" -name "*.node" | head -1)
           [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 .node not found"; exit 1; }
           ELECTRON_RUN_AS_NODE=1 "$APP/Contents/MacOS/CodePilot" -e "const path = require('node:path'); require(path.resolve(process.argv[1])); console.log('better-sqlite3 OK, ABI=' + process.versions.modules)" "$SQLITE"
+          node scripts/verify-packaged-server.mjs "$APP/Contents/MacOS/CodePilot" "$APP/Contents/Resources"
 
       - name: Checksums
         run: cd release && shasum -a 256 CodePilot-*.dmg CodePilot-*.zip 2>/dev/null | tee checksums-macos.sha256
@@ -230,7 +231,7 @@ jobs:
           npm run electron:build
           npx electron-builder --win --x64 --config electron-builder.yml --publish never
 
-      - name: Verify packaged version and native ABI
+      - name: Verify packaged version, native ABI, and server startup
         shell: bash
         env:
           EXPECTED_VERSION: ${{ needs.verify-source.outputs.version }}
@@ -243,6 +244,7 @@ jobs:
           [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 .node not found"; exit 1; }
           BIN=$(find release/win-unpacked -maxdepth 1 -name "CodePilot.exe" | head -1)
           ELECTRON_RUN_AS_NODE=1 "$BIN" -e "const path = require('node:path'); require(path.resolve(process.argv[1])); console.log('better-sqlite3 OK, ABI=' + process.versions.modules)" "$SQLITE"
+          node scripts/verify-packaged-server.mjs "$BIN" "$(dirname "$BIN")/resources"
 
       - name: Checksums
         shell: bash

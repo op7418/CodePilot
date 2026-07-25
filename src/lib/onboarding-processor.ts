@@ -54,6 +54,7 @@ export async function processOnboarding(
 
   try {
     const resolved = resolveProvider({
+      callScene: 'user_onboarding',
       sessionProviderId: session?.provider_id || undefined,
       sessionModel: session?.model || undefined,
     });
@@ -154,10 +155,10 @@ Keep under 1000 characters. Use bullet points.
 Only include explicitly stated information.`;
 
     [soulContent, userContent, claudeContent, memoryContent] = await Promise.all([
-      generateTextFromProvider({ providerId, model, system: 'You generate configuration files for AI assistants. Output only the file content, no explanations.', prompt: soulPrompt }),
-      generateTextFromProvider({ providerId, model, system: 'You generate user profile documents. Output only the file content, no explanations.', prompt: userPrompt }),
-      generateTextFromProvider({ providerId, model, system: 'You generate configuration files for AI assistants. Output only the file content, no explanations.', prompt: claudePrompt }),
-      generateTextFromProvider({ providerId, model, system: 'You generate knowledge files for AI assistants. Output only the file content, no explanations.', prompt: memoryPrompt }),
+      generateTextFromProvider({ callScene: 'user_onboarding', providerId, model, system: 'You generate configuration files for AI assistants. Output only the file content, no explanations.', prompt: soulPrompt }),
+      generateTextFromProvider({ callScene: 'user_onboarding', providerId, model, system: 'You generate user profile documents. Output only the file content, no explanations.', prompt: userPrompt }),
+      generateTextFromProvider({ callScene: 'user_onboarding', providerId, model, system: 'You generate configuration files for AI assistants. Output only the file content, no explanations.', prompt: claudePrompt }),
+      generateTextFromProvider({ callScene: 'user_onboarding', providerId, model, system: 'You generate knowledge files for AI assistants. Output only the file content, no explanations.', prompt: memoryPrompt }),
     ]);
 
     if (!soulContent.trim() || !userContent.trim()) {

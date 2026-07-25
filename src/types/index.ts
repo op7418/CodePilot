@@ -294,8 +294,10 @@ export interface ApiProvider {
   id: string;
   name: string;
   provider_type: string; // legacy: 'anthropic' | 'openrouter' | 'bedrock' | 'vertex' | 'custom'
+  /** Stable catalog identity selected by the user. Empty only for legacy/ambiguous rows. */
+  preset_key: string;
   /** Wire protocol — new field, takes precedence over provider_type for dispatch */
-  protocol: string; // 'anthropic' | 'openai-compatible' | 'openrouter' | 'bedrock' | 'vertex' | 'google' | 'gemini-image' | 'openai-image'
+  protocol: string; // 'anthropic' | 'openai-compatible' | 'xai' | 'openrouter' | 'bedrock' | 'vertex' | 'google' | 'gemini-image' | 'openai-image'
   base_url: string;
   api_key: string;
   is_active: number; // SQLite boolean: 0 or 1
@@ -318,6 +320,8 @@ export interface ProviderModelGroup {
   provider_id: string;       // provider DB id, or 'env' for environment variables
   provider_name: string;
   provider_type: string;
+  preset_key: string;
+  protocol: string;
   /** True if this provider only supports Claude Code SDK wire protocol, not standard Messages API */
   sdkProxyOnly?: boolean;
   /** Total models known for this provider (enabled + hidden in provider_models,
@@ -526,6 +530,8 @@ export interface ProviderModel {
 
 export interface CreateProviderRequest {
   name: string;
+  /** Required for preset-backed create flows; generic/legacy callers pass ''. */
+  preset_key?: string;
   provider_type?: string;
   protocol?: string;
   base_url?: string;
@@ -540,6 +546,14 @@ export interface CreateProviderRequest {
 
 export interface UpdateProviderRequest {
   name?: string;
+  /** Omit to preserve identity. Send only for an explicit user preset switch. */
+  preset_key?: string;
+  /**
+   * Request catalog-managed model reconciliation for an explicit preset
+   * choice. Merely adopting a stable identity on a legacy row must not imply
+   * permission to rewrite its catalog rows.
+   */
+  reconcile_catalog?: boolean;
   provider_type?: string;
   protocol?: string;
   base_url?: string;
@@ -1580,6 +1594,8 @@ export type ConversationHistoryItem = {
 
 export interface ClaudeStreamOptions {
   prompt: string;
+  /** Mandatory credential-use classification; unknown callers fail closed. */
+  callScene: import('@/lib/provider-call-policy').ProviderCallScene;
   sessionId: string;
   sdkSessionId?: string; // SDK session ID for resuming conversations
   model?: string;

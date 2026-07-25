@@ -327,7 +327,7 @@ export type TitleModelCall = (args: {
  */
 const defaultResolveProviderExact: TitleProviderResolver = async (providerId) => {
   const { resolveExactProvider } = await import('@/lib/provider-resolver');
-  return resolveExactProvider(providerId);
+  return resolveExactProvider(providerId, 'automatic_title');
 };
 
 /**
@@ -349,6 +349,7 @@ const defaultCallModel: TitleModelCall = async ({
   if (runtime === 'claude_code') {
     const { generateTextViaSdk } = await import('@/lib/claude-client');
     return generateTextViaSdk({
+      callScene: 'automatic_title',
       providerId,
       resolvedProvider,
       model,
@@ -378,6 +379,7 @@ const defaultCallModel: TitleModelCall = async ({
   // a caller opts in, and we don't.
   const { generateTextFromProvider } = await import('@/lib/text-generator');
   return generateTextFromProvider({
+    callScene: 'automatic_title',
     providerId,
     resolvedProvider,
     model: model || '',

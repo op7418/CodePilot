@@ -405,7 +405,10 @@ export async function runScheduledAgentTask(
         provider_id: session?.provider_id || '',
         model: session?.model || '',
       },
-      { runtime: effectiveSessionRuntime },
+      {
+        runtime: effectiveSessionRuntime,
+        callScene: isHeartbeat ? 'assistant_heartbeat' : 'scheduled_task',
+      },
     );
     if (resolved.invalidReason) {
       const reasonLabel =
@@ -500,6 +503,7 @@ export async function runScheduledAgentTask(
 
     const headless = await runClaudeHeadless({
       prompt,
+      callScene: isHeartbeat ? 'assistant_heartbeat' : 'scheduled_task',
       sessionId,
       // SDK session resume — when present, streamClaude continues the
       // existing SDK conversation instead of starting from scratch.

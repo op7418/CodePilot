@@ -460,6 +460,7 @@ export function PresetConnectDialog({
       })();
       await onSave({
         name: name.trim() || preset.name,
+        preset_key: preset.key,
         provider_type: preset.provider_type,
         protocol: preset.protocol,
         base_url: baseUrl.trim(),
@@ -516,22 +517,36 @@ export function PresetConnectDialog({
                   {isZh ? '获取 API Key' : 'Get API Key'}
                 </a>
               )}
+              {preset.meta.docsUrl && (
+                <a href={preset.meta.docsUrl} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline">
+                  <ArrowSquareOut size={12} />
+                  {isZh ? '官方文档' : 'Official docs'}
+                </a>
+              )}
+              {preset.meta.purchaseUrl && (
+                <a href={preset.meta.purchaseUrl} target="_blank" rel="noopener noreferrer"
+                  className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline">
+                  <ArrowSquareOut size={12} />
+                  {isZh ? '购买或管理套餐' : 'Purchase or manage plan'}
+                </a>
+              )}
               <a href={isZh ? 'https://www.codepilot.sh/zh/docs/providers' : 'https://www.codepilot.sh/docs/providers'} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline">
                 <ArrowSquareOut size={12} />
                 {isZh ? '配置指南' : 'Setup Guide'}
               </a>
             </div>
-            {preset.meta.notes && preset.meta.notes.length > 0 && (
+            {(isZh ? (preset.meta.notesZh ?? preset.meta.notes) : preset.meta.notes)?.length ? (
               <div className="rounded-md bg-amber-500/10 border border-amber-500/20 px-3 py-2 space-y-1">
-                {preset.meta.notes.map((note, i) => (
+                {(isZh ? (preset.meta.notesZh ?? preset.meta.notes) : preset.meta.notes)!.map((note, i) => (
                   <p key={i} className="text-[11px] text-amber-600 dark:text-amber-400 flex items-start gap-1.5">
                     <Warning size={12} className="shrink-0 mt-0.5" />
                     {note}
                   </p>
                 ))}
               </div>
-            )}
+            ) : null}
           </div>
         )}
 

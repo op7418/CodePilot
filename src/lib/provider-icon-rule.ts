@@ -24,6 +24,7 @@ export type ProviderIconKey =
   | "xiaomi-mimo"
   | "ollama"
   | "openai"
+  | "xai"
   | "deepseek"
   | "bedrock"
   | "google"
@@ -83,6 +84,13 @@ export function getProviderIconKey(name: string, baseUrl: string): ProviderIconK
   if (url.includes("xiaomimimo") || lower.includes("mimo") || lower.includes("小米"))
     return "xiaomi-mimo";
   if (url.includes("11434") || lower.includes("ollama")) return "ollama";
+  if (
+    url.includes("api.x.ai") ||
+    lower.includes("xai") ||
+    lower.includes("x.ai") ||
+    lower.includes("grok")
+  )
+    return "xai";
   if (
     url.includes("api.openai.com") ||
     lower.includes("openai") ||

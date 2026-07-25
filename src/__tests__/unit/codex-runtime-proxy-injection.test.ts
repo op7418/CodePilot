@@ -205,6 +205,7 @@ async function collectStream(stream: ReadableStream<string>): Promise<string[]> 
 describe('CodexRuntime.stream — provider gate (Phase 5b)', () => {
   it('rejects with run_failed when providerId is "env"', async () => {
     const stream = codexRuntime.stream({
+      callScene: 'interactive_chat',
       prompt: 'hi',
       sessionId: 'test-session-env',
       providerId: 'env',
@@ -228,6 +229,7 @@ describe('CodexRuntime.stream — provider gate (Phase 5b)', () => {
 
   it('rejects with run_failed when no providerId / sessionProviderId is given', async () => {
     const stream = codexRuntime.stream({
+      callScene: 'interactive_chat',
       prompt: 'hi',
       sessionId: 'test-session-empty',
     });

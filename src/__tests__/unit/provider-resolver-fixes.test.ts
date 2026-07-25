@@ -155,7 +155,7 @@ describe('short-alias fallback narrowed to single-model providers', () => {
     // Simulate a resolved provider with MULTIPLE models in its catalog
     const resolved = {
       provider: {
-        id: 'or', name: 'OpenRouter', provider_type: 'anthropic', protocol: 'anthropic',
+        id: 'or', name: 'OpenRouter', preset_key: 'openrouter', provider_type: 'anthropic', protocol: 'anthropic',
         base_url: 'https://openrouter.ai/api/v1', api_key: 'sk-or',
         is_active: 1, sort_order: 0, extra_env: '{}', headers_json: '{}',
         env_overrides_json: '', role_models_json: '{}', notes: '', options_json: '{}',
@@ -193,7 +193,7 @@ describe('short-alias fallback narrowed to single-model providers', () => {
     // Single-model "套餐型" provider: only one upstream model in catalog
     const resolved = {
       provider: {
-        id: 'p1', name: 'PackyCode-Sonnet', provider_type: 'anthropic', protocol: 'anthropic',
+        id: 'p1', name: 'PackyCode-Sonnet', preset_key: '', provider_type: 'anthropic', protocol: 'anthropic',
         base_url: 'https://relay.example.com', api_key: 'sk-relay',
         is_active: 1, sort_order: 0, extra_env: '{}', headers_json: '{}',
         env_overrides_json: '', role_models_json: '{}', notes: '', options_json: '{}',
@@ -229,7 +229,7 @@ describe('short-alias fallback narrowed to single-model providers', () => {
     // Multi-model provider WITH explicit role mapping — must use the mapping
     const resolved = {
       provider: {
-        id: 'p2', name: 'GLM', provider_type: 'anthropic', protocol: 'anthropic',
+        id: 'p2', name: 'GLM', preset_key: 'glm-cn', provider_type: 'anthropic', protocol: 'anthropic',
         base_url: 'https://glm.example.com', api_key: 'sk-glm',
         is_active: 1, sort_order: 0, extra_env: '{}', headers_json: '{}',
         env_overrides_json: '', role_models_json: '{}', notes: '', options_json: '{}',

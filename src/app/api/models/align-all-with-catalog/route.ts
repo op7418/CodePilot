@@ -33,10 +33,7 @@ export async function POST(request: NextRequest) {
   }> = [];
 
   for (const p of providers) {
-    const catalog = getCatalogDefaultModelsForRecord({
-      provider_type: p.provider_type,
-      base_url: p.base_url,
-    });
+    const catalog = getCatalogDefaultModelsForRecord(p);
     if (catalog.length === 0) {
       results.push({
         providerId: p.id,

@@ -312,7 +312,7 @@ async function rerankWithAI(
   try {
     const { generateTextFromProvider } = await import('./text-generator');
     const { resolveProvider } = await import('./provider-resolver');
-    const resolved = resolveProvider({ useCase: 'small' });
+    const resolved = resolveProvider({ callScene: 'active_turn_memory_rerank', useCase: 'small' });
 
     if (!resolved.hasCredentials) return null;
 
@@ -321,6 +321,7 @@ async function rerankWithAI(
     ).join('\n');
 
     const response = await generateTextFromProvider({
+      callScene: 'active_turn_memory_rerank',
       providerId: resolved.provider?.id || '',
       model: resolved.upstreamModel || resolved.model || 'haiku',
       system: 'You select the most relevant search results. Return ONLY a JSON array of indices (e.g. [2, 0, 4]).',

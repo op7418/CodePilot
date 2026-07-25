@@ -139,7 +139,7 @@ export function classifyProvider(input: Pick<DiscoveryInput, 'protocol' | 'prese
   const protocol = input.protocol;
 
   // OAuth login flows / env-driven Claude Code don't expose a model list endpoint.
-  if (key === 'openai-oauth' || key === 'claude-code-env') {
+  if (key === 'openai-oauth' || key === 'xai-oauth' || key === 'claude-code-env') {
     return {
       classification: 'unsupported',
       protocol: 'unknown',

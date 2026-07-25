@@ -87,6 +87,7 @@ describe('automatic title provider snapshot survives deletion without cross-prov
     const { providerA, providerB, captured } = seedRace();
     const prepared = prepareGenerateTextViaSdkCall(
       {
+        callScene: 'automatic_title',
         providerId: providerA.id,
         resolvedProvider: captured,
         model: 'claude-haiku-4-5',
@@ -112,6 +113,7 @@ describe('automatic title provider snapshot survives deletion without cross-prov
   it('CodePilot Runtime model factory uses captured A config, never default B', () => {
     const { providerA, providerB, captured } = seedRace();
     const created = createModel({
+      callScene: 'automatic_title',
       providerId: providerA.id,
       resolvedProvider: captured,
       model: 'claude-haiku-4-5',

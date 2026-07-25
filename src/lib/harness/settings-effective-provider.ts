@@ -50,6 +50,7 @@ export function resolveEffectiveProviderId(): string | undefined {
     if (
       pinned === 'codex_account' ||
       pinned === 'openai-oauth' ||
+      pinned === 'xai-oauth' ||
       pinned === 'env'
     ) {
       return pinned;
@@ -66,6 +67,7 @@ export function resolveEffectiveProviderId(): string | undefined {
     // intercepts an id pattern. Preserve the id for downstream use.
     if (resolved._codexAccount) return 'codex_account';
     if (resolved._openaiOAuth) return 'openai-oauth';
+    if (resolved._xaiOAuth) return 'xai-oauth';
 
     return resolved.provider?.id;
   } catch {

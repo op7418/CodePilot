@@ -8,6 +8,7 @@
 
 | 文档 | 对应交接文档 | 主题 |
 |------|------------|------|
+| [qwen-token-plan-grok-access.md](./qwen-token-plan-grok-access.md) | [handover/qwen-token-plan-grok-access.md](../handover/qwen-token-plan-grok-access.md) | 为什么套餐 identity 不能靠 URL、为什么订阅凭据需要场景 gate、xAI API Key/OAuth 双渠道取舍与真实 OAuth 完成感反馈 |
 | [cli-tools.md](./cli-tools.md) | [handover/cli-tools.md](../handover/cli-tools.md) | CLI 工具管理的 MCP 化、Agent-first CLI 趋势、凭证管理痛点 |
 | [new-chat-greeting.md](./new-chat-greeting.md) | [handover/new-chat-greeting.md](../handover/new-chat-greeting.md) | 新对话欢迎语为何按时间/场景变化：问候+问句拆分、场景优先级、首屏先中性句再替换的取舍、品牌语气可调 |
 | [dashboard-generative-ui.md](./dashboard-generative-ui.md) | [handover/dashboard.md](../handover/dashboard.md) | 生成式 UI 持久化、AI-first 项目看板、系统级渲染层构想、实现后复盘 |

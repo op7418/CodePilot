@@ -163,6 +163,7 @@ async function runLoop(opts: RunOpts): Promise<{ sessionId: string; events: SSEE
   const restore = installFetch(opts.fetchHandler);
   try {
     const stream = runAgentLoop({
+      callScene: 'interactive_chat',
       prompt: 'timeout probe',
       sessionId: session.id,
       model: MODEL,

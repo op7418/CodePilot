@@ -7,6 +7,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { generateText, Output, jsonSchema } from 'ai';
 import { createModel } from '@/lib/ai-provider';
+import { ProviderCallPolicyError } from '@/lib/provider-call-policy';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -36,6 +37,7 @@ export async function POST(request: NextRequest) {
 
     // Create model via unified provider factory
     const { languageModel } = createModel({
+      callScene: 'structured_generation',
       providerId: options?.providerId,
       model: options?.model,
     });
@@ -66,6 +68,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ result: null });
   } catch (error) {
     console.error('[structured] Structured query failed:', error);
+    if (error instanceof ProviderCallPolicyError) {
+      return NextResponse.json(
+        { error: error.message, code: error.code, scene: error.scene },
+        { status: 403 },
+      );
+    }
     return NextResponse.json({ error: String(error) }, { status: 500 });
   }
 }

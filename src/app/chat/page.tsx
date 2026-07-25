@@ -206,6 +206,7 @@ function NewChatPageInner() {
     // Same goes for OpenAI OAuth, which is also a virtual provider
     // (`/api/openai-oauth/status`-managed).
     if (currentProviderId === 'openai-oauth') return true;
+    if (currentProviderId === 'xai-oauth') return true;
     // Everything else still requires the legacy "provider set up"
     // signal so we don't accidentally route to an env-fallback
     // provider that the resolver synthesised but the user never

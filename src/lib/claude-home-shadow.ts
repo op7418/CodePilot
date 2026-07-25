@@ -156,10 +156,14 @@ function readJsonFile(filePath: string): Record<string, unknown> | null {
  * declaring the request bleed-free.
  */
 export function settingsJsonHasAuthOverride(): boolean {
-  const settingsContent = readSettingsJson(path.join(REAL_HOME(), '.claude')).content;
+  const settingsContent = readSettingsJson(
+    path.join(/* turbopackIgnore: true */ REAL_HOME(), '.claude'),
+  ).content;
   if (envBlockHasAnyAuthEntry(settingsContent)) return true;
 
-  const dotClaudeJson = readJsonFile(path.join(REAL_HOME(), '.claude.json'));
+  const dotClaudeJson = readJsonFile(
+    path.join(/* turbopackIgnore: true */ REAL_HOME(), '.claude.json'),
+  );
   if (envBlockHasAnyAuthEntry(dotClaudeJson)) return true;
 
   return false;
@@ -238,11 +242,14 @@ export function createShadowClaudeHome(opts: { stripAuth: boolean }): ShadowHome
 
   // Check both user-scoped settings files for any auth env entries. If neither
   // has any, we don't need to build a shadow at all — pass through real HOME.
-  const realClaudeDir = path.join(REAL_HOME(), '.claude');
+  const realClaudeDir = path.join(/* turbopackIgnore: true */ REAL_HOME(), '.claude');
   const settingsContent = fs.existsSync(realClaudeDir)
     ? readSettingsJson(realClaudeDir).content
     : null;
-  const dotClaudeJsonPath = path.join(REAL_HOME(), '.claude.json');
+  const dotClaudeJsonPath = path.join(
+    /* turbopackIgnore: true */ REAL_HOME(),
+    '.claude.json',
+  );
   const dotClaudeJsonContent = readJsonFile(dotClaudeJsonPath);
 
   const settingsHasAuth = envBlockHasAnyAuthEntry(settingsContent);
@@ -250,8 +257,13 @@ export function createShadowClaudeHome(opts: { stripAuth: boolean }): ShadowHome
   if (!settingsHasAuth && !dotClaudeHasAuth) return passthrough();
 
   // Build the shadow tree.
-  const shadowRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codepilot-shadow-claude-'));
-  const shadowClaudeDir = path.join(shadowRoot, '.claude');
+  const shadowRoot = fs.mkdtempSync(
+    path.join(/* turbopackIgnore: true */ os.tmpdir(), 'codepilot-shadow-claude-'),
+  );
+  const shadowClaudeDir = path.join(
+    /* turbopackIgnore: true */ shadowRoot,
+    '.claude',
+  );
 
   try {
     fs.mkdirSync(shadowClaudeDir, { recursive: true });
@@ -268,14 +280,20 @@ export function createShadowClaudeHome(opts: { stripAuth: boolean }): ShadowHome
       }
       for (const name of entries) {
         if (name === 'settings.json' || name === 'claude.json') continue;
-        mirrorEntry(path.join(realClaudeDir, name), path.join(shadowClaudeDir, name));
+        mirrorEntry(
+          path.join(/* turbopackIgnore: true */ realClaudeDir, name),
+          path.join(/* turbopackIgnore: true */ shadowClaudeDir, name),
+        );
       }
     }
 
     // Stripped ~/.claude/settings.json. If real one was missing/unreadable,
     // we still write a minimal `{}` so the SDK doesn't error on absent file.
     const settingsToWrite = settingsContent ? stripAuthEnv(settingsContent) : {};
-    fs.writeFileSync(path.join(shadowClaudeDir, 'settings.json'), JSON.stringify(settingsToWrite, null, 2));
+    fs.writeFileSync(
+      path.join(/* turbopackIgnore: true */ shadowClaudeDir, 'settings.json'),
+      JSON.stringify(settingsToWrite, null, 2),
+    );
 
     // Mirror ~/.claude.json (root-level, not inside .claude/). This is the
     // documented home for user-scoped MCP servers (mcp-loader.ts:46). When
@@ -285,7 +303,10 @@ export function createShadowClaudeHome(opts: { stripAuth: boolean }): ShadowHome
     // it contains one too.
     if (dotClaudeJsonContent) {
       const dotClaudeToWrite = stripAuthEnv(dotClaudeJsonContent);
-      fs.writeFileSync(path.join(shadowRoot, '.claude.json'), JSON.stringify(dotClaudeToWrite, null, 2));
+      fs.writeFileSync(
+        path.join(/* turbopackIgnore: true */ shadowRoot, '.claude.json'),
+        JSON.stringify(dotClaudeToWrite, null, 2),
+      );
     }
     // If `~/.claude.json` doesn't exist on disk at all, we don't create one —
     // matches real-HOME semantics where SDK just doesn't see a file.

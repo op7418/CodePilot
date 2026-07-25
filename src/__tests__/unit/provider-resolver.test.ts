@@ -2,14 +2,22 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   VENDOR_PRESETS,
-  inferProtocolFromLegacy,
+  inferProtocolFromLegacy as inferProtocolFromLegacyResolved,
   inferAuthStyleFromLegacy,
   getDefaultModelsForProvider,
-  findPresetForLegacy,
+  findPresetForLegacy as findPresetForLegacyResolved,
 } from '../../lib/provider-catalog';
 import { resolveEffortMenuLevels } from '../../lib/effort-levels';
 import en from '../../i18n/en';
 import zh from '../../i18n/zh';
+
+const inferProtocolFromLegacy = (providerType: string, baseUrl: string) =>
+  inferProtocolFromLegacyResolved(providerType, baseUrl, '');
+const findPresetForLegacy = (
+  baseUrl: string,
+  providerType: string,
+  protocol?: import('../../lib/provider-catalog').Protocol,
+) => findPresetForLegacyResolved(baseUrl, providerType, protocol, '');
 
 // ── Provider Catalog Tests ──────────────────────────────────────
 
@@ -485,6 +493,7 @@ describe('Provider Resolver', () => {
         provider: {
           id: 'test',
           name: 'Test',
+          preset_key: 'anthropic-official',
           provider_type: 'anthropic',
           protocol: 'anthropic',
           base_url: 'https://api.anthropic.com',
@@ -525,6 +534,7 @@ describe('Provider Resolver', () => {
         provider: {
           id: 'test',
           name: 'Kimi',
+          preset_key: 'kimi',
           provider_type: 'anthropic',
           protocol: 'anthropic',
           base_url: 'https://api.kimi.com/coding/',
@@ -563,6 +573,7 @@ describe('Provider Resolver', () => {
         provider: {
           id: 'test',
           name: 'Test',
+          preset_key: 'anthropic-official',
           provider_type: 'anthropic',
           protocol: 'anthropic',
           base_url: '',
@@ -609,6 +620,7 @@ describe('Provider Resolver', () => {
         provider: {
           id: 'test',
           name: 'Test',
+          preset_key: 'anthropic-official',
           provider_type: 'anthropic',
           protocol: 'anthropic',
           base_url: '',
@@ -651,6 +663,7 @@ describe('Provider Resolver', () => {
         provider: {
           id: 'test',
           name: 'Legacy Gateway',
+          preset_key: '',
           provider_type: 'anthropic',
           protocol: 'anthropic',
           base_url: 'https://gateway.example.com/anthropic',
@@ -726,7 +739,7 @@ describe('Provider Resolver', () => {
     it('anthropic protocol → anthropic SDK', () => {
       const resolved: ResolvedProvider = {
         provider: {
-          id: 'test', name: 'Test', provider_type: 'anthropic', protocol: 'anthropic',
+          id: 'test', name: 'Test', preset_key: 'anthropic-official', provider_type: 'anthropic', protocol: 'anthropic',
           base_url: 'https://api.anthropic.com', api_key: 'key', is_active: 1, sort_order: 0,
           extra_env: '{}', headers_json: '{}', env_overrides_json: '', role_models_json: '{}',
           notes: '', created_at: '', updated_at: '', options_json: '{}',
@@ -764,7 +777,7 @@ describe('Provider Resolver', () => {
       // upstream slug.
       const resolved: ResolvedProvider = {
         provider: {
-          id: 'test', name: 'OR', provider_type: 'openrouter', protocol: 'openrouter',
+          id: 'test', name: 'OR', preset_key: 'openrouter', provider_type: 'openrouter', protocol: 'openrouter',
           base_url: 'https://openrouter.ai/api', api_key: 'or-key', is_active: 1, sort_order: 0,
           extra_env: '{}', headers_json: '{}', env_overrides_json: '', role_models_json: '{}',
           notes: '', created_at: '', updated_at: '', options_json: '{}',
@@ -814,7 +827,7 @@ describe('Provider Resolver', () => {
       // sdkProxyOnly providers like Zhipu / Kimi).
       const resolved: ResolvedProvider = {
         provider: {
-          id: 'test', name: 'OR', provider_type: 'openrouter', protocol: 'openrouter',
+          id: 'test', name: 'OR', preset_key: 'openrouter', provider_type: 'openrouter', protocol: 'openrouter',
           base_url: 'https://openrouter.ai/api', api_key: 'or-key', is_active: 1, sort_order: 0,
           extra_env: '{}', headers_json: '{}', env_overrides_json: '', role_models_json: '{}',
           notes: '', created_at: '', updated_at: '', options_json: '{}',
@@ -847,7 +860,7 @@ describe('Provider Resolver', () => {
       // refactor doesn't accidentally widen the branch.
       const resolved: ResolvedProvider = {
         provider: {
-          id: 'test', name: 'OR', provider_type: 'openrouter', protocol: 'openrouter',
+          id: 'test', name: 'OR', preset_key: 'openrouter', provider_type: 'openrouter', protocol: 'openrouter',
           base_url: 'https://openrouter.ai/api/v1', api_key: 'or-key', is_active: 1, sort_order: 0,
           extra_env: '{}', headers_json: '{}', env_overrides_json: '', role_models_json: '{}',
           notes: '', created_at: '', updated_at: '', options_json: '{}',
@@ -877,7 +890,7 @@ describe('Provider Resolver', () => {
       // pre-round-7 behaviour for un-configured records.
       const resolved: ResolvedProvider = {
         provider: {
-          id: 'test', name: 'OR', provider_type: 'openrouter', protocol: 'openrouter',
+          id: 'test', name: 'OR', preset_key: 'openrouter', provider_type: 'openrouter', protocol: 'openrouter',
           base_url: '', api_key: 'or-key', is_active: 1, sort_order: 0,
           extra_env: '{}', headers_json: '{}', env_overrides_json: '', role_models_json: '{}',
           notes: '', created_at: '', updated_at: '', options_json: '{}',
@@ -903,7 +916,7 @@ describe('Provider Resolver', () => {
     it('bedrock protocol → injects env overrides', () => {
       const resolved: ResolvedProvider = {
         provider: {
-          id: 'test', name: 'Bedrock', provider_type: 'bedrock', protocol: 'bedrock',
+          id: 'test', name: 'Bedrock', preset_key: 'bedrock', provider_type: 'bedrock', protocol: 'bedrock',
           base_url: '', api_key: '', is_active: 1, sort_order: 0,
           extra_env: '{}', headers_json: '{}', env_overrides_json: '', role_models_json: '{}',
           notes: '', created_at: '', updated_at: '', options_json: '{}',
@@ -935,7 +948,7 @@ describe('Provider Resolver', () => {
     it('openai-compatible protocol → openai SDK', () => {
       const resolved: ResolvedProvider = {
         provider: {
-          id: 'test', name: 'Custom', provider_type: 'custom', protocol: 'openai-compatible',
+          id: 'test', name: 'Custom', preset_key: '', provider_type: 'custom', protocol: 'openai-compatible',
           base_url: 'https://my-server.com/v1', api_key: 'key', is_active: 1, sort_order: 0,
           extra_env: '{}', headers_json: '{}', env_overrides_json: '', role_models_json: '{}',
           notes: '', created_at: '', updated_at: '', options_json: '{}',
@@ -961,7 +974,7 @@ describe('Provider Resolver', () => {
     it('model override takes precedence', () => {
       const resolved: ResolvedProvider = {
         provider: {
-          id: 'test', name: 'Test', provider_type: 'anthropic', protocol: 'anthropic',
+          id: 'test', name: 'Test', preset_key: 'anthropic-official', provider_type: 'anthropic', protocol: 'anthropic',
           base_url: '', api_key: 'key', is_active: 1, sort_order: 0,
           extra_env: '{}', headers_json: '{}', env_overrides_json: '', role_models_json: '{}',
           notes: '', created_at: '', updated_at: '', options_json: '{}',
@@ -986,7 +999,7 @@ describe('Provider Resolver', () => {
     it('gemini-image protocol → google SDK', () => {
       const resolved: ResolvedProvider = {
         provider: {
-          id: 'test', name: 'Gemini', provider_type: 'gemini-image', protocol: 'gemini-image',
+          id: 'test', name: 'Gemini', preset_key: 'gemini-image', provider_type: 'gemini-image', protocol: 'gemini-image',
           base_url: 'https://generativelanguage.googleapis.com/v1beta', api_key: 'gkey',
           is_active: 1, sort_order: 0,
           extra_env: '{}', headers_json: '{}', env_overrides_json: '', role_models_json: '{}',
@@ -1133,7 +1146,7 @@ describe('Upstream Model ID Mapping', () => {
   it('toAiSdkConfig maps internal model ID to upstream via availableModels', () => {
     const resolved: ResolvedProvider = {
       provider: {
-        id: 'test', name: 'GLM', provider_type: 'custom', protocol: 'anthropic',
+        id: 'test', name: 'GLM', preset_key: 'glm-cn', provider_type: 'custom', protocol: 'anthropic',
         base_url: 'https://open.bigmodel.cn/api/anthropic', api_key: 'key',
         is_active: 1, sort_order: 0, extra_env: '{}', headers_json: '{}',
         env_overrides_json: '', role_models_json: '{}', notes: '', created_at: '', updated_at: '', options_json: '{}',
@@ -1170,7 +1183,7 @@ describe('Upstream Model ID Mapping', () => {
   it('toClaudeCodeEnv injects role model env vars for upstream mapping', () => {
     const resolved: ResolvedProvider = {
       provider: {
-        id: 'test', name: 'GLM', provider_type: 'custom', protocol: 'anthropic',
+        id: 'test', name: 'GLM', preset_key: 'glm-cn', provider_type: 'custom', protocol: 'anthropic',
         base_url: 'https://open.bigmodel.cn/api/anthropic', api_key: 'key',
         is_active: 1, sort_order: 0, extra_env: '{}', headers_json: '{}',
         env_overrides_json: '', role_models_json: '{"default":"glm-5-turbo","sonnet":"glm-5-turbo","opus":"glm-5.1"}',
@@ -1310,7 +1323,7 @@ describe('Entry Point Resolution Contract', () => {
     // both toAiSdkConfig and toClaudeCodeEnv must use the upstream ID
     const resolved: ResolvedProvider = {
       provider: {
-        id: 'test', name: 'GLM', provider_type: 'custom', protocol: 'anthropic',
+        id: 'test', name: 'GLM', preset_key: 'glm-cn', provider_type: 'custom', protocol: 'anthropic',
         base_url: 'https://open.bigmodel.cn/api/anthropic', api_key: 'key',
         is_active: 1, sort_order: 0, extra_env: '{}', headers_json: '{}',
         env_overrides_json: '', role_models_json: '{"default":"glm-5-turbo"}',
@@ -1816,7 +1829,9 @@ describe('Hidden role models do not leak into Claude Code env', () => {
 
 describe('getProviderCompat tier mapping', () => {
   // eslint-disable-next-line @typescript-eslint/no-require-imports
-  const { getProviderCompat } = require('../../lib/runtime-compat');
+  const { getProviderCompat: getProviderCompatResolved } = require('../../lib/runtime-compat') as typeof import('../../lib/runtime-compat');
+  const getProviderCompat = (record: { provider_type: string; base_url: string }) =>
+    getProviderCompatResolved({ preset_key: '', protocol: record.provider_type, ...record });
 
   it('Anthropic official → claude_code_ready', () => {
     assert.equal(
@@ -2209,6 +2224,7 @@ describe('routeAuxiliaryModel (pure routing)', () => {
       provider: {
         id: opts.id || 'main-prov',
         name: 'Test Main',
+        preset_key: 'anthropic-official',
         provider_type: 'anthropic',
         protocol: 'anthropic',
         base_url: 'https://api.anthropic.com',
@@ -2693,8 +2709,9 @@ describe('resolveAuxiliaryModel (live wrapper)', () => {
 
     const makeProvider = (json: string) => ({
       id: 'p',
-      name: 'Test',
-      provider_type: 'anthropic',
+          name: 'Test',
+          preset_key: 'anthropic-official',
+          provider_type: 'anthropic',
       protocol: 'anthropic',
       base_url: 'https://example.com',
       api_key: 'k',
@@ -2818,7 +2835,7 @@ import { isFirstPartyAnthropicEndpoint } from '../../lib/ai-provider';
 describe('resolveEffectiveAnthropicBaseUrl — context-window trust gate (#632)', () => {
   const GLM_URL = 'https://open.bigmodel.cn/api/anthropic';
   const makeDbProvider = (base_url: string): NonNullable<ResolvedProvider['provider']> => ({
-    id: 'p1', name: 'Test', provider_type: 'custom', protocol: 'anthropic',
+    id: 'p1', name: 'Test', preset_key: '', provider_type: 'custom', protocol: 'anthropic',
     base_url, api_key: 'key', is_active: 1, sort_order: 0, extra_env: '{}',
     headers_json: '{}', env_overrides_json: '', role_models_json: '{}', notes: '',
     created_at: '', updated_at: '', options_json: '{}',

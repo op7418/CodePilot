@@ -37,7 +37,7 @@ const resolved = {
   settingSources: ['user'],
 } as unknown as ResolvedProvider;
 
-const base = { system: 'You write titles.', prompt: 'Hello' };
+const base = { callScene: 'automatic_title' as const, system: 'You write titles.', prompt: 'Hello' };
 
 function build(params: Parameters<typeof buildGenerateTextQueryOptions>[0]) {
   return buildGenerateTextQueryOptions(params, resolved, {}, new AbortController());

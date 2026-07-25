@@ -113,7 +113,7 @@ function scanClaudeCodeFramework(
   activeFramework: ExternalFrameworkId | undefined,
 ): ExternalFrameworkHarnessRef[] {
   const out: ExternalFrameworkHarnessRef[] = [];
-  const claudeDir = path.join(home, '.claude');
+  const claudeDir = path.join(/* turbopackIgnore: true */ home, '.claude');
   if (!existsSafe(claudeDir)) return out;
 
   const isActive = activeFramework === 'claude_code';
@@ -206,7 +206,7 @@ function scanCodexFramework(
   activeFramework: ExternalFrameworkId | undefined,
 ): ExternalFrameworkHarnessRef[] {
   const out: ExternalFrameworkHarnessRef[] = [];
-  const codexDir = path.join(home, '.codex');
+  const codexDir = path.join(/* turbopackIgnore: true */ home, '.codex');
   if (!existsSafe(codexDir)) return out;
 
   const isActive = activeFramework === 'codex';

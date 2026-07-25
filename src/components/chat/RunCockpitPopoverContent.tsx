@@ -113,7 +113,7 @@ export function RunCockpitPopoverContent({
     state.cliEnabled,
     cliConnected,
   );
-  const isNonAnthropicProvider = providerId === "openai-oauth";
+  const isNonAnthropicProvider = providerId === "openai-oauth" || providerId === "xai-oauth";
   // Round 4 — session-level runtime override. When the user has
   // explicitly pinned a runtime via the composer's RuntimeSelector,
   // this surface must reflect THAT runtime, not the global setting.

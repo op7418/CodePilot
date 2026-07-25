@@ -152,13 +152,14 @@ describe('#23 Sonnet 4.6 — API route layer (Codex review P1: providers/models,
       'claude-sonnet-4-6',
     );
   });
-  it('skills/search MODEL_MAP: no stale sonnet 4.0 / opus 4.6 / old haiku', () => {
+  it('skills/search delegates model selection to the shared resolver (no stale local MODEL_MAP)', () => {
     const src = readSrc('app/api/skills/search/route.ts');
     assert.doesNotMatch(src, /'claude-sonnet-4-20250514'/);
     assert.doesNotMatch(src, /'claude-opus-4-20250514'/); // Opus 4.6
     assert.doesNotMatch(src, /'claude-haiku-4-20250414'/);
-    assert.match(src, /sonnet:\s*'claude-sonnet-4-6'/);
-    assert.match(src, /opus:\s*'claude-opus-4-7'/);
+    assert.doesNotMatch(src, /MODEL_MAP/);
+    assert.match(src, /resolveProvider\(\{[\s\S]{0,120}callScene:\s*'user_skill_search'/);
+    assert.match(src, /generateTextFromProvider\(\{[\s\S]{0,120}callScene:\s*'user_skill_search'/);
   });
   it('media/jobs/plan fallback → claude-sonnet-4-6 (no Sonnet 4.0)', () => {
     const src = readSrc('app/api/media/jobs/plan/route.ts');
