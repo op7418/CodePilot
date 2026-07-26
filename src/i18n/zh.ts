@@ -1353,6 +1353,8 @@ const zh: Record<TranslationKey, string> = {
   'terminal.hook_stopped': 'Hook 中断本轮',
   'terminal.tool_deferred': '有工具等待响应',
   'terminal.unknown': '本轮已结束',
+  'terminal.streamError': '回复中断，连接异常',
+  'terminal.streamStopped': '回复已中断',
 
   // ── TerminalReason action buttons (Phase 1b) ──
   'terminalAction.compressAndRetry': '压缩并重试',

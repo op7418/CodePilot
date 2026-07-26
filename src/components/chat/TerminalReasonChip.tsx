@@ -8,18 +8,16 @@
  *
  * Only renders for reasons that carry information users can act on or interpret.
  * Silent for `completed` (normal) and `aborted_*` (user-initiated).
+ *
+ * When `phase` is 'error' or 'stopped' without a known reason, a generic
+ * retry button is shown so users can quickly re-send the last message after
+ * an interruption or network error.
  */
 
 import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
+import type { StreamPhase } from '@/types';
 
-/**
- * Actions a user can take from the chip. Each maps to a handler in
- * ChatView that wires it to the corresponding subsystem (compressor,
- * context1m toggle, model switch, router, etc.). "requiresConfirm"
- * actions pop a 2nd-step AlertDialog before the destructive step runs
- * (per feedback_no_silent_auto_irreversible memory).
- */
 export type TerminalActionId =
   | 'compress_and_retry'
   | 'enable_1m_and_retry'
@@ -32,6 +30,7 @@ export type TerminalActionId =
 
 interface Props {
   reason: string | undefined;
+  phase?: StreamPhase;
   onAction?: (actionId: TerminalActionId) => void;
 }
 
@@ -39,13 +38,10 @@ type Tone = 'warning' | 'error' | 'info' | 'muted';
 
 interface ActionDescriptor {
   id: TerminalActionId;
-  /** i18n key under 'terminalAction.*' for the button label */
   labelKey: TranslationKey;
-  /** Primary actions use a filled button; secondary use ghost */
   variant: 'primary' | 'secondary';
 }
 
-// Per-reason action mapping. Order in the array = visual order.
 const ACTIONS_BY_REASON: Record<string, ActionDescriptor[]> = {
   prompt_too_long: [
     { id: 'compress_and_retry', labelKey: 'terminalAction.compressAndRetry' as TranslationKey, variant: 'primary' },
@@ -73,7 +69,6 @@ const ACTIONS_BY_REASON: Record<string, ActionDescriptor[]> = {
   model_error: [
     { id: 'retry_simple', labelKey: 'terminalAction.retry' as TranslationKey, variant: 'primary' },
   ],
-  // tool_deferred handled by Phase 7b's deferred-tool card, no action here.
 };
 
 const TONE_BY_REASON: Record<string, Tone> = {
@@ -88,13 +83,8 @@ const TONE_BY_REASON: Record<string, Tone> = {
   tool_deferred: 'info',
 };
 
-// Reasons that should render silently (no chip). Users either already know
-// (they cancelled) or the turn completed normally.
 const SILENT_REASONS = new Set(['completed', 'aborted_streaming', 'aborted_tools']);
 
-// Whitelist of reasons we have explicit i18n labels for. Anything else
-// (e.g. a future SDK value we haven't translated yet) renders under the
-// 'unknown' key so the UI never leaks the raw reason string.
 const KNOWN_REASONS = new Set([
   'max_turns',
   'prompt_too_long',
@@ -114,20 +104,46 @@ const TONE_CLASSES: Record<Tone, string> = {
   muted: 'bg-muted text-muted-foreground border-border',
 };
 
-export function TerminalReasonChip({ reason, onAction }: Props) {
+const RETRY_ACTION: ActionDescriptor = {
+  id: 'retry_simple',
+  labelKey: 'terminalAction.retry' as TranslationKey,
+  variant: 'primary',
+};
+
+export function TerminalReasonChip({ reason, phase, onAction }: Props) {
   const { t } = useTranslation();
 
-  if (!reason || SILENT_REASONS.has(reason)) return null;
+  const isInterrupted = phase === 'error' || phase === 'stopped';
 
-  // Use whitelist rather than `t(key) || t(fallback)` because translate()
-  // returns the raw key when missing, so the `||` branch would never fire
-  // and a new SDK reason would leak a "terminal.new_reason" string to the UI.
+  if (!reason || SILENT_REASONS.has(reason)) {
+    if (isInterrupted && onAction) {
+      return (
+        <div className="mx-auto mt-2 flex w-full max-w-3xl flex-wrap items-center justify-start gap-2 px-4">
+          <button
+            type="button"
+            onClick={() => onAction(RETRY_ACTION.id)}
+            data-terminal-action={RETRY_ACTION.id}
+            className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs font-medium text-foreground transition-colors hover:bg-muted"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+              <path d="M13.65 2.35A8 8 0 1 0 15.94 9H13.9a6 6 0 1 1-1.63-5.27L10 6h6V0l-2.35 2.35z" fill="currentColor"/>
+            </svg>
+            {t(RETRY_ACTION.labelKey)}
+          </button>
+        </div>
+      );
+    }
+    return null;
+  }
+
   const isKnown = KNOWN_REASONS.has(reason);
   const tone = TONE_BY_REASON[reason] ?? 'warning';
   const label = isKnown
     ? t(`terminal.${reason}` as TranslationKey)
     : t('terminal.unknown' as TranslationKey);
   const actions = onAction ? (ACTIONS_BY_REASON[reason] || []) : [];
+
+  const showRetry = isInterrupted && actions.every(a => a.id !== 'retry_simple') && onAction;
 
   return (
     <div className="mx-auto mt-2 flex w-full max-w-3xl flex-wrap items-center justify-start gap-2 px-4">
@@ -152,6 +168,19 @@ export function TerminalReasonChip({ reason, onAction }: Props) {
           {t(action.labelKey)}
         </button>
       ))}
+      {showRetry && (
+        <button
+          type="button"
+          onClick={() => onAction(RETRY_ACTION.id)}
+          data-terminal-action={RETRY_ACTION.id}
+          className={`inline-flex items-center gap-1 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${TONE_CLASSES[tone]} hover:opacity-90`}
+        >
+          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" className="shrink-0">
+            <path d="M13.65 2.35A8 8 0 1 0 15.94 9H13.9a6 6 0 1 1-1.63-5.27L10 6h6V0l-2.35 2.35z" fill="currentColor"/>
+          </svg>
+          {t(RETRY_ACTION.labelKey)}
+        </button>
+      )}
     </div>
   );
 }

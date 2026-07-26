@@ -1433,11 +1433,16 @@ export function ChatView({ sessionId, initialMessages = [], initialHasMore = fal
         // the panel to disappear (or update to the new run state)
         // instead of staying frozen on the cancelled row.
         onTaskRunAction={reconcileWithDb}
+        onRetryLastMessage={() => {
+          const lastUserMsg = findLastUserMessage();
+          if (lastUserMsg) sendMessageRef.current?.(lastUserMsg);
+        }}
       />
       {/* End-of-turn terminal reason chip (only shown when stream is not active) */}
       {!isStreaming && (
         <TerminalReasonChip
           reason={streamSnapshot?.terminalReason}
+          phase={streamSnapshot?.phase}
           onAction={handleTerminalAction}
         />
       )}

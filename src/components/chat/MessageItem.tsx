@@ -413,10 +413,10 @@ function extractTruncatedWidget(fenceBody: string): ShowWidgetData | null {
 interface MessageItemProps {
   message: Message;
   sessionId?: string;
-  /** Whether this is an assistant workspace project */
   isAssistantProject?: boolean;
-  /** Assistant name for avatar */
   assistantName?: string;
+  isLastAssistant?: boolean;
+  onRetry?: () => void;
 }
 
 interface ToolBlock {
@@ -618,7 +618,7 @@ function TokenUsageDisplay({ usage }: { usage: TokenUsage }) {
 
 const COLLAPSE_HEIGHT = 300;
 
-export const MessageItem = memo(function MessageItem({ message, sessionId, isAssistantProject, assistantName }: MessageItemProps) {
+export const MessageItem = memo(function MessageItem({ message, sessionId, isAssistantProject, assistantName, isLastAssistant, onRetry }: MessageItemProps) {
   const isUser = message.role === 'user';
 
   // Collapse/expand state for long user messages (hooks must be called unconditionally)
@@ -843,10 +843,23 @@ export const MessageItem = memo(function MessageItem({ message, sessionId, isAss
         );
       })()}
 
-      {/* Footer with copy, timestamp and token usage */}
+      {/* Footer with copy, retry, timestamp and token usage */}
       <div className={`flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity duration-200 ${isUser ? 'justify-end' : ''}`}>
         {!isUser && <span className="text-xs text-muted-foreground/50">{timestamp}</span>}
         {!isUser && tokenUsage && <TokenUsageDisplay usage={tokenUsage} />}
+        {!isUser && isLastAssistant && onRetry && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={onRetry}
+            className="inline-flex items-center gap-1 px-1.5 py-0.5 text-xs text-muted-foreground/60 hover:text-muted-foreground h-auto"
+            title="Retry"
+          >
+            <svg width="12" height="12" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path d="M13.65 2.35A8 8 0 1 0 15.94 9H13.9a6 6 0 1 1-1.63-5.27L10 6h6V0l-2.35 2.35z" fill="currentColor"/>
+            </svg>
+          </Button>
+        )}
         {displayText && <CopyButton text={displayText} />}
       </div>
     </AIMessage>

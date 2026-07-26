@@ -229,6 +229,7 @@ interface MessageListProps {
    * and the panel never disappears even after the abandon PATCH lands.
    */
   onTaskRunAction?: () => void;
+  onRetryLastMessage?: () => void;
 }
 
 export function MessageList({
@@ -251,6 +252,7 @@ export function MessageList({
   startedAt,
   isAssistantProject,
   assistantName,
+  onRetryLastMessage,
 }: MessageListProps) {
   const { t } = useTranslation();
 
@@ -328,6 +330,7 @@ export function MessageList({
           statusText={statusText}
           onForceStop={onForceStop}
           startedAt={startedAt}
+          onRetryLastMessage={onRetryLastMessage}
         />
       </ConversationContent>
       <ConversationScrollButton />
@@ -355,6 +358,7 @@ interface VirtualTranscriptProps {
   statusText?: string;
   onForceStop?: () => void;
   startedAt?: number;
+  onRetryLastMessage?: () => void;
 }
 
 /**
@@ -388,6 +392,7 @@ function VirtualTranscript({
   statusText,
   onForceStop,
   startedAt,
+  onRetryLastMessage,
 }: VirtualTranscriptProps) {
   const { t } = useTranslation();
   const { scrollRef } = useStickToBottomContext();
@@ -483,7 +488,14 @@ function VirtualTranscript({
     return (
       <div id={`msg-${message.id}`} className="group pb-6">
         {leadingMarker}
-        <MessageItem message={message} sessionId={sessionId} isAssistantProject={isAssistantProject} assistantName={assistantName} />
+        <MessageItem
+          message={message}
+          sessionId={sessionId}
+          isAssistantProject={isAssistantProject}
+          assistantName={assistantName}
+          isLastAssistant={!isStreaming && message.role === 'assistant' && idx === messages.length - 1}
+          onRetry={!isStreaming && message.role === 'assistant' && idx === messages.length - 1 ? onRetryLastMessage : undefined}
+        />
         {rewindSdkUuid && sessionId && !isStreaming && (
           <RewindButton sessionId={sessionId} userMessageId={rewindSdkUuid} />
         )}

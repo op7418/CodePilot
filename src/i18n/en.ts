@@ -1372,6 +1372,8 @@ const en = {
   'terminal.hook_stopped': 'Hook stopped this turn',
   'terminal.tool_deferred': 'Tool awaiting response',
   'terminal.unknown': 'Turn ended',
+  'terminal.streamError': 'Response interrupted — connection error',
+  'terminal.streamStopped': 'Response interrupted',
 
   // ── TerminalReason action buttons (Phase 1b) ──
   'terminalAction.compressAndRetry': 'Compress & retry',
