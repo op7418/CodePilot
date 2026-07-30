@@ -28,6 +28,7 @@ import { QUICK_PRESETS } from "./provider-presets";
 import type { ApiProvider } from "@/types";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { TranslationKey } from "@/i18n";
+import { resolveConnectionTestModelName } from "@/lib/provider-connection-test-model";
 
 /** Infer auth style from base URL by fuzzy-matching preset hostnames */
 function inferAuthStyleFromUrl(url: string): "api_key" | "auth_token" | null {
@@ -156,7 +157,7 @@ export function PresetConnectDialog({
         protocol: preset?.protocol || 'anthropic',
         authStyle: preset?.key === 'anthropic-thirdparty' ? authStyle : (preset?.authStyle || authStyle),
         envOverrides,
-        modelName: modelName || undefined,
+        modelName: resolveConnectionTestModelName(modelName, mapSonnet),
         providerName: name || preset?.name,
       };
       if (isEdit && editProvider) {
@@ -272,12 +273,14 @@ export function PresetConnectDialog({
       setBaseUrl(preset.base_url);
       setName(preset.name);
       setExtraEnv(preset.extra_env);
-      // Pre-fill the model-name field with the preset's default model id so a
-      // preset that requires a user-specified model (e.g. MiMo) shows its
-      // current model (editable) rather than an empty box (#577). Harmless for
-      // presets without the model_names field — the value is only read on save
-      // when that field is exposed.
-      setModelName(preset.defaultModelId || "");
+      // Pre-fill only an exposed model-name field with the preset default so a
+      // provider such as MiMo shows its editable current model (#577).
+      // Mapping-only presets must keep this empty: otherwise their hidden
+      // catalog alias (for example, "sonnet") overrides a Sonnet mapping in
+      // the connection-test payload.
+      setModelName(
+        preset.fields.includes("model_names") ? (preset.defaultModelId || "") : "",
+      );
       // Use authStyle directly from preset (single source of truth)
       const detectedStyle = (preset.authStyle === 'auth_token' ? 'auth_token' : 'api_key') as 'api_key' | 'auth_token';
       // If preset doesn't expose api_key field, pre-fill from extra_env default
