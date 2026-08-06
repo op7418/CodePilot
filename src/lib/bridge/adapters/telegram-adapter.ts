@@ -18,8 +18,10 @@ import { BaseChannelAdapter, registerAdapterFactory } from '../channel-adapter';
 import { callTelegramApi, sendMessageDraft } from './telegram-utils';
 import {
   isImageEnabled,
+  isDocumentEnabled,
   downloadPhoto,
   downloadDocumentImage,
+  downloadDocument,
   isSupportedImageMime,
   inferMimeType,
 } from './telegram-media';
@@ -552,6 +554,7 @@ export class TelegramAdapter extends BaseChannelAdapter {
             const hasPhoto = m.photo && m.photo.length > 0;
             const hasDocImage = m.document && this.isDocumentImage(m.document);
             const hasMedia = hasPhoto || hasDocImage;
+            const hasNonImageDocument = !!m.document && !hasDocImage;
 
             // Unified text extraction: text for regular messages, caption for media messages
             const messageText = m.text ?? m.caption ?? '';
@@ -565,9 +568,17 @@ export class TelegramAdapter extends BaseChannelAdapter {
                 // Single image message — process immediately
                 await this.processSingleImageMessage(update, chatId, userId, displayName);
               }
+            } else if (hasNonImageDocument && isDocumentEnabled()) {
+              if (m.media_group_id) {
+                // Mixed-media album entry — buffer with the rest of the group
+                this.bufferMediaGroup(m.media_group_id, update, chatId, userId, displayName);
+              } else {
+                // Single non-image document (PDF/DOCX/TXT/etc.) — download and enqueue
+                await this.processSingleDocumentMessage(update, chatId, userId, displayName);
+              }
             } else if (messageText) {
               // Text/caption message (covers: pure text, image_enabled=false + caption,
-              // unsupported document + caption)
+              // document_enabled=false + caption)
               const msg: InboundMessage = {
                 messageId: String(m.message_id),
                 address: {
@@ -713,6 +724,80 @@ export class TelegramAdapter extends BaseChannelAdapter {
   }
 
   /**
+   * Process a single non-image document message (no media_group_id).
+   * Downloads the file, attaches it with original name + MIME, and enqueues
+   * for the normal session-locked turn. Sends rejection notifications to
+   * Telegram on download failure or size overflow.
+   */
+  private async processSingleDocumentMessage(
+    update: TelegramUpdate,
+    chatId: string,
+    userId: string,
+    displayName: string,
+  ): Promise<void> {
+    const m = update.message!;
+    const token = this.botToken;
+    const address = { channelType: 'telegram' as const, chatId, userId, displayName };
+
+    if (!token || !m.document) {
+      this.markUpdateProcessed(update.update_id);
+      return;
+    }
+
+    const attachments: FileAttachment[] = [];
+    const rejections: MediaDownloadResult[] = [];
+
+    const result = await downloadDocument(token, m.document, String(m.message_id));
+    if (result.attachment) {
+      attachments.push(result.attachment);
+    } else if (result.rejected) {
+      rejections.push(result);
+    }
+
+    // Send rejection notification directly to user
+    if (rejections.length > 0) {
+      const notice = rejections.map(r => r.rejectedMessage || 'File processing failed').join('\n');
+      this.send({ address, text: notice, parseMode: 'plain' }).catch(() => {});
+    }
+
+    const text = m.caption || m.text || '';
+    const hasContent = attachments.length > 0 || text.trim();
+
+    if (!hasContent) {
+      // Download failed and no caption — mark processed without enqueue
+      this.markUpdateProcessed(update.update_id);
+      return;
+    }
+
+    const summary = attachments.length > 0
+      ? `[file: ${attachments[0].name}] ${text.slice(0, 150)}`
+      : text.slice(0, 200);
+
+    // Audit log
+    try {
+      insertAuditLog({
+        channelType: 'telegram',
+        chatId,
+        direction: 'inbound',
+        messageId: String(m.message_id),
+        summary,
+      });
+    } catch { /* best effort */ }
+
+    const msg: InboundMessage = {
+      messageId: String(m.message_id),
+      address,
+      text,
+      timestamp: m.date * 1000,
+      raw: update,
+      updateId: update.update_id,
+      attachments: attachments.length > 0 ? attachments : undefined,
+    };
+
+    this.enqueue(msg);
+  }
+
+  /**
    * Buffer a media group update for debounced processing.
    * Resets the 500ms timer on each new update in the same group.
    */
@@ -776,7 +861,10 @@ export class TelegramAdapter extends BaseChannelAdapter {
     let firstMessageId = '';
     let firstDate = 0;
 
-    // Download all images in the group
+    // Download all media items in the group (photos, image-docs, and non-image documents).
+    // Tracks counts separately so the audit summary can report them distinctly.
+    let imageCount = 0;
+    let fileCount = 0;
     for (const update of entry.updates) {
       const m = update.message!;
       if (!firstMessageId) {
@@ -792,6 +880,7 @@ export class TelegramAdapter extends BaseChannelAdapter {
         const result = await downloadPhoto(token, m.photo, String(m.message_id));
         if (result.attachment) {
           attachments.push(result.attachment);
+          imageCount++;
         } else if (result.rejected && result.rejected !== 'unsupported_type') {
           rejections.push(result);
         }
@@ -799,18 +888,30 @@ export class TelegramAdapter extends BaseChannelAdapter {
         const result = await downloadDocumentImage(token, m.document, String(m.message_id));
         if (result.attachment) {
           attachments.push(result.attachment);
+          imageCount++;
+        } else if (result.rejected && result.rejected !== 'unsupported_type') {
+          rejections.push(result);
+        }
+      } else if (m.document) {
+        // Non-image document in a mixed-media album — only include if document
+        // attachments are enabled (mirrors the single-message dispatch gate).
+        if (!isDocumentEnabled()) continue;
+        const result = await downloadDocument(token, m.document, String(m.message_id));
+        if (result.attachment) {
+          attachments.push(result.attachment);
+          fileCount++;
         } else if (result.rejected && result.rejected !== 'unsupported_type') {
           rejections.push(result);
         }
       }
     }
 
-    // Send rejection notification if any images failed
+    // Send rejection notification if any items failed
     if (rejections.length > 0) {
-      const reasons = rejections.map(r => r.rejectedMessage || 'Image processing failed').join('\n');
+      const reasons = rejections.map(r => r.rejectedMessage || 'Attachment processing failed').join('\n');
       const notice = rejections.length === 1
         ? reasons
-        : `${rejections.length} image(s) failed:\n${reasons}`;
+        : `${rejections.length} attachment(s) failed:\n${reasons}`;
       this.send({ address, text: notice, parseMode: 'plain' }).catch(() => {});
     }
 
@@ -827,7 +928,7 @@ export class TelegramAdapter extends BaseChannelAdapter {
     }
 
     const summary = attachments.length > 0
-      ? `[Album: ${attachments.length} image(s)] ${text.slice(0, 150)}`
+      ? `[Album: ${formatAlbumSummary(imageCount, fileCount)}] ${text.slice(0, 150)}`
       : text.slice(0, 200);
 
     try {
@@ -860,6 +961,14 @@ export class TelegramAdapter extends BaseChannelAdapter {
 
     this.enqueue(msg);
   }
+}
+
+/** Build the audit-summary parts string for a mixed-media album. */
+function formatAlbumSummary(imageCount: number, fileCount: number): string {
+  const parts: string[] = [];
+  if (imageCount > 0) parts.push(`${imageCount} image(s)`);
+  if (fileCount > 0) parts.push(`${fileCount} file(s)`);
+  return parts.join(', ');
 }
 
 // Self-register so bridge-manager can create TelegramAdapter via the registry.
