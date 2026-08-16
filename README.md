@@ -27,7 +27,7 @@
 |---|---|---|
 | macOS | [Apple Silicon (.dmg)](https://github.com/op7418/CodePilot/releases/latest) · [Intel (.dmg)](https://github.com/op7418/CodePilot/releases/latest) | arm64 / x64 |
 | Windows | [Installer (.exe)](https://github.com/op7418/CodePilot/releases/latest) | x64 |
-| Linux | [AppImage / deb / rpm](https://github.com/op7418/CodePilot/releases/latest) | x64 / arm64 |
+| Linux | [AppImage / deb / rpm](https://github.com/op7418/CodePilot/releases/latest) · [AUR](https://aur.archlinux.org/packages/codepilot-appimage) | x64 / arm64 |
 
 Or visit the [Releases](https://github.com/op7418/CodePilot/releases) page for all versions.
 
