@@ -8,6 +8,7 @@
 
 import type { FileAttachment } from '@/types';
 import { getSetting } from '../../db';
+import { proxyFetch } from './telegram-utils';
 
 const TELEGRAM_API = 'https://api.telegram.org';
 
@@ -201,7 +202,7 @@ async function downloadFileById(
     try {
       // Step 1: Get file path from Telegram
       const getFileUrl = `${TELEGRAM_API}/bot${botToken}/getFile`;
-      const getFileRes = await fetch(getFileUrl, {
+      const getFileRes = await proxyFetch(getFileUrl, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ file_id: fileId }),
@@ -229,7 +230,7 @@ async function downloadFileById(
 
       // Step 2: Download the file
       const downloadUrl = `${TELEGRAM_API}/file/bot${botToken}/${filePath}`;
-      const downloadRes = await fetch(downloadUrl, {
+      const downloadRes = await proxyFetch(downloadUrl, {
         signal: AbortSignal.timeout(60_000),
       });
 

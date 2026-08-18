@@ -21,6 +21,7 @@ import {
   escapeHtml,
   splitMessage,
   formatSessionHeader,
+  proxyFetch,
 } from './bridge/adapters/telegram-utils';
 
 // ── Types ──────────────────────────────────────────────────────
@@ -279,7 +280,7 @@ export async function verifyBot(
 ): Promise<{ ok: boolean; botName?: string; error?: string }> {
   try {
     const url = `${TELEGRAM_API}/bot${botToken}/getMe`;
-    const res = await fetch(url);
+    const res = await proxyFetch(url);
     const data: TelegramBotInfo = await res.json();
 
     if (!data.ok || !data.result) {
@@ -317,7 +318,7 @@ export async function detectChatId(
   try {
     // Try getUpdates first (works when polling hasn't consumed the message)
     const url = `${TELEGRAM_API}/bot${botToken}/getUpdates`;
-    const res = await fetch(url, {
+    const res = await proxyFetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ limit: 100, timeout: 0, allowed_updates: ['message'] }),
@@ -493,7 +494,7 @@ async function pollLoop(botToken: string, chatId: string, state: PollerState): P
   while (state.running) {
     try {
       const url = `${TELEGRAM_API}/bot${botToken}/getUpdates`;
-      const res = await fetch(url, {
+      const res = await proxyFetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
