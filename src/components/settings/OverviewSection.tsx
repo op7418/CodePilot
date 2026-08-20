@@ -141,8 +141,9 @@ export function OverviewSection() {
             {t("settings.overviewDesc" as TranslationKey)}
           </p>
         </div>
-        <div className="rounded-lg border border-dashed border-border/50 bg-card/50 p-10 text-center">
-          <p className="text-xs text-muted-foreground">{isZh ? "加载中…" : "Loading…"}</p>
+        <div aria-busy="true" aria-live="polite" className="space-y-8">
+          <span className="sr-only">{t("common.loading")}</span>
+          <OverviewDashboardSkeleton />
         </div>
       </div>
     );
@@ -388,5 +389,45 @@ export function OverviewSection() {
       {/* Bottom — Token usage activity heatmap */}
       <OverviewHeatmap isZh={isZh} onJumpToDetails={() => navToSection("usage")} />
     </div>
+  );
+}
+
+
+/**
+ * Reserved-geometry loading stand-in for the 6-card grid + heatmap.
+ * Matches OverviewCard chrome (`rounded-lg border … p-5`) and Usage's
+ * `h-64` reserved chart block so the page does not expand when data lands.
+ * Checklist is omitted until loaded (avoids a false "all done" from zeros).
+ */
+function OverviewDashboardSkeleton() {
+  return (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4" aria-hidden>
+        {Array.from({ length: 6 }, (_, i) => (
+          <div
+            key={i}
+            className="rounded-lg border border-border/50 bg-card p-5 flex flex-col gap-3 h-full min-h-[9.5rem] animate-pulse"
+          >
+            <div className="flex items-center gap-2">
+              <div className="size-4 rounded bg-muted" />
+              <div className="h-4 w-24 rounded bg-muted" />
+            </div>
+            <div className="space-y-1.5 flex-1">
+              <div className="h-3 w-3/4 rounded bg-muted/70" />
+              <div className="h-3 w-1/2 rounded bg-muted/70" />
+            </div>
+            <div className="h-7 w-28 rounded bg-muted/60" />
+          </div>
+        ))}
+      </div>
+      <div
+        className="rounded-lg border border-border/50 bg-card p-5 min-h-64 animate-pulse"
+        aria-hidden
+      >
+        <div className="h-4 w-40 rounded bg-muted" />
+        <div className="mt-1.5 h-3 w-56 rounded bg-muted/70" />
+        <div className="mt-4 h-40 rounded bg-muted/40" />
+      </div>
+    </>
   );
 }

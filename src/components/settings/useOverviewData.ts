@@ -92,6 +92,9 @@ export interface OverviewState {
   providers: ProviderModelGroup[];
 }
 
+/** Last successful snapshot so a revisit paints real numbers instantly. */
+let lastKnownOverview: OverviewState | null = null;
+
 const initialState: OverviewState = {
   loading: true,
   agentRuntime: "claude-code-sdk",
@@ -114,7 +117,7 @@ const initialState: OverviewState = {
 };
 
 export function useOverviewData(): OverviewState {
-  const [state, setState] = useState<OverviewState>(initialState);
+  const [state, setState] = useState<OverviewState>(() => lastKnownOverview ?? initialState);
 
   const fetchAll = useCallback(async () => {
     try {
@@ -240,6 +243,7 @@ export function useOverviewData(): OverviewState {
 
       // First paint: everything except the per-provider manual counts.
       setState(next);
+      lastKnownOverview = next;
 
       // Phase 2 (non-blocking): per-provider deep fetch for manual_enabled /
       // manual_hidden counts. A slow / large provider list can't hold up the
@@ -263,9 +267,15 @@ export function useOverviewData(): OverviewState {
           }),
         );
         setState((prev) => ({ ...prev, modelsManualEnabled: manualEnabled, modelsManualHidden: manualHidden }));
+        lastKnownOverview = {
+          ...(lastKnownOverview ?? next),
+          modelsManualEnabled: manualEnabled,
+          modelsManualHidden: manualHidden,
+        };
       }
     } catch {
       setState((prev) => ({ ...prev, loading: false }));
+      if (lastKnownOverview) lastKnownOverview = { ...lastKnownOverview, loading: false };
     }
   }, []);
 

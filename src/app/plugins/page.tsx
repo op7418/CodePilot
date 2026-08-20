@@ -26,7 +26,7 @@
  *   3. SkillsManager re-fetches when those props change.
  */
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import {
@@ -51,6 +51,13 @@ import {
   TabsList,
   TabsTrigger,
 } from "@/components/ui/tabs";
+import {
+  hydratePluginCountsFromSession,
+  prefetchPluginTabCounts,
+  readCachedPluginCounts,
+  writeCachedPluginCounts,
+  type PluginTabCounts,
+} from "@/lib/plugin-tab-counts";
 import {
   Dialog,
   DialogContent,
@@ -118,27 +125,73 @@ export default function ExtensionsPage() {
   // stale-search flash. https://react.dev/learn/you-might-not-need-an-effect
   const [search, setSearch] = useState("");
   const [prevFilter, setPrevFilter] = useState(filter);
+  const [prefetchCounts, setPrefetchCounts] = useState<PluginTabCounts>(
+    () => readCachedPluginCounts(),
+  );
+  const [liveCounts, setLiveCounts] = useState<PluginTabCounts>({});
   if (filter !== prevFilter) {
     setPrevFilter(filter);
     setSearch("");
+    // Drop the tab we left so a stale search-filtered total cannot
+    // paint when we come back; inactive pills use unfiltered last-known.
+    setLiveCounts((prev) => {
+      if (prev[prevFilter] === undefined) return prev;
+      const next = { ...prev };
+      delete next[prevFilter];
+      return next;
+    });
   }
 
   // Per-filter counts for the Tab labels ("Skills 35 / MCP 9 / CLI 11").
-  // Each manager reports its own count via callback when mounted; the
-  // host caches the last known number so Tabs don't flash back to "?"
-  // when the user switches tabs. `undefined` means "not yet known" —
-  // Tabs omit the number rather than render a misleading "0".
-  const [skillsCount, setSkillsCount] = useState<number | undefined>(undefined);
-  const [mcpCount, setMcpCount] = useState<number | undefined>(undefined);
-  const [cliCount, setCliCount] = useState<number | undefined>(undefined);
-  const handleSkillsCounts = (counts: Record<SkillSource, number>) => {
+  // Prefetch all three on mount so unvisited pills are not blank.
+  // `undefined` = not yet known — we still render a reserved slot with
+  // a muted en-dash, never omit the span and never flash a "0".
+  // Active tab prefers the mounted manager (search-filtered); inactive
+  // tabs keep the unfiltered prefetch / last-known number.
+  useEffect(() => {
+    const stored = hydratePluginCountsFromSession();
+    if (stored.skills != null || stored.mcp != null || stored.cli != null) {
+      setPrefetchCounts((prev) => ({ ...stored, ...prev }));
+    }
+    let cancelled = false;
+    prefetchPluginTabCounts({ cwd, sessionId: activeSessionId }).then((next) => {
+      if (cancelled) return;
+      setPrefetchCounts((prev) => ({ ...prev, ...next }));
+    });
+    return () => {
+      cancelled = true;
+    };
+    // Mount-only: do not re-prefetch when cwd fallback arrives.
+    // SkillsManager already refetches on cwd; a second host GET would
+    // add another wave.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const rememberUnfiltered = useCallback((key: PluginFilter, value: number) => {
+    writeCachedPluginCounts({ [key]: value });
+    setPrefetchCounts((prev) => (prev[key] === value ? prev : { ...prev, [key]: value }));
+  }, []);
+
+  const handleSkillsCounts = useCallback((counts: Record<SkillSource, number>) => {
     const total = Object.values(counts).reduce((sum, n) => sum + n, 0);
-    setSkillsCount(total);
-  };
+    setLiveCounts((prev) => (prev.skills === total ? prev : { ...prev, skills: total }));
+    if (!search) rememberUnfiltered("skills", total);
+  }, [search, rememberUnfiltered]);
+
+  const handleMcpCount = useCallback((count: number) => {
+    setLiveCounts((prev) => (prev.mcp === count ? prev : { ...prev, mcp: count }));
+    if (!search) rememberUnfiltered("mcp", count);
+  }, [search, rememberUnfiltered]);
+
+  const handleCliCount = useCallback((count: number) => {
+    setLiveCounts((prev) => (prev.cli === count ? prev : { ...prev, cli: count }));
+    if (!search) rememberUnfiltered("cli", count);
+  }, [search, rememberUnfiltered]);
+
   const filterCounts: Record<PluginFilter, number | undefined> = {
-    skills: skillsCount,
-    mcp: mcpCount,
-    cli: cliCount,
+    skills: filter === "skills" && liveCounts.skills !== undefined ? liveCounts.skills : prefetchCounts.skills,
+    mcp: filter === "mcp" && liveCounts.mcp !== undefined ? liveCounts.mcp : prefetchCounts.mcp,
+    cli: filter === "cli" && liveCounts.cli !== undefined ? liveCounts.cli : prefetchCounts.cli,
   };
 
   // Imperative refs into each manager so the per-tab action bar can
@@ -184,14 +237,10 @@ export default function ExtensionsPage() {
       );
     }
     if (filter === "mcp") {
-      return <McpManager ref={mcpRef} variant="embedded" onCountChange={setMcpCount} search={search} />;
+      return <McpManager ref={mcpRef} variant="embedded" onCountChange={handleMcpCount} search={search} />;
     }
-    return <CliToolsManager ref={cliRef} variant="embedded" onCountChange={setCliCount} search={search} />;
-    // handleSkillsCounts identity changes per render, but it only flows
-    // into a child useEffect that re-fires harmlessly. Keeping it out of
-    // deps would cause stale closure on setSkillsCount. (deps are complete now —
-    // no suppression needed.)
-  }, [filter, cwd, activeSessionId, search]);
+    return <CliToolsManager ref={cliRef} variant="embedded" onCountChange={handleCliCount} search={search} />;
+  }, [filter, cwd, activeSessionId, search, handleSkillsCounts, handleMcpCount, handleCliCount]);
 
   return (
     <div className="flex h-full flex-col">
@@ -216,11 +265,9 @@ export default function ExtensionsPage() {
                 <TabsTrigger key={key} value={key}>
                   <CodePilotIcon name={meta.icon} size="md" className="text-inherit" aria-hidden />
                   {t(meta.labelKey)}
-                  {typeof count === "number" && (
-                    <span className="tabular-nums text-xs text-muted-foreground">
-                      {count}
-                    </span>
-                  )}
+                  <span className="inline-block min-w-[1.5rem] text-center tabular-nums text-xs text-muted-foreground">
+                    {typeof count === "number" ? count : "–"}
+                  </span>
                 </TabsTrigger>
               );
             })}

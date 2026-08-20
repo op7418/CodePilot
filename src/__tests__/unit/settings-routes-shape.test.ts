@@ -106,12 +106,11 @@ describe('Settings route-level split', () => {
         `/settings/page.tsx must not import ${section} — it is a redirect-only page`,
       );
     }
-    // The hash → route redirect must exist for legacy /settings#providers etc.
-    assert.match(root, /useRouter\(\)/);
-    assert.match(root, /window\.location\.hash/);
-    assert.match(root, /router\.replace/);
-    // Default fallback when no hash is present must point at /settings/overview.
+    // Server redirect — no client empty-tick (`return null` + router.replace).
+    assert.match(root, /from\s+["']next\/navigation["']/);
+    assert.match(root, /\bredirect\s*\(/);
     assert.match(root, /\/settings\/overview/);
+    assert.doesNotMatch(root, /["']use client["']/);
   });
 
   it('SettingsSidebar uses pathname + Link (not hash + history.replaceState)', () => {

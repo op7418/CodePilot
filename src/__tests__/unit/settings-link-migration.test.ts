@@ -130,24 +130,15 @@ describe('Settings link migration — no bare hash navigation in active code', (
     }
   });
 
-  it('the /settings root page still preserves hash compat for external deep links', () => {
-    // External docs / past chat sessions still hand out /settings#providers.
-    // The redirect must keep handling that — but only at the root page,
-    // never at internal callers.
+  it('the /settings root page server-redirects to overview', () => {
+    // Server redirect removes the client empty-tick. Internal callers already
+    // use /settings/<section>; this page must stay import-free.
     const root = readFileSync(
       path.resolve(__dirname, '../../app/settings/page.tsx'),
       'utf-8',
     );
-    assert.match(root, /window\.location\.hash/);
-    assert.match(root, /router\.replace/);
-    // The hash → route table must include at least the four high-traffic
-    // sections so no important external link 404s.
-    for (const section of ['providers', 'models', 'runtime', 'assistant']) {
-      assert.match(
-        root,
-        new RegExp(`\\b${section}\\b[\\s\\S]{0,80}/settings/${section}`),
-        `hash-redirect table must map "${section}" → /settings/${section}`,
-      );
-    }
+    assert.match(root, /\bredirect\s*\(/);
+    assert.match(root, /\/settings\/overview/);
+    assert.doesNotMatch(root, /["']use client["']/);
   });
 });
