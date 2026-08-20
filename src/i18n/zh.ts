@@ -325,6 +325,12 @@ const zh: Record<TranslationKey, string> = {
   'provider.ccSwitchHint': 'Claude Code 相关设置已迁移到 Claude Code 设置页面。',
   'provider.goToClaudeCodeSettings': '前往设置',
   'provider.openaiOAuthHint': '使用 ChatGPT Plus/Pro 订阅登录，无需 API Key 即可使用 OpenAI 模型。',
+  'provider.openaiOAuth.error.regionUnsupported':
+    'OpenAI OAuth 当前在你所在地区不可用。可改用兼容 OpenAI 协议的第三方服务（在 Provider 中配置 Base URL + API Key）。',
+  'provider.openaiOAuth.error.expiredState':
+    '登录会话已过期，请重新点击 OpenAI 登录并在新打开的页面中完成授权。',
+  'provider.openaiOAuth.error.timeout':
+    '登录超时，请重试',
   'provider.addProviderSection': '添加提供商',
   'provider.addProviderDesc': '选择要连接的提供商。大多数预设只需填写 API 密钥。',
   'provider.connectedServices': '已连接服务',
