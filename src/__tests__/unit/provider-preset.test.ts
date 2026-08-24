@@ -85,6 +85,29 @@ describe('Preset Schema Validation', () => {
     assert.notEqual(p!.sdkProxyOnly, true, 'openai-compatible uses the AI SDK path, not the Claude Code subprocess');
     assert.notEqual(p!.meta?.claudeCodeVerified, true, 'claudeCodeVerified is only meaningful for anthropic presets');
   });
+
+  it('MiniMax regional presets expose current model metadata and OpenAI endpoints', () => {
+    const expected = [
+      ['minimax-cn', 'https://api.minimaxi.com/v1', 'https://platform.minimaxi.com/docs'],
+      ['minimax-global', 'https://api.minimax.io/v1', 'https://platform.minimax.io/docs'],
+    ] as const;
+    for (const [key, openaiBaseUrl, docsUrl] of expected) {
+      const preset = VENDOR_PRESETS.find(v => v.key === key)!;
+      const m27 = preset.defaultModels.find(model => model.upstreamModelId === 'MiniMax-M2.7')!;
+      const m3 = preset.defaultModels.find(model => model.modelId === 'MiniMax-M3')!;
+      assert.equal(m27.capabilities?.contextWindow, 204_800);
+      assert.equal(m27.capabilities?.thinkingMode, 'always');
+      assert.deepEqual(m27.capabilities?.inputModalities, ['text']);
+      assert.equal(m3.capabilities?.contextWindow, 1_000_000);
+      assert.equal(m3.capabilities?.supportsAdaptiveThinking, true);
+      assert.deepEqual(m3.capabilities?.inputModalities, ['text', 'image', 'video']);
+      assert.deepEqual(preset.wireCapabilities?.codexResponses, {
+        baseUrl: openaiBaseUrl,
+        modelIds: ['MiniMax-M3', 'MiniMax-M2.7'],
+      });
+      assert.equal(preset.meta?.docsUrl, docsUrl);
+    }
+  });
 });
 
 describe('toClaudeCodeEnv: env shape after CLAUDE_CODE_PROVIDER_MANAGED_BY_HOST removal', () => {

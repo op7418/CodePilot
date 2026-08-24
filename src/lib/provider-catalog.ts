@@ -81,6 +81,15 @@ export interface CatalogModel {
     supportsAdaptiveThinking?: boolean;
     /** Vendor-documented thinking mode when it is not user-switchable. */
     thinkingMode?: 'always' | 'adaptive';
+    /** Input modalities accepted by the model's upstream endpoint. */
+    inputModalities?: ('text' | 'image' | 'video')[];
+    /** Vendor list pricing, in USD per million tokens. */
+    pricingUsdPerMillionTokens?: {
+      input: number;
+      output: number;
+      cacheRead: number;
+      cacheWrite?: number | null;
+    };
     /** Vendor default effort when the user leaves the selector on Auto. */
     defaultEffortLevel?: ProviderEffortLevel;
     /** Vendor sampling defaults/limits that must be represented honestly. */
@@ -289,6 +298,13 @@ export const PresetSchema = z.object({
       effortNoteKey: z.string().optional(),
       supportsAdaptiveThinking: z.boolean().optional(),
       thinkingMode: z.enum(['always', 'adaptive']).optional(),
+      inputModalities: z.array(z.enum(['text', 'image', 'video'])).optional(),
+      pricingUsdPerMillionTokens: z.object({
+        input: z.number(),
+        output: z.number(),
+        cacheRead: z.number(),
+        cacheWrite: z.number().nullable().optional(),
+      }).optional(),
       defaultEffortLevel: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).optional(),
       thinkingTemperatureDefault: z.number().optional(),
       thinkingTemperatureMin: z.number().optional(),
@@ -1005,7 +1021,44 @@ export const VENDOR_PRESETS: VendorPreset[] = [
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     },
     defaultModels: [
-      { modelId: 'sonnet', upstreamModelId: 'MiniMax-M2.7', displayName: 'MiniMax-M2.7', role: 'default' },
+      {
+        modelId: 'sonnet',
+        upstreamModelId: 'MiniMax-M2.7',
+        displayName: 'MiniMax-M2.7',
+        role: 'default',
+        capabilities: {
+          reasoning: true,
+          toolUse: true,
+          contextWindow: 204_800,
+          thinkingMode: 'always',
+          inputModalities: ['text'],
+          pricingUsdPerMillionTokens: {
+            input: 0.3,
+            output: 1.2,
+            cacheRead: 0.06,
+            cacheWrite: 0.375,
+          },
+        },
+      },
+      {
+        modelId: 'MiniMax-M3',
+        upstreamModelId: 'MiniMax-M3',
+        displayName: 'MiniMax-M3',
+        capabilities: {
+          reasoning: true,
+          toolUse: true,
+          vision: true,
+          contextWindow: 1_000_000,
+          supportsAdaptiveThinking: true,
+          inputModalities: ['text', 'image', 'video'],
+          pricingUsdPerMillionTokens: {
+            input: 0.6,
+            output: 2.4,
+            cacheRead: 0.12,
+            cacheWrite: null,
+          },
+        },
+      },
     ],
     defaultRoleModels: {
       default: 'MiniMax-M2.7',
@@ -1016,9 +1069,15 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     fields: ['api_key'],
     iconKey: 'minimax',
     sdkProxyOnly: true,
+    wireCapabilities: {
+      codexResponses: {
+        baseUrl: 'https://api.minimaxi.com/v1',
+        modelIds: ['MiniMax-M3', 'MiniMax-M2.7'],
+      },
+    },
     meta: {
       apiKeyUrl: 'https://platform.minimaxi.com/user-center/payment/token-plan',
-      docsUrl: 'https://platform.minimaxi.com/docs/token-plan/claude-code',
+      docsUrl: 'https://platform.minimaxi.com/docs',
       billingModel: 'token_plan',
       claudeCodeVerified: true,
     },
@@ -1038,7 +1097,44 @@ export const VENDOR_PRESETS: VendorPreset[] = [
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     },
     defaultModels: [
-      { modelId: 'sonnet', upstreamModelId: 'MiniMax-M2.7', displayName: 'MiniMax-M2.7', role: 'default' },
+      {
+        modelId: 'sonnet',
+        upstreamModelId: 'MiniMax-M2.7',
+        displayName: 'MiniMax-M2.7',
+        role: 'default',
+        capabilities: {
+          reasoning: true,
+          toolUse: true,
+          contextWindow: 204_800,
+          thinkingMode: 'always',
+          inputModalities: ['text'],
+          pricingUsdPerMillionTokens: {
+            input: 0.3,
+            output: 1.2,
+            cacheRead: 0.06,
+            cacheWrite: 0.375,
+          },
+        },
+      },
+      {
+        modelId: 'MiniMax-M3',
+        upstreamModelId: 'MiniMax-M3',
+        displayName: 'MiniMax-M3',
+        capabilities: {
+          reasoning: true,
+          toolUse: true,
+          vision: true,
+          contextWindow: 1_000_000,
+          supportsAdaptiveThinking: true,
+          inputModalities: ['text', 'image', 'video'],
+          pricingUsdPerMillionTokens: {
+            input: 0.6,
+            output: 2.4,
+            cacheRead: 0.12,
+            cacheWrite: null,
+          },
+        },
+      },
     ],
     defaultRoleModels: {
       default: 'MiniMax-M2.7',
@@ -1049,9 +1145,15 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     fields: ['api_key'],
     iconKey: 'minimax',
     sdkProxyOnly: true,
+    wireCapabilities: {
+      codexResponses: {
+        baseUrl: 'https://api.minimax.io/v1',
+        modelIds: ['MiniMax-M3', 'MiniMax-M2.7'],
+      },
+    },
     meta: {
       apiKeyUrl: 'https://platform.minimax.io/user-center/payment/token-plan',
-      docsUrl: 'https://platform.minimax.io/docs/token-plan/opencode',
+      docsUrl: 'https://platform.minimax.io/docs',
       billingModel: 'token_plan',
       claudeCodeVerified: true,
     },
