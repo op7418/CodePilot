@@ -359,6 +359,12 @@ const en = {
   'provider.ccSwitchHint': 'Claude Code settings have been moved to the Claude Code settings page.',
   'provider.goToClaudeCodeSettings': 'Go to Settings',
   'provider.openaiOAuthHint': 'Sign in with ChatGPT Plus/Pro to access OpenAI models without an API key.',
+  'provider.openaiOAuth.error.regionUnsupported':
+    'OpenAI OAuth is unavailable in your current country/region. You can use an OpenAI-compatible third-party endpoint via Provider settings (Base URL + API key).',
+  'provider.openaiOAuth.error.expiredState':
+    'The login session has expired. Please click OpenAI Login again and complete authorization in the newly opened page.',
+  'provider.openaiOAuth.error.timeout':
+    'Login timed out, please try again',
   'provider.addProviderSection': 'Add Provider',
   'provider.addProviderDesc': 'Select a provider to connect. Most presets only require an API key.',
   'provider.connectedServices': 'Connected services',

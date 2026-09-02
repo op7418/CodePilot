@@ -27,6 +27,7 @@ const KEYS = {
   email: 'openai_oauth_email',
   plan: 'openai_oauth_plan',
   accountId: 'openai_oauth_account_id',
+  lastError: 'openai_oauth_last_error',
 } as const;
 
 const REFRESH_BUFFER_MS = 5 * 60 * 1000;
@@ -40,11 +41,17 @@ export interface OpenAIOAuthStatus {
   accountId?: string;
   /** True when token is near/past expiry but a refresh token exists */
   needsRefresh?: boolean;
+  oauthError?: string;
 }
 
 export function getOAuthStatus(): OpenAIOAuthStatus {
   const accessToken = getSetting(KEYS.accessToken);
-  if (!accessToken) return { authenticated: false };
+  if (!accessToken) {
+    return {
+      authenticated: false,
+      oauthError: getSetting(KEYS.lastError) || undefined,
+    };
+  }
 
   // Check if token is expired and no refresh token available
   const expiresAt = Number(getSetting(KEYS.expiresAt) || '0');
@@ -65,6 +72,7 @@ export function getOAuthStatus(): OpenAIOAuthStatus {
     plan: getSetting(KEYS.plan),
     accountId: getSetting(KEYS.accountId),
     needsRefresh,
+    oauthError: undefined,
   };
 }
 
@@ -132,6 +140,7 @@ function saveTokens(tokens: OAuthTokens): void {
   setSetting(KEYS.idToken, tokens.idToken);
   if (tokens.refreshToken) setSetting(KEYS.refreshToken, tokens.refreshToken);
   if (tokens.expiresAt) setSetting(KEYS.expiresAt, String(tokens.expiresAt));
+  setSetting(KEYS.lastError, '');
 
   const claims = parseIdTokenClaims(tokens.idToken);
   if (claims.email) setSetting(KEYS.email, claims.email);
@@ -200,6 +209,7 @@ export async function startOAuthFlow(): Promise<{ authUrl: string; completion: P
     prevPending.reject(new Error('Superseded by new login attempt'));
     setPendingOAuth(undefined);
   }
+  setSetting(KEYS.lastError, '');
 
   const flow = prepareOAuthFlow();
 
@@ -247,6 +257,7 @@ async function startOAuthServer(): Promise<void> {
 
     if (error) {
       const msg = errorDesc || error;
+      setSetting(KEYS.lastError, msg);
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(errorHtml(msg));
       getPendingOAuth()?.reject(new Error(msg));
@@ -257,7 +268,8 @@ async function startOAuthServer(): Promise<void> {
 
     const pending = getPendingOAuth();
     if (!code || !pending || state !== pending.state) {
-      const msg = !code ? 'Missing authorization code' : 'Invalid state';
+      const msg = !code ? 'Missing authorization code' : 'Invalid or expired state';
+      setSetting(KEYS.lastError, msg);
       res.writeHead(400, { 'Content-Type': 'text/html' });
       res.end(errorHtml(msg));
       getPendingOAuth()?.reject(new Error(msg));
@@ -278,6 +290,7 @@ async function startOAuthServer(): Promise<void> {
       current.resolve(tokens.accessToken);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      setSetting(KEYS.lastError, `Token exchange failed: ${message}`);
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(errorHtml(`Token exchange failed: ${message}`));
       current.reject(err instanceof Error ? err : new Error(message));
