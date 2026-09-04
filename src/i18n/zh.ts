@@ -36,6 +36,9 @@ const zh: Record<TranslationKey, string> = {
   'chatList.projects': '项目',
   'chatList.assistantSection': '助理',
   'chatList.newProject': '新建项目',
+  'chatList.dropToCreateProject': '松开即可新建项目',
+  'chatList.dropFileNotFolder': '请拖入文件夹，不支持单个文件',
+  'chatList.dropCreateFailed': '创建项目失败',
   'chatList.showMore': '展开更多（{count} 条）',
   'chatList.showLess': '收起',
 
