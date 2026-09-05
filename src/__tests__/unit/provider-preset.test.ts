@@ -1,6 +1,14 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { VENDOR_PRESETS, PresetSchema, getDefaultModelsForProvider, getEffectiveProviderProtocol, isValidProtocol } from '../../lib/provider-catalog';
+import {
+  VENDOR_PRESETS,
+  PresetSchema,
+  findMatchingPresetForRecord,
+  getDefaultModelsForProvider,
+  getEffectiveProviderProtocol,
+  isValidProtocol,
+} from '../../lib/provider-catalog';
+import { getProviderCompat } from '../../lib/runtime-compat';
 
 describe('Preset Schema Validation', () => {
   for (const preset of VENDOR_PRESETS) {
@@ -86,6 +94,35 @@ describe('Preset Schema Validation', () => {
     assert.ok(p!.fields.includes('model_names'), 'must expose model_names so the user can set their model');
     assert.notEqual(p!.sdkProxyOnly, true, 'openai-compatible uses the AI SDK path, not the Claude Code subprocess');
     assert.notEqual(p!.meta?.claudeCodeVerified, true, 'claudeCodeVerified is only meaningful for anthropic presets');
+  });
+
+  it('atlascloud preset uses the OpenAI-compatible runtime path with live-verified defaults', () => {
+    const p = VENDOR_PRESETS.find(v => v.key === 'atlascloud');
+    assert.ok(p, 'Atlas Cloud preset must exist');
+    assert.equal(p!.protocol, 'openai-compatible');
+    assert.equal(p!.authStyle, 'api_key');
+    assert.equal(p!.baseUrl, 'https://api.atlascloud.ai/v1');
+    assert.deepEqual(p!.fields, ['api_key']);
+    assert.equal(p!.sdkProxyOnly, undefined, 'Atlas Cloud uses the AI SDK path, not the Claude Code subprocess');
+    assert.equal(p!.defaultRoleModels?.default, 'qwen/qwen3.5-flash');
+    assert.equal(p!.defaultRoleModels?.reasoning, 'deepseek-ai/deepseek-v4-pro');
+    assert.deepEqual(
+      p!.defaultModels.map(m => m.modelId),
+      ['qwen/qwen3.5-flash', 'deepseek-ai/deepseek-v4-pro'],
+    );
+
+    const models = getDefaultModelsForProvider('openai-compatible', 'https://api.atlascloud.ai/v1');
+    assert.deepEqual(models.map(m => m.modelId), ['qwen/qwen3.5-flash', 'deepseek-ai/deepseek-v4-pro']);
+
+    const atlasRecord = {
+      preset_key: 'atlascloud',
+      provider_type: 'openai-compatible',
+      protocol: 'openai-compatible',
+      base_url: 'https://api.atlascloud.ai/v1',
+    };
+    const match = findMatchingPresetForRecord(atlasRecord);
+    assert.equal(match?.key, 'atlascloud');
+    assert.equal(getProviderCompat(atlasRecord), 'codepilot_only');
   });
 });
 
