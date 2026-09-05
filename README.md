@@ -36,7 +36,7 @@
 |---|---|---|
 | macOS | [Apple Silicon (.dmg)](https://github.com/op7418/CodePilot/releases/latest) · [Intel (.dmg)](https://github.com/op7418/CodePilot/releases/latest) | arm64 / x64 |
 | Windows | [Installer (.exe)](https://github.com/op7418/CodePilot/releases/latest) | x64 |
-| Linux | [AppImage / deb / rpm](https://github.com/op7418/CodePilot/releases/latest) | x64 / arm64 |
+| Linux | [AppImage / deb / rpm](https://github.com/op7418/CodePilot/releases/latest) · [AUR](https://aur.archlinux.org/packages/codepilot-appimage) | x64 / arm64 |
 
 Official macOS stable builds can check, download, and install signed updates in the app. After manually installing the first supported Windows version, later Windows releases can update in the app using unsigned packages from the official GitHub Release; Linux releases remain manual downloads.
 
