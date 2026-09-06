@@ -1078,7 +1078,8 @@ export const VENDOR_PRESETS: VendorPreset[] = [
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     },
     defaultModels: [
-      { modelId: 'sonnet', upstreamModelId: 'MiniMax-M2.7', displayName: 'MiniMax-M2.7', role: 'default' },
+      { modelId: 'sonnet', upstreamModelId: 'MiniMax-M2.7', displayName: 'MiniMax-M2.7', role: 'default', capabilities: { contextWindow: 204800, reasoning: true, toolUse: true } },
+      { modelId: 'MiniMax-M3', upstreamModelId: 'MiniMax-M3', displayName: 'MiniMax-M3', capabilities: { contextWindow: 1000000, reasoning: true, toolUse: true, vision: true, supportsAdaptiveThinking: true } },
     ],
     defaultRoleModels: {
       default: 'MiniMax-M2.7',
@@ -1111,7 +1112,8 @@ export const VENDOR_PRESETS: VendorPreset[] = [
       CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC: '1',
     },
     defaultModels: [
-      { modelId: 'sonnet', upstreamModelId: 'MiniMax-M2.7', displayName: 'MiniMax-M2.7', role: 'default' },
+      { modelId: 'sonnet', upstreamModelId: 'MiniMax-M2.7', displayName: 'MiniMax-M2.7', role: 'default', capabilities: { contextWindow: 204800, reasoning: true, toolUse: true } },
+      { modelId: 'MiniMax-M3', upstreamModelId: 'MiniMax-M3', displayName: 'MiniMax-M3', capabilities: { contextWindow: 1000000, reasoning: true, toolUse: true, vision: true, supportsAdaptiveThinking: true } },
     ],
     defaultRoleModels: {
       default: 'MiniMax-M2.7',
