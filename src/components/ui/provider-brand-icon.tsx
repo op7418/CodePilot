@@ -37,6 +37,9 @@ interface ProviderBrandIconByKeyProps {
 export function ProviderBrandIconByKey({ iconKey: key, size = 18 }: ProviderBrandIconByKeyProps) {
   if (key === 'tokendance') return <Image src="/provider-icons/tokendance.svg" alt="" width={size} height={size} unoptimized className="shrink-0" />;
   if (key === 'openrouter') return <OpenRouter size={size} />;
+  // Requesty has no @lobehub/icons entry yet; render its logo from models.dev
+  // the same way ModelSelectorLogo already does for the `requesty` provider.
+  if (key === 'requesty') return <img src="https://models.dev/logos/requesty.svg" alt="Requesty" width={size} height={size} className="shrink-0 dark:invert" />;
   if (key === 'zhipu') return <Zhipu size={size} />;
   if (key === 'kimi') return <Kimi size={size} />;
   if (key === 'moonshot') return <Moonshot size={size} />;
