@@ -256,7 +256,7 @@ export function createCliToolsTools() {
         command: z.string().describe('The install command to execute, e.g. "brew install ffmpeg"'),
         name: z.string().optional().describe('Display name for the tool. If omitted, extracted from the command.'),
       }),
-      execute: async ({ command, name }) => {
+      execute: async ({ command, name }, { abortSignal }) => {
         try {
           const expandedPath = getExpandedPath();
           const installMethod = extractInstallMethod(command);
@@ -265,6 +265,7 @@ export function createCliToolsTools() {
           const { stdout, stderr } = await execAsync(command, {
             timeout: 300_000,
             env: { ...process.env, PATH: expandedPath },
+            signal: abortSignal,
           });
 
           const output = (stdout + '\n' + stderr).trim();
@@ -629,7 +630,7 @@ export function createCliToolsTools() {
         toolId: z.string().optional().describe('The tool ID to update (e.g. "ffmpeg", "custom-mytool")'),
         name: z.string().optional().describe('The tool name or binary name to update (used if toolId not provided)'),
       }),
-      execute: async ({ toolId, name: toolName }) => {
+      execute: async ({ toolId, name: toolName }, { abortSignal }) => {
         try {
           const expandedPath = getExpandedPath();
           const env = { ...process.env, PATH: expandedPath };
@@ -700,6 +701,7 @@ export function createCliToolsTools() {
           const { stdout, stderr } = await execAsync(updateCmd, {
             timeout: 300_000,
             env,
+            signal: abortSignal,
           });
 
           const output = (stdout + '\n' + stderr).trim();
