@@ -1,19 +1,19 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef, useMemo } from 'react';
+import { Fragment, useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import { useTranslation } from '@/hooks/useTranslation';
 import {
   CommandDialog,
   CommandInput,
   CommandList,
-  CommandEmpty,
-  CommandGroup,
   CommandItem,
 } from '@/components/ui/command';
-import { ChatCircleText, NotePencil, Folder, File, UserCircle, Sparkle, Wrench, CaretDown, CaretRight } from '@/components/ui/icon';
-import type { IconComponent } from '@/types';
+import { Button } from '@/components/ui/button';
+import { CodePilotIcon, type CodePilotIconName } from '@/components/ui/semantic-icon';
+import { cn } from '@/lib/utils';
 import type { TranslationKey } from '@/i18n';
+import { formatRelativeTime } from './chat-list-utils';
 
 interface SearchResultSession {
   type: 'session';
@@ -56,44 +56,144 @@ interface GlobalSearchDialogProps {
 
 type SearchScope = 'all' | 'sessions' | 'messages' | 'files';
 
-const TYPE_ICONS: Record<string, IconComponent> = {
-  sessions: ChatCircleText,
-  messages: NotePencil,
-  files: Folder,
-};
-
-const TYPE_LABEL_KEYS: Record<keyof SearchResponse, TranslationKey> = {
+const TYPE_LABEL_KEYS: Record<Exclude<SearchScope, 'all'>, TranslationKey> = {
   sessions: 'globalSearch.sessions',
   messages: 'globalSearch.messages',
   files: 'globalSearch.files',
 };
 
-const CONTENT_TYPE_ICONS: Record<SearchResultMessage['contentType'], IconComponent> = {
-  user: UserCircle,
-  assistant: Sparkle,
-  tool: Wrench,
+const CONTENT_TYPE_LABEL_KEYS: Record<SearchResultMessage['contentType'], TranslationKey> = {
+  user: 'messageList.userLabel',
+  assistant: 'messageList.assistantLabel',
+  tool: 'globalSearch.toolLabel',
 };
+
+const SCOPE_OPTIONS: Array<{
+  scope: SearchScope;
+  labelKey: TranslationKey;
+  prefix: string | null;
+  icon?: CodePilotIconName;
+}> = [
+  { scope: 'all', labelKey: 'globalSearch.all', prefix: null },
+  {
+    scope: 'sessions',
+    labelKey: 'globalSearch.sessions',
+    prefix: 'session:',
+    icon: 'chat',
+  },
+  {
+    scope: 'messages',
+    labelKey: 'globalSearch.messages',
+    prefix: 'message:',
+    icon: 'note',
+  },
+  {
+    scope: 'files',
+    labelKey: 'globalSearch.files',
+    prefix: 'file:',
+    icon: 'file_tree',
+  },
+];
+
+function buildScopedQuery(scope: SearchScope, term: string) {
+  const option = SCOPE_OPTIONS.find((item) => item.scope === scope);
+  if (!option || !option.prefix) {
+    return term;
+  }
+  return `${option.prefix}${term}`;
+}
+
+function normalizeInlineText(value: string) {
+  return value.replace(/\s+/g, ' ').trim();
+}
+
+function formatPathTail(filePath: string) {
+  const parts = filePath.replace(/\\/g, '/').split('/').filter(Boolean);
+  if (parts.length === 0) return filePath;
+  return parts.slice(-3).join('/');
+}
+
+function renderHighlightedText(text: string, searchTerm: string) {
+  if (!searchTerm) return text;
+
+  const normalizedTerm = searchTerm.trim();
+  if (!normalizedTerm) return text;
+
+  const lowerText = text.toLowerCase();
+  const lowerTerm = normalizedTerm.toLowerCase();
+  const segments: Array<{ text: string; match: boolean }> = [];
+  let cursor = 0;
+
+  while (cursor < text.length) {
+    const matchIndex = lowerText.indexOf(lowerTerm, cursor);
+    if (matchIndex === -1) {
+      segments.push({ text: text.slice(cursor), match: false });
+      break;
+    }
+
+    if (matchIndex > cursor) {
+      segments.push({ text: text.slice(cursor, matchIndex), match: false });
+    }
+
+    segments.push({
+      text: text.slice(matchIndex, matchIndex + normalizedTerm.length),
+      match: true,
+    });
+    cursor = matchIndex + normalizedTerm.length;
+  }
+
+  return segments.map((segment, index) => (
+    <Fragment key={`${segment.text}-${index}`}>
+      {segment.match ? (
+        <mark className="rounded bg-primary/15 px-0.5 text-foreground">
+          {segment.text}
+        </mark>
+      ) : (
+        segment.text
+      )}
+    </Fragment>
+  ));
+}
 
 export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogProps) {
   const { t } = useTranslation();
   const router = useRouter();
   const [query, setQuery] = useState('');
   const [loading, setLoading] = useState(false);
-  const [results, setResults] = useState<SearchResponse>({ sessions: [], messages: [], files: [] });
-  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
+  const [results, setResults] = useState<SearchResponse>({
+    sessions: [],
+    messages: [],
+    files: [],
+  });
   const abortRef = useRef<AbortController | null>(null);
   const composingRef = useRef(false);
-  const normalizedQuery = query.trim();
-  const parsedQuery = useMemo<{ scope: SearchScope; term: string; prefix: string | null }>(() => {
+
+  const parsedQuery = useMemo<{
+    scope: SearchScope;
+    term: string;
+    prefix: string | null;
+  }>(() => {
     const trimmed = query.trim();
     const lower = trimmed.toLowerCase();
 
-    const parsePrefix = (single: string, plural: string, scope: Exclude<SearchScope, 'all'>) => {
+    const parsePrefix = (
+      single: string,
+      plural: string,
+      scope: Exclude<SearchScope, 'all'>,
+    ) => {
       if (lower.startsWith(`${single}:`)) {
-        return { scope, term: trimmed.slice(single.length + 1).trim(), prefix: `${single}:` };
+        return {
+          scope,
+          term: trimmed.slice(single.length + 1).trim(),
+          prefix: `${single}:`,
+        };
       }
       if (lower.startsWith(`${plural}:`)) {
-        return { scope, term: trimmed.slice(plural.length + 1).trim(), prefix: `${single}:` };
+        return {
+          scope,
+          term: trimmed.slice(plural.length + 1).trim(),
+          prefix: `${single}:`,
+        };
       }
       return null;
     };
@@ -101,20 +201,38 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
     return (
       parsePrefix('session', 'sessions', 'sessions') ??
       parsePrefix('message', 'messages', 'messages') ??
-      parsePrefix('file', 'files', 'files') ??
-      { scope: 'all', term: trimmed, prefix: null }
+      parsePrefix('file', 'files', 'files') ?? {
+        scope: 'all',
+        term: trimmed,
+        prefix: null,
+      }
     );
   }, [query]);
+
   const searchTerm = parsedQuery.term;
   const activeScope = parsedQuery.scope;
   const activePrefix = parsedQuery.prefix;
+  const hasSearchTerm = searchTerm.length > 0;
+  const totalResults =
+    results.sessions.length + results.messages.length + results.files.length;
+  const hasResults = totalResults > 0;
 
-  const performSearch = useCallback(async (q: string) => {
+  const focusSearchInput = useCallback(() => {
+    if (typeof document === 'undefined') return;
+    requestAnimationFrame(() => {
+      const input = document.querySelector<HTMLInputElement>(
+        '[data-slot="command-input"]',
+      );
+      input?.focus();
+    });
+  }, []);
+
+  const performSearch = useCallback(async (rawQuery: string, term: string) => {
     if (composingRef.current) return;
-    if (abortRef.current) {
-      abortRef.current.abort();
-    }
-    if (!q.trim()) {
+
+    abortRef.current?.abort();
+
+    if (!term.trim()) {
       abortRef.current = null;
       setResults({ sessions: [], messages: [], files: [] });
       setLoading(false);
@@ -126,10 +244,11 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
     setLoading(true);
 
     try {
-      const res = await fetch(`/api/search?q=${encodeURIComponent(q)}`, {
+      const res = await fetch(`/api/search?q=${encodeURIComponent(rawQuery)}`, {
         signal: controller.signal,
       });
       if (!res.ok) throw new Error('Search failed');
+
       const data: SearchResponse = await res.json();
       if (!controller.signal.aborted) {
         setResults(data);
@@ -148,10 +267,10 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
 
   useEffect(() => {
     const timer = setTimeout(() => {
-      performSearch(query);
-    }, 150);
+      void performSearch(query, searchTerm);
+    }, 160);
     return () => clearTimeout(timer);
-  }, [query, performSearch]);
+  }, [performSearch, query, searchTerm]);
 
   useEffect(() => {
     if (!open) {
@@ -159,7 +278,6 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
       abortRef.current = null;
       setQuery('');
       setResults({ sessions: [], messages: [], files: [] });
-      setCollapsedGroups(new Set());
       setLoading(false);
     }
   }, [open]);
@@ -170,222 +288,316 @@ export function GlobalSearchDialog({ open, onOpenChange }: GlobalSearchDialogPro
     };
   }, []);
 
-  const toggleGroup = useCallback((sessionId: string) => {
-    setCollapsedGroups(prev => {
-      const next = new Set(prev);
-      if (next.has(sessionId)) {
-        next.delete(sessionId);
-      } else {
-        next.add(sessionId);
-      }
-      return next;
-    });
-  }, []);
-
   const handleSelect = useCallback(
     (item: SearchResultSession | SearchResultMessage | SearchResultFile) => {
       onOpenChange(false);
       const qParam = query.trim() ? `&q=${encodeURIComponent(query.trim())}` : '';
+
       if (item.type === 'session') {
         router.push(`/chat/${item.id}`);
-      } else if (item.type === 'message') {
-        router.push(`/chat/${item.sessionId}?message=${item.messageId}${qParam}`);
-      } else if (item.type === 'file') {
-        const seek = Date.now().toString(36);
-        router.push(`/chat/${item.sessionId}?file=${encodeURIComponent(item.path)}&seek=${seek}${qParam}`);
+        return;
       }
+
+      if (item.type === 'message') {
+        router.push(`/chat/${item.sessionId}?message=${item.messageId}${qParam}`);
+        return;
+      }
+
+      const seek = Date.now().toString(36);
+      router.push(
+        `/chat/${item.sessionId}?file=${encodeURIComponent(item.path)}&seek=${seek}${qParam}`,
+      );
     },
-    [router, onOpenChange, query],
+    [onOpenChange, query, router],
   );
 
-  const hasResults =
-    results.sessions.length > 0 ||
-    results.messages.length > 0 ||
-    results.files.length > 0;
+  const handleScopeSelect = useCallback(
+    (scope: SearchScope) => {
+      setQuery(buildScopedQuery(scope, searchTerm));
+      focusSearchInput();
+    },
+    [focusSearchInput, searchTerm],
+  );
 
-  const groupedMessages = useMemo(() => {
-    const groups: Record<string, { sessionTitle: string; messages: SearchResultMessage[] }> = {};
-    for (const msg of results.messages) {
-      if (!groups[msg.sessionId]) {
-        groups[msg.sessionId] = { sessionTitle: msg.sessionTitle, messages: [] };
-      }
-      groups[msg.sessionId].messages.push(msg);
-    }
-    return Object.values(groups);
-  }, [results.messages]);
+  const activeScopeLabel =
+    activeScope === 'all' ? t('globalSearch.all') : t(TYPE_LABEL_KEYS[activeScope]);
+  const expanded = hasSearchTerm || loading;
+  const resultStackClass =
+    'overflow-hidden rounded-2xl border border-border/60 bg-background/80';
+  const resultItemClass =
+    'rounded-none border-0 border-b border-border/45 bg-transparent px-3.5 py-2.5 data-[selected=true]:bg-accent/70 last:border-b-0';
 
-  const renderHighlightedSnippet = (snippet: string, searchTerm: string) => {
-    if (!searchTerm) return <span>{snippet}</span>;
-    const lowerSnippet = snippet.toLowerCase();
-    const lowerTerm = searchTerm.toLowerCase();
-    const idx = lowerSnippet.indexOf(lowerTerm);
-    if (idx === -1) return <span>{snippet}</span>;
-    return (
-      <span>
-        {snippet.slice(0, idx)}
-        <mark className="rounded bg-primary/25 px-0.5 text-foreground">
-          {snippet.slice(idx, idx + searchTerm.length)}
-        </mark>
-        {snippet.slice(idx + searchTerm.length)}
+  const renderSectionHeader = (
+    scope: Exclude<SearchScope, 'all'>,
+    count: number,
+  ) => (
+    <div className="flex items-center justify-between gap-3 px-2 pb-1 pt-1">
+      <div className="text-[11px] font-medium text-muted-foreground">
+        {t(TYPE_LABEL_KEYS[scope])}
+      </div>
+      <span className="rounded-full bg-muted/55 px-2 py-0.5 text-[10px] tabular-nums text-muted-foreground">
+        {count}
       </span>
-    );
-  };
-
-  const renderGroup = (
-    key: keyof SearchResponse,
-    items: (SearchResultSession | SearchResultFile)[],
-  ) => {
-    if (items.length === 0) return null;
-    const Icon = TYPE_ICONS[key];
-    return (
-      <CommandGroup key={key} heading={t(TYPE_LABEL_KEYS[key])}>
-        {items.map((item, idx) => (
-          <CommandItem
-            key={`${key}-${idx}`}
-            value={`${key}-${idx}-${item.type === 'session' ? item.id : item.path}`}
-            onSelect={() => handleSelect(item)}
-            className="flex items-start gap-2 py-2"
-          >
-            {item.type === 'file' ? (
-              item.nodeType === 'directory' ? (
-                <Folder size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
-              ) : (
-                <File size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
-              )
-            ) : (
-              <Icon size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
-            )}
-            <div className="min-w-0 flex-1">
-              {item.type === 'session' && (
-                <>
-                  <p className="truncate text-sm max-w-[360px]">{item.title}</p>
-                  {item.projectName && (
-                    <p className="truncate text-xs text-muted-foreground max-w-[360px]">{item.projectName}</p>
-                  )}
-                </>
-              )}
-              {item.type === 'file' && (
-                <>
-                  <p className="truncate text-sm max-w-[360px]">{item.name}</p>
-                  <p className="truncate text-xs text-muted-foreground max-w-[360px]">{item.sessionTitle}</p>
-                </>
-              )}
-            </div>
-          </CommandItem>
-        ))}
-      </CommandGroup>
-    );
-  };
+    </div>
+  );
 
   return (
     <CommandDialog
       open={open}
       onOpenChange={onOpenChange}
-      title="Global Search"
-      description="Search across sessions, messages, and files"
-      className="sm:max-w-3xl h-[min(80vh,520px)] flex flex-col overflow-hidden"
+      title={t('globalSearch.title')}
+      description={t('globalSearch.description')}
+      className={cn(
+        'top-[44%] h-[min(70vh,560px)] max-h-[min(70vh,560px)] overflow-hidden rounded-[24px] border border-border/70 bg-background/98 p-0 shadow-[var(--shadow-diffuse)] backdrop-blur-xl sm:max-w-[760px]',
+        'data-[state=open]:zoom-in-100 data-[state=closed]:zoom-out-100',
+        '[&_[data-slot=command-input-wrapper]]:h-12 [&_[data-slot=command-input-wrapper]]:border-0 [&_[data-slot=command-input-wrapper]]:px-3',
+      )}
       showCloseButton={false}
       shouldFilter={false}
     >
-      <CommandInput
-        placeholder={t('globalSearch.placeholder')}
-        value={query}
-        onValueChange={setQuery}
-        className="h-12 shrink-0"
-        onCompositionStart={() => { composingRef.current = true; }}
-        onCompositionEnd={(e) => {
-          composingRef.current = false;
-          const value = (e.target as HTMLInputElement).value;
-          setQuery(value);
-        }}
-      />
-      {normalizedQuery && activeScope !== 'all' && (
-        <div className="flex items-center justify-between bg-primary/5 px-3 py-1.5 text-xs">
-          <span className="inline-flex items-center gap-1.5 text-primary">
-            <span className="size-1.5 rounded-full bg-primary" />
-            {t('globalSearch.activeScope', { scope: t(TYPE_LABEL_KEYS[activeScope]) })}
-          </span>
-          <code className="rounded border border-primary/25 bg-primary/10 px-1.5 py-0.5 font-mono text-[11px] text-primary">
-            {activePrefix}
-          </code>
-        </div>
-      )}
-      <CommandList className="flex-1 min-h-0 overflow-y-auto max-h-none">
-        {!query && !loading && (
-          <div className="py-6 text-center text-sm text-muted-foreground">
-            <p>{t('globalSearch.hint')}</p>
-            <p className="mt-1 text-xs">
-              {t('globalSearch.hintPrefix')}{' '}
-              <code className="rounded bg-muted px-1">session:</code>{' '}
-              <code className="rounded bg-muted px-1">message:</code>{' '}
-              <code className="rounded bg-muted px-1">file:</code>{' '}
-              {t('globalSearch.toNarrowScope')}
-            </p>
+      <div className="flex h-full min-h-0 flex-col">
+        <div className="border-b border-border/60 px-3 pt-3">
+          <div className="overflow-hidden rounded-[18px] border border-border/70 bg-background shadow-sm">
+            <CommandInput
+              placeholder={t('globalSearch.placeholder')}
+              value={query}
+              onValueChange={setQuery}
+              className="h-12 text-[15px]"
+              onCompositionStart={() => {
+                composingRef.current = true;
+              }}
+              onCompositionEnd={(event) => {
+                composingRef.current = false;
+                setQuery((event.target as HTMLInputElement).value);
+              }}
+            />
           </div>
-        )}
-        {normalizedQuery && !loading && !hasResults && (
-          <CommandEmpty>{t('globalSearch.noResults')}</CommandEmpty>
-        )}
-        {normalizedQuery && renderGroup('sessions', results.sessions)}
 
-        {normalizedQuery && groupedMessages.map((group, groupIdx) => {
-          const isCollapsed = collapsedGroups.has(group.messages[0]?.sessionId || `group-${groupIdx}`);
-          const sessionId = group.messages[0]?.sessionId || `group-${groupIdx}`;
-          return (
-            <CommandGroup key={`msg-group-${groupIdx}`}>
-              <CommandItem
-                value={`message-group-${sessionId}`}
-                onSelect={() => toggleGroup(sessionId)}
-                className="flex w-full items-center gap-1.5 rounded bg-muted/40 px-1 py-1 text-left font-medium text-foreground"
-                aria-expanded={!isCollapsed}
-              >
-                <div className="flex min-w-0 items-center gap-1.5">
-                  {isCollapsed ? (
-                    <CaretRight size={14} className="shrink-0 text-muted-foreground" />
-                  ) : (
-                    <CaretDown size={14} className="shrink-0 text-muted-foreground" />
-                  )}
-                  <NotePencil size={14} className="shrink-0 text-muted-foreground" />
-                  <span className="truncate max-w-[280px]" title={group.sessionTitle.replace(/\n/g, ' ')}>
-                    {group.sessionTitle.replace(/\n/g, ' ')}
-                  </span>
-                  <span className="ml-1 rounded-full bg-muted px-1.5 py-0 text-[10px] text-muted-foreground">
-                    {group.messages.length}
-                  </span>
-                </div>
-              </CommandItem>
-              {!isCollapsed && group.messages.map((item, idx) => {
-                const Icon = CONTENT_TYPE_ICONS[item.contentType];
-                const labelKey: TranslationKey =
-                  item.contentType === 'user'
-                    ? 'messageList.userLabel'
-                    : item.contentType === 'tool'
-                      ? ('globalSearch.toolLabel' as TranslationKey)
-                      : 'messageList.assistantLabel';
+          <div className="flex items-center justify-between gap-3 py-2.5">
+            <div className="inline-flex rounded-full bg-muted/55 p-0.5">
+              {SCOPE_OPTIONS.map((option) => {
+                const isActive = option.scope === activeScope;
                 return (
-                  <CommandItem
-                    key={`message-${groupIdx}-${idx}`}
-                    value={`message-${groupIdx}-${idx}-${item.messageId}`}
-                    onSelect={() => handleSelect(item)}
-                    className="flex items-start gap-2 py-2"
+                  <Button
+                    key={option.scope}
+                    type="button"
+                    variant="ghost"
+                    size="xs"
+                    aria-pressed={isActive}
+                    data-testid={`global-search-scope-${option.scope}`}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => handleScopeSelect(option.scope)}
+                    className={cn(
+                      'h-7 gap-1.5 rounded-full px-3 text-[12px] transition-colors',
+                      isActive
+                        ? 'bg-background text-foreground shadow-sm'
+                        : 'text-muted-foreground hover:text-foreground',
+                    )}
                   >
-                    <Icon size={16} className="mt-0.5 shrink-0 text-muted-foreground" />
-                    <div className="min-w-0 flex-1">
-                      <p className="truncate text-sm">{renderHighlightedSnippet(item.snippet, searchTerm)}</p>
-                      <p className="truncate text-xs text-muted-foreground">{t(labelKey)}</p>
-                    </div>
-                  </CommandItem>
+                    {option.icon && (
+                      <CodePilotIcon
+                        name={option.icon}
+                        size="sm"
+                        className="text-inherit"
+                        aria-hidden
+                      />
+                    )}
+                    {t(option.labelKey)}
+                  </Button>
                 );
               })}
-            </CommandGroup>
-          );
-        })}
+            </div>
 
-        {normalizedQuery && renderGroup('files', results.files)}
-        {loading && (
-          <div className="py-4 text-center text-sm text-muted-foreground">{t('globalSearch.searching')}</div>
-        )}
-      </CommandList>
+            <div
+              className="flex min-w-0 items-center justify-end gap-2 text-[11px] text-muted-foreground"
+              data-testid="global-search-status"
+            >
+              {activePrefix && (
+                <code className="rounded-full bg-muted px-2 py-1 font-mono text-[10px] text-muted-foreground">
+                  {activePrefix}
+                </code>
+              )}
+              {loading ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <CodePilotIcon
+                    name="loading"
+                    size="sm"
+                    className="animate-spin text-muted-foreground"
+                    aria-hidden
+                  />
+                  {t('globalSearch.searching')}
+                </span>
+              ) : hasSearchTerm ? (
+                <span>{t('globalSearch.resultsSummary', { count: totalResults })}</span>
+              ) : null}
+            </div>
+          </div>
+        </div>
+
+        <CommandList
+          className="max-h-none min-h-0 flex-1 overflow-y-auto px-3 pb-3 pt-2"
+        >
+          <div className={cn(expanded && 'space-y-3')} data-testid="global-search-surface">
+            {!hasSearchTerm && !loading && (
+              <div
+                className="flex min-h-9 items-center justify-end gap-1.5 rounded-2xl bg-muted/[0.16] px-3 py-2 text-[11px] text-muted-foreground"
+                data-testid="global-search-empty-state"
+              >
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground shadow-sm">
+                  Enter
+                </kbd>
+                <kbd className="rounded bg-background px-1.5 py-0.5 font-mono text-[10px] text-muted-foreground shadow-sm">
+                  Esc
+                </kbd>
+              </div>
+            )}
+
+            {hasSearchTerm && !loading && !hasResults && (
+              <div
+                className="rounded-2xl border border-dashed border-border/70 bg-muted/[0.14] px-4 py-8 text-center"
+                data-testid="global-search-no-results"
+              >
+                <p className="text-sm font-medium text-foreground">
+                  {t('globalSearch.noResults')}
+                </p>
+                <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                  {t('globalSearch.noResultsHint')}
+                </p>
+                <code className="mt-3 inline-flex rounded-full bg-background px-2.5 py-1 font-mono text-[11px] text-muted-foreground shadow-sm">
+                  {activeScopeLabel}: {searchTerm}
+                </code>
+              </div>
+            )}
+
+            {loading && hasSearchTerm && (
+              <div className={resultStackClass}>
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <div
+                    key={`search-loading-${index}`}
+                    className="animate-pulse border-b border-border/45 px-3.5 py-3 last:border-b-0"
+                  >
+                    <div className="space-y-2">
+                      <div className="h-3 w-2/3 rounded bg-muted/80" />
+                      <div className="h-3 w-1/3 rounded bg-muted/55" />
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {hasSearchTerm && !loading && hasResults && (
+              <div className="space-y-3">
+                {results.sessions.length > 0 && (
+                  <section className="space-y-1" data-testid="global-search-section-sessions">
+                    {renderSectionHeader('sessions', results.sessions.length)}
+                    <div className={resultStackClass}>
+                      {results.sessions.map((item) => (
+                        <CommandItem
+                          key={`session-${item.id}`}
+                          value={`session-${item.id}`}
+                          onSelect={() => handleSelect(item)}
+                          className={resultItemClass}
+                          data-testid="global-search-item"
+                        >
+                          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5">
+                            <p className="min-w-0 truncate text-sm font-medium leading-6 text-foreground">
+                              {renderHighlightedText(
+                                normalizeInlineText(item.title),
+                                searchTerm,
+                              )}
+                            </p>
+                            <span className="text-[11px] leading-6 text-muted-foreground">
+                              {formatRelativeTime(item.updatedAt, t)}
+                            </span>
+                            <p className="col-span-2 truncate text-[11px] leading-5 text-muted-foreground">
+                              {renderHighlightedText(item.projectName, searchTerm)}
+                            </p>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {results.messages.length > 0 && (
+                  <section className="space-y-1" data-testid="global-search-section-messages">
+                    {renderSectionHeader('messages', results.messages.length)}
+                    <div className={resultStackClass}>
+                      {results.messages.map((item) => (
+                        <CommandItem
+                          key={`message-${item.messageId}`}
+                          value={`message-${item.messageId}`}
+                          onSelect={() => handleSelect(item)}
+                          className={resultItemClass}
+                          data-testid="global-search-item"
+                        >
+                          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5">
+                            <p
+                              className="min-w-0 truncate text-[11px] leading-5 text-muted-foreground"
+                              title={normalizeInlineText(item.sessionTitle)}
+                            >
+                              {renderHighlightedText(
+                                normalizeInlineText(item.sessionTitle),
+                                searchTerm,
+                              )}
+                            </p>
+                            <span className="text-[11px] leading-5 text-muted-foreground">
+                              {t(CONTENT_TYPE_LABEL_KEYS[item.contentType])}
+                              <span aria-hidden> · </span>
+                              {formatRelativeTime(item.createdAt, t)}
+                            </span>
+                            <p className="col-span-2 line-clamp-2 text-[13px] leading-6 text-foreground">
+                              {renderHighlightedText(
+                                normalizeInlineText(item.snippet),
+                                searchTerm,
+                              )}
+                            </p>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </div>
+                  </section>
+                )}
+
+                {results.files.length > 0 && (
+                  <section className="space-y-1" data-testid="global-search-section-files">
+                    {renderSectionHeader('files', results.files.length)}
+                    <div className={resultStackClass}>
+                      {results.files.map((item) => (
+                        <CommandItem
+                          key={`file-${item.path}`}
+                          value={`file-${item.path}`}
+                          onSelect={() => handleSelect(item)}
+                          className={resultItemClass}
+                          data-testid="global-search-item"
+                        >
+                          <div className="grid min-w-0 flex-1 grid-cols-[minmax(0,1fr)_auto] gap-x-3 gap-y-0.5">
+                            <p className="min-w-0 truncate text-sm font-medium leading-6 text-foreground">
+                              {renderHighlightedText(item.name, searchTerm)}
+                            </p>
+                            <span className="text-[11px] leading-6 text-muted-foreground">
+                              {item.nodeType === 'directory'
+                                ? t('globalSearch.directoryLabel')
+                                : t('globalSearch.fileLabel')}
+                            </span>
+                            <p className="col-span-2 truncate text-[11px] text-muted-foreground">
+                              {normalizeInlineText(item.sessionTitle)}
+                              <span aria-hidden> · </span>
+                              <span className="font-mono text-muted-foreground/80">
+                                {renderHighlightedText(formatPathTail(item.path), searchTerm)}
+                              </span>
+                            </p>
+                          </div>
+                        </CommandItem>
+                      ))}
+                    </div>
+                  </section>
+                )}
+              </div>
+            )}
+          </div>
+        </CommandList>
+      </div>
     </CommandDialog>
   );
 }
