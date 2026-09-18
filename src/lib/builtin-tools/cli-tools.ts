@@ -16,7 +16,7 @@
 
 import { tool } from 'ai';
 import { z } from 'zod';
-import { execFile, exec } from 'child_process';
+import { execFile, exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { access, constants } from 'fs/promises';
 import path from 'path';
@@ -82,7 +82,7 @@ function buildUpdateCommand(method: string, packageName: string): string | null 
 }
 
 /** Run --help on a binary and return truncated output for context. */
-async function getHelpOutput(binPath: string): Promise<string> {
+async function getHelpOutput(binPath: string, signal?: AbortSignal): Promise<string> {
   const env = { ...process.env, PATH: getExpandedPath() };
   // Try --help first, fall back to -h
   for (const flag of ['--help', '-h']) {
@@ -90,10 +90,18 @@ async function getHelpOutput(binPath: string): Promise<string> {
       const { stdout, stderr } = await execFileAsync(binPath, [flag], {
         timeout: 5000,
         env,
+        signal,
       });
       const output = (stdout || stderr).trim();
       if (output.length > 50) return output.slice(0, 2000); // truncate to keep context manageable
-    } catch { /* try next flag */ }
+    } catch (error) {
+      // A signal-triggered abort must propagate, never be swallowed as
+      // "this flag didn't work, try the next one" — execFile spawns the
+      // target directly with no shell wrapper, so Node's own signal-kill
+      // already reaches the real process correctly here.
+      if (error instanceof Error && error.name === 'AbortError') throw error;
+      /* any other failure: try next flag */
+    }
   }
   return '';
 }
@@ -112,11 +120,433 @@ After installing or registering a tool, the --help output is automatically inclu
 When listing tools with format="json", each tool includes: agentFriendly (designed for AI agents), supportsJson (structured JSON output), supportsSchema (runtime API schema introspection), supportsDryRun (preview before mutating), contextFriendly (field masks/pagination to save context window), and healthCheckCommand (verify auth/health). Prefer agent-friendly tools; use --dry-run before destructive actions; use field masks to limit response size; use healthCheckCommand after install.
 </cli-tools-capability>`;
 
+// ── Install: schema + real side effect ─────────────────────────────────
+//
+// codepilot_cli_tools_install executes an arbitrary shell command built
+// from model-generated text. It is the one tool in this file where "the
+// model asked for it and the JSON parsed" is not sufficient proof of
+// intent: an AI SDK provider adapter's separately-projected final
+// tool-call input can diverge from what was actually streamed, even
+// under a safe finish reason and even when the JSON is schema-valid —
+// reproduced directly against the real @ai-sdk/openai adapter (see
+// cli-tools-install-openai-adapter-divergence.test.ts). This tool is
+// therefore execution-locked (see agent-loop.ts, which applies
+// prefix-safe-json's createAiSdkExecutionLock to this key only) and its
+// real side effect is dispatched manually, only after
+// createAiSdkExecutionGuard has confirmed authority from SDK-emitted
+// tool-input-delta evidence — never from this tool's own (nonexistent,
+// on a locked tool) execute() input.
+//
+// The schema and the side effect are both exported standalone, shared by
+// the tool definition below and by agent-loop.ts's manual-authority
+// dispatch path, so there is exactly ONE implementation of the real
+// install logic — never duplicated between a native-execute path and a
+// manual path.
+export const CLI_TOOL_INSTALL_SCHEMA = z.object({
+  command: z.string().describe('The install command to execute, e.g. "brew install ffmpeg"'),
+  name: z.string().optional().describe('Display name for the tool. If omitted, extracted from the command.'),
+});
+
+export type CliToolInstallInput = z.infer<typeof CLI_TOOL_INSTALL_SCHEMA>;
+
+/** Builds the AbortError shape both platform paths reject with on a real signal-triggered kill. */
+function makeAbortError(): NodeJS.ErrnoException {
+  const err = new Error('The operation was aborted') as NodeJS.ErrnoException;
+  err.name = 'AbortError';
+  err.code = 'ABORT_ERR';
+  return err;
+}
+
+/**
+ * Windows: `signal` passed straight to `child_process.exec()` rejects the
+ * promise but does not kill the real process — `exec()` wraps the command
+ * in `cmd.exe /c "..."`, and Node's signal-kill only reaches that wrapper,
+ * orphaning whatever it spawned. Fixed by taking the real child PID
+ * directly and issuing `taskkill /pid <pid> /T /F` on abort, before Node's
+ * own kill can reap the wrapper first.
+ *
+ * `signal` is `timeoutCtl.signal`, shared across the whole run — a
+ * `settled` flag plus `removeEventListener` on every terminal path (not
+ * just `{ once: true }`) prevents a call that finished normally from
+ * leaving a stale listener that a later, unrelated abort could still fire
+ * against a recycled PID.
+ */
+function execWithAbortWindows(
+  command: string,
+  options: { timeout: number; env: NodeJS.ProcessEnv; signal?: AbortSignal },
+): Promise<{ stdout: string; stderr: string }> {
+  const { signal, ...execOptions } = options;
+  if (!signal) return execAsync(command, options);
+  // Defense-in-depth: never spawn on an already-fired signal, even if the caller didn't check.
+  if (signal.aborted) return Promise.reject(makeAbortError());
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    const cleanup = () => signal.removeEventListener('abort', onAbort);
+    const child = exec(command, execOptions, (error, stdout, stderr) => {
+      if (settled) return; // already handled via onAbort — a racing normal completion is a no-op
+      settled = true;
+      cleanup();
+      if (error) {
+        Object.assign(error, { stdout, stderr });
+        reject(error);
+      } else {
+        resolve({ stdout, stderr });
+      }
+    });
+    function onAbort() {
+      if (settled) return; // child already completed on its own — never act on a stale/racing abort
+      settled = true;
+      cleanup();
+      const pid = child.pid;
+      if (pid != null) {
+        // Fire-and-forget: a process that already exited must never block the rejection below.
+        execFile('taskkill', ['/pid', String(pid), '/T', '/F'], () => {});
+      }
+      reject(makeAbortError());
+    }
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * POSIX: `signal` passed straight to `exec()` has the same class of bug as
+ * Windows — a plain (non-detached) grandchild the shell-invoked command
+ * itself forks (what real install tooling does internally) survives as an
+ * orphan; killing the immediate `sh -c` PID alone doesn't reach it. Fixed
+ * by spawning with `detached: true` (leader of its own process group) and,
+ * on abort, killing the whole group via `process.kill(-pid, 'SIGKILL')`.
+ *
+ * Two termination sources need two distinct shapes: a `signal`-triggered
+ * kill produces an `AbortError` (matching the Windows path); the separate,
+ * pre-existing hardcoded `timeout` mirrors Node's own native `exec()`
+ * timeout shape instead (plain `Error`, `killed: true`, `signal:
+ * 'SIGTERM'`), keeping that unrelated 300s ceiling's behavior unchanged.
+ *
+ * Output bound: this path accumulates stdout/stderr manually and does not
+ * inherit Node's own `exec()` `maxBuffer` (default 1 MiB) protection —
+ * MAX_OUTPUT_BYTES below restores it, counted in real bytes (not JS string
+ * `.length`, which undercounts multi-byte UTF-8), killing the whole group
+ * on overflow rather than merely rejecting, matching Node's own error
+ * shape (`RangeError`, `ERR_CHILD_PROCESS_STDIO_MAXBUFFER`).
+ */
+/** Error shape for a POSIX command failure — deliberately separate from `NodeJS.ErrnoException` (whose `.code` is string-typed, for errno names, not exit codes). */
+interface ExecPosixFailure extends Error {
+  exitCode?: number;
+  signal?: string;
+  killed?: boolean;
+  stdout?: string;
+  stderr?: string;
+}
+
+/**
+ * Matches Node's own `child_process.exec()` default `maxBuffer` exactly
+ * (confirmed empirically, not assumed) — behavioral parity with the
+ * pre-existing, pre-this-file bound, not a newly invented value.
+ */
+const MAX_OUTPUT_BYTES = 1024 * 1024;
+
+function execWithAbortPosix(
+  command: string,
+  options: { timeout: number; env: NodeJS.ProcessEnv; signal?: AbortSignal },
+): Promise<{ stdout: string; stderr: string }> {
+  const { signal, timeout, env } = options;
+  if (!signal) return execAsync(command, options);
+  // Defense-in-depth: never spawn on an already-fired signal, even if the caller didn't check.
+  if (signal.aborted) return Promise.reject(makeAbortError());
+  return new Promise((resolve, reject) => {
+    let settled = false;
+    let stdout = '';
+    let stderr = '';
+    let stdoutBytes = 0;
+    let stderrBytes = 0;
+    const child = spawn('sh', ['-c', command], {
+      detached: true,
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env,
+    });
+    child.stdout.on('data', (d: Buffer) => {
+      if (settled) return; // overflow/abort/timeout already fired — stop accumulating
+      stdoutBytes += d.length; // Buffer.length is bytes, not JS string chars
+      if (stdoutBytes > MAX_OUTPUT_BYTES) { killGroup('maxBuffer', 'stdout'); return; }
+      stdout += d;
+    });
+    child.stderr.on('data', (d: Buffer) => {
+      if (settled) return;
+      stderrBytes += d.length;
+      if (stderrBytes > MAX_OUTPUT_BYTES) { killGroup('maxBuffer', 'stderr'); return; }
+      stderr += d;
+    });
+
+    const timeoutTimer = timeout > 0 ? setTimeout(() => killGroup('timeout'), timeout) : null;
+    const cleanup = () => {
+      if (timeoutTimer) clearTimeout(timeoutTimer);
+      signal.removeEventListener('abort', onAbort);
+    };
+
+    child.on('exit', (exitCode, killedBySignal) => {
+      if (settled) return; // already handled via killGroup — a racing normal exit is a no-op
+      settled = true;
+      cleanup();
+      if (exitCode === 0) {
+        resolve({ stdout, stderr });
+      } else {
+        const err = new Error(`Command failed: ${command}\n${stderr}`) as ExecPosixFailure;
+        err.exitCode = exitCode ?? undefined;
+        if (killedBySignal) err.signal = killedBySignal;
+        err.stdout = stdout;
+        err.stderr = stderr;
+        reject(err);
+      }
+    });
+    child.on('error', (err) => {
+      if (settled) return;
+      settled = true;
+      cleanup();
+      reject(err);
+    });
+
+    function killGroup(reason: 'abort' | 'timeout' | 'maxBuffer', overflowedStream?: 'stdout' | 'stderr') {
+      if (settled) return; // child already completed on its own — never act on a stale/racing trigger
+      settled = true;
+      cleanup();
+      const pid = child.pid;
+      if (pid != null) {
+        // Negative pid = the whole process group (reaches a plain grandchild the command forked).
+        // Fire-and-forget: an already-exited group must never block the rejection below.
+        try { process.kill(-pid, 'SIGKILL'); } catch { /* already gone */ }
+      }
+      if (reason === 'maxBuffer') {
+        const err = new RangeError(`${overflowedStream} maxBuffer length exceeded`) as ExecPosixFailure & { code?: string };
+        err.code = 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER';
+        reject(err);
+        return;
+      }
+      if (reason === 'abort') {
+        reject(makeAbortError());
+      } else {
+        // Mirrors Node's native exec() timeout shape — see preamble above.
+        const err = new Error(`Command failed: ${command}`) as ExecPosixFailure;
+        err.killed = true;
+        err.signal = 'SIGTERM';
+        reject(err);
+      }
+    }
+    function onAbort() { killGroup('abort'); }
+    if (signal.aborted) onAbort();
+    else signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
+
+/**
+ * Runs `command` like `execAsync`, but with a real process(-tree) kill on
+ * abort — see execWithAbortWindows / execWithAbortPosix for the mechanism.
+ */
+function execWithAbort(
+  command: string,
+  options: { timeout: number; env: NodeJS.ProcessEnv; signal?: AbortSignal },
+): Promise<{ stdout: string; stderr: string }> {
+  return process.platform === 'win32'
+    ? execWithAbortWindows(command, options)
+    : execWithAbortPosix(command, options);
+}
+
+/**
+ * The real side effect for codepilot_cli_tools_install — hoisted so it has
+ * exactly one caller-agnostic implementation. Never throws for an ordinary
+ * command failure (returns a message instead); a `signal`-triggered abort
+ * is the one exception, propagating as a real thrown AbortError so a
+ * caller racing this against a timeout/abort budget can tell them apart.
+ */
+export async function runCliToolInstall(
+  { command, name }: CliToolInstallInput,
+  options?: { signal?: AbortSignal },
+): Promise<string> {
+  // An already-aborted signal must never start the real shell command —
+  // checked once, here, before anything else runs (execWithAbort*'s own
+  // checks are defense-in-depth for the same invariant).
+  if (options?.signal?.aborted) throw makeAbortError();
+  try {
+    const expandedPath = getExpandedPath();
+    const installMethod = extractInstallMethod(command);
+    const installPackage = extractPackageSpec(command);
+
+    const { stdout, stderr } = await execWithAbort(command, {
+      timeout: 300_000,
+      env: { ...process.env, PATH: expandedPath },
+      signal: options?.signal,
+    });
+
+    const output = (stdout + '\n' + stderr).trim();
+
+    // Build a list of binary name candidates to try with `which`.
+    // Package spec ≠ binary name, so we try multiple candidates:
+    //   "brew install ffmpeg" → ["ffmpeg"]
+    //   "npm install -g @elevenlabs/cli" → catalog binNames ["elevenlabs"], then ["cli"]
+    //   "brew install stripe/stripe-cli/stripe" → ["stripe"]
+    //   "npm install -g @music163/ncm-cli" → catalog binNames ["ncm-cli"]
+    const cmdParts = command.trim().split(/\s+/);
+    const binCandidates: string[] = [];
+    let rawPkgArg: string | null = null;
+    const installIdx = cmdParts.findIndex(p => p === 'install');
+    if (installIdx >= 0) {
+      for (let i = installIdx + 1; i < cmdParts.length; i++) {
+        if (!cmdParts[i].startsWith('-')) {
+          rawPkgArg = cmdParts[i].replace(/@[\d.]*$/, ''); // strip version pinning
+          break;
+        }
+      }
+    }
+
+    // Priority 1: check if a catalog tool matches this package — use its declared binNames
+    if (rawPkgArg) {
+      const matchingCatalog = CLI_TOOLS_CATALOG.find(c =>
+        c.installMethods.some(m => m.command.includes(rawPkgArg!))
+      );
+      if (matchingCatalog) {
+        binCandidates.push(...matchingCatalog.binNames);
+      }
+    }
+
+    // Priority 2: derive candidates from the package arg itself
+    if (rawPkgArg) {
+      const segments = rawPkgArg.split('/');
+      // Last segment (e.g. "stripe" from "stripe/stripe-cli/stripe", "ncm-cli" from "@music163/ncm-cli")
+      const last = segments[segments.length - 1];
+      if (last && !binCandidates.includes(last)) binCandidates.push(last);
+      // For scoped packages like @scope/name, also try "name" without scope
+      if (segments.length >= 2 && segments[0].startsWith('@')) {
+        const scopeless = segments[1];
+        if (scopeless && !binCandidates.includes(scopeless)) binCandidates.push(scopeless);
+      }
+    }
+
+    if (binCandidates.length === 0) {
+      return `Command executed successfully but could not determine the binary name.\nOutput:\n${output.slice(0, 1000)}\n\nPlease use codepilot_cli_tools_add with the binary path to register it manually.`;
+    }
+
+    invalidateDetectCache();
+
+    // Try each candidate with `which` until one resolves
+    let binPath: string | null = null;
+    let binName: string | null = null;
+    let version: string | null = null;
+    for (const candidate of binCandidates) {
+      try {
+        const { stdout: whichOut } = await execFileAsync('/usr/bin/which', [candidate], {
+          timeout: 5000,
+          env: { ...process.env, PATH: expandedPath },
+          signal: options?.signal,
+        });
+        const resolved = whichOut.trim().split(/\r?\n/)[0]?.trim();
+        if (resolved) {
+          binPath = resolved;
+          binName = candidate;
+          break;
+        }
+      } catch (error) {
+        // Same rule as getHelpOutput above: an abort must propagate, not
+        // be treated as "try the next candidate."
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        /* any other failure: try next candidate */
+      }
+    }
+
+    if (binPath) {
+      try {
+        const { stdout: vOut, stderr: vErr } = await execFileAsync(binPath, ['--version'], {
+          timeout: 5000,
+          env: { ...process.env, PATH: expandedPath },
+          signal: options?.signal,
+        });
+        const vText = (vOut || vErr).trim();
+        const match = vText.split('\n')[0]?.match(/(\d+\.\d+[\w.-]*)/);
+        version = match ? match[1] : null;
+      } catch (error) {
+        // Same rule: an abort must propagate, not be treated as an
+        // ignorable probe failure.
+        if (error instanceof Error && error.name === 'AbortError') throw error;
+        /* --version genuinely unsupported/failed: version stays null, non-fatal */
+      }
+
+      // Last point before real DB registration (below) starts — catches a
+      // budget/abort that landed in the gap between the awaits above,
+      // where nothing actually threw. No new registration once observed.
+      if (options?.signal?.aborted) throw makeAbortError();
+
+      const toolName = name || binName || path.basename(binPath);
+      const registeredTool = createCustomCliTool({
+        name: toolName,
+        binPath,
+        binName: binName || path.basename(binPath),
+        version,
+        installMethod,
+        installPackage: installPackage || undefined,
+      });
+
+      const verStr = version ? ` v${version}` : '';
+      const resultLines = [
+        `Successfully installed and registered "${toolName}"${verStr}.`,
+        `Path: ${binPath}`,
+        `Tool ID: ${registeredTool.id}`,
+        `Install method: ${installMethod}`,
+      ];
+
+      // Check if this is a catalog tool that needs auth setup
+      const catalogDef = CLI_TOOLS_CATALOG.find(
+        c => c.binNames.includes(binName!) || c.id === binName
+      );
+      if (catalogDef?.setupType === 'needs_auth') {
+        resultLines.push('');
+        resultLines.push('⚠ This tool requires authentication before use:');
+        const steps = catalogDef.guideSteps.en;
+        // Skip the install step (usually first), show remaining setup steps
+        for (let i = 1; i < steps.length; i++) {
+          resultLines.push(`  ${i}. ${steps[i]}`);
+        }
+        resultLines.push('');
+        resultLines.push('Please guide the user through the authentication steps above.');
+      }
+
+      // Capture --help output so the model can generate an accurate description
+      const helpOutput = await getHelpOutput(binPath, options?.signal);
+      if (helpOutput) {
+        resultLines.push('');
+        resultLines.push('--- Tool Help Output ---');
+        resultLines.push(helpOutput);
+        resultLines.push('--- End Help Output ---');
+      }
+
+      resultLines.push('');
+      resultLines.push('Now please generate a bilingual description (zh/en) based on the help output above and call codepilot_cli_tools_add to save it.');
+
+      return resultLines.join('\n');
+    } else {
+      return `Command executed but could not locate "${binName}" in PATH after installation.\nOutput:\n${output.slice(0, 1000)}\n\nThe tool may have been installed with a different binary name. Use "which" to find it, then call codepilot_cli_tools_add to register manually.`;
+    }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      // A fired timeout budget or caller abort killed the real process —
+      // propagate so the caller's own classification runs, instead of
+      // reporting an ordinary installation failure.
+      throw error;
+    }
+    const msg = error instanceof Error ? error.message : 'Command execution failed';
+    return `Installation failed: ${msg}`;
+  }
+}
+
 // ── Tool factory ─────────────────────────────────────────────────────
 
 /**
  * Create CLI tools as Vercel AI SDK ToolSet.
  * Can be used by both Native Runtime and as reference for SDK Runtime.
+ *
+ * codepilot_cli_tools_install carries no `execute` here — it is locked by
+ * agent-loop.ts (createAiSdkExecutionLock) immediately after tool
+ * assembly, and its real side effect (runCliToolInstall, above) is
+ * dispatched manually from there once prefix-safe-json's execution guard
+ * confirms authority. Every other tool below is unaffected.
  */
 export function createCliToolsTools() {
   return {
@@ -250,159 +680,15 @@ export function createCliToolsTools() {
     }),
 
     // ── INSTALL ──────────────────────────────────────────────────
-    codepilot_cli_tools_install: tool({
+    // No `execute`: locked by agent-loop.ts via createAiSdkExecutionLock
+    // immediately after tool assembly. The real side effect is
+    // runCliToolInstall (defined above createCliToolsTools in this file),
+    // dispatched manually only after prefix-safe-json's execution guard
+    // grants authority from SDK-emitted tool-input-delta evidence.
+    codepilot_cli_tools_install: {
       description: 'Install a CLI tool by executing a shell command (e.g. "brew install ffmpeg", "pip install yt-dlp"). After the command succeeds, the tool is automatically detected and registered. This tool requires user permission before execution. After calling this tool, generate a bilingual description and call codepilot_cli_tools_add to save it.',
-      inputSchema: z.object({
-        command: z.string().describe('The install command to execute, e.g. "brew install ffmpeg"'),
-        name: z.string().optional().describe('Display name for the tool. If omitted, extracted from the command.'),
-      }),
-      execute: async ({ command, name }) => {
-        try {
-          const expandedPath = getExpandedPath();
-          const installMethod = extractInstallMethod(command);
-          const installPackage = extractPackageSpec(command);
-
-          const { stdout, stderr } = await execAsync(command, {
-            timeout: 300_000,
-            env: { ...process.env, PATH: expandedPath },
-          });
-
-          const output = (stdout + '\n' + stderr).trim();
-
-          // Build a list of binary name candidates to try with `which`.
-          // Package spec ≠ binary name, so we try multiple candidates:
-          //   "brew install ffmpeg" → ["ffmpeg"]
-          //   "npm install -g @elevenlabs/cli" → catalog binNames ["elevenlabs"], then ["cli"]
-          //   "brew install stripe/stripe-cli/stripe" → ["stripe"]
-          //   "npm install -g @music163/ncm-cli" → catalog binNames ["ncm-cli"]
-          const cmdParts = command.trim().split(/\s+/);
-          const binCandidates: string[] = [];
-          let rawPkgArg: string | null = null;
-          const installIdx = cmdParts.findIndex(p => p === 'install');
-          if (installIdx >= 0) {
-            for (let i = installIdx + 1; i < cmdParts.length; i++) {
-              if (!cmdParts[i].startsWith('-')) {
-                rawPkgArg = cmdParts[i].replace(/@[\d.]*$/, ''); // strip version pinning
-                break;
-              }
-            }
-          }
-
-          // Priority 1: check if a catalog tool matches this package — use its declared binNames
-          if (rawPkgArg) {
-            const matchingCatalog = CLI_TOOLS_CATALOG.find(c =>
-              c.installMethods.some(m => m.command.includes(rawPkgArg!))
-            );
-            if (matchingCatalog) {
-              binCandidates.push(...matchingCatalog.binNames);
-            }
-          }
-
-          // Priority 2: derive candidates from the package arg itself
-          if (rawPkgArg) {
-            const segments = rawPkgArg.split('/');
-            // Last segment (e.g. "stripe" from "stripe/stripe-cli/stripe", "ncm-cli" from "@music163/ncm-cli")
-            const last = segments[segments.length - 1];
-            if (last && !binCandidates.includes(last)) binCandidates.push(last);
-            // For scoped packages like @scope/name, also try "name" without scope
-            if (segments.length >= 2 && segments[0].startsWith('@')) {
-              const scopeless = segments[1];
-              if (scopeless && !binCandidates.includes(scopeless)) binCandidates.push(scopeless);
-            }
-          }
-
-          if (binCandidates.length === 0) {
-            return `Command executed successfully but could not determine the binary name.\nOutput:\n${output.slice(0, 1000)}\n\nPlease use codepilot_cli_tools_add with the binary path to register it manually.`;
-          }
-
-          invalidateDetectCache();
-
-          // Try each candidate with `which` until one resolves
-          let binPath: string | null = null;
-          let binName: string | null = null;
-          let version: string | null = null;
-          for (const candidate of binCandidates) {
-            try {
-              const { stdout: whichOut } = await execFileAsync('/usr/bin/which', [candidate], {
-                timeout: 5000,
-                env: { ...process.env, PATH: expandedPath },
-              });
-              const resolved = whichOut.trim().split(/\r?\n/)[0]?.trim();
-              if (resolved) {
-                binPath = resolved;
-                binName = candidate;
-                break;
-              }
-            } catch { /* try next candidate */ }
-          }
-
-          if (binPath) {
-            try {
-              const { stdout: vOut, stderr: vErr } = await execFileAsync(binPath, ['--version'], {
-                timeout: 5000,
-                env: { ...process.env, PATH: expandedPath },
-              });
-              const vText = (vOut || vErr).trim();
-              const match = vText.split('\n')[0]?.match(/(\d+\.\d+[\w.-]*)/);
-              version = match ? match[1] : null;
-            } catch { /* optional */ }
-
-            const toolName = name || binName || path.basename(binPath);
-            const registeredTool = createCustomCliTool({
-              name: toolName,
-              binPath,
-              binName: binName || path.basename(binPath),
-              version,
-              installMethod,
-              installPackage: installPackage || undefined,
-            });
-
-            const verStr = version ? ` v${version}` : '';
-            const resultLines = [
-              `Successfully installed and registered "${toolName}"${verStr}.`,
-              `Path: ${binPath}`,
-              `Tool ID: ${registeredTool.id}`,
-              `Install method: ${installMethod}`,
-            ];
-
-            // Check if this is a catalog tool that needs auth setup
-            const catalogDef = CLI_TOOLS_CATALOG.find(
-              c => c.binNames.includes(binName!) || c.id === binName
-            );
-            if (catalogDef?.setupType === 'needs_auth') {
-              resultLines.push('');
-              resultLines.push('\u26a0 This tool requires authentication before use:');
-              const steps = catalogDef.guideSteps.en;
-              // Skip the install step (usually first), show remaining setup steps
-              for (let i = 1; i < steps.length; i++) {
-                resultLines.push(`  ${i}. ${steps[i]}`);
-              }
-              resultLines.push('');
-              resultLines.push('Please guide the user through the authentication steps above.');
-            }
-
-            // Capture --help output so the model can generate an accurate description
-            const helpOutput = await getHelpOutput(binPath);
-            if (helpOutput) {
-              resultLines.push('');
-              resultLines.push('--- Tool Help Output ---');
-              resultLines.push(helpOutput);
-              resultLines.push('--- End Help Output ---');
-            }
-
-            resultLines.push('');
-            resultLines.push('Now please generate a bilingual description (zh/en) based on the help output above and call codepilot_cli_tools_add to save it.');
-
-            return resultLines.join('\n');
-          } else {
-            return `Command executed but could not locate "${binName}" in PATH after installation.\nOutput:\n${output.slice(0, 1000)}\n\nThe tool may have been installed with a different binary name. Use "which" to find it, then call codepilot_cli_tools_add to register manually.`;
-          }
-        } catch (error) {
-          const msg = error instanceof Error ? error.message : 'Command execution failed';
-          return `Installation failed: ${msg}`;
-        }
-      },
-    }),
+      inputSchema: CLI_TOOL_INSTALL_SCHEMA,
+    },
 
     // ── ADD ──────────────────────────────────────────────────────
     codepilot_cli_tools_add: tool({

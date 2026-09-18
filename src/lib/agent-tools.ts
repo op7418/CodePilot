@@ -191,6 +191,166 @@ function getSessionRules(sessionId: string): Array<{ permission: string; pattern
   return approvals.map(a => ({ permission: a.toolName, pattern: a.pattern, action: 'allow' as const }));
 }
 
+/**
+ * Tools that never carry a native `execute` at all — locked via
+ * prefix-safe-json's `createAiSdkExecutionLock` so nothing in this process
+ * can run them before an execution guard reaches a decision from
+ * SDK-emitted tool-input-delta evidence — and whose real side effect is
+ * dispatched manually elsewhere (agent-loop.ts), after that authority is
+ * granted.
+ *
+ * `wrapWithPermissions` must pass these through unwrapped: its generic
+ * wrapper assumes there is an `original.execute` to call once permission
+ * resolves, which does not exist here, and wrapping them anyway would
+ * strip a callback that was never attached in the first place while
+ * hiding the real problem — the permission decision for these tools is
+ * made later, manually, via `resolveToolPermission` at the point where the
+ * real side effect actually dispatches, not inside this wrapper.
+ *
+ * Deliberately NOT added to `PERMISSION_SAFE_TOOLS`: these tools are not
+ * safe/read-only (this file mounts `codepilot_cli_tools_install`, which
+ * remains `mutating_external` and must still stay out of `plan` mode,
+ * which filters on `PERMISSION_SAFE_TOOLS` alone). This set only concerns
+ * whether the generic execute-wrapping shape applies — not whether a
+ * permission check happens at all.
+ */
+export const MANUAL_AUTHORITY_TOOLS: ReadonlySet<string> = new Set(['codepilot_cli_tools_install']);
+
+/** Result of resolving one tool call's permission decision. */
+export interface ToolPermissionResolution {
+  action: 'deny' | 'execute';
+  /**
+   * For `action: 'execute'` — the input to actually run with. Identical to
+   * the input passed in unless the user explicitly edited it during
+   * approval (`updatedInput`), matching the wrapper's own long-standing
+   * behavior of substituting it before dispatch.
+   */
+  input: unknown;
+  /** For `action: 'deny'` — the exact message to surface to the model/UI, byte-identical to what the inline wrapper always returned for that same case. */
+  message?: string;
+}
+
+/**
+ * Core permission-decision logic for one tool call: checkPermission ->
+ * deny / ask (persist + emit permission_request, wait, apply
+ * updatedInput, record session-level approvals) / allow. Extracted out of
+ * the inline wrapper below so there is exactly ONE implementation of
+ * "does the user's permission system allow this call" — shared by both:
+ *   - the generic execute-wrapping path immediately below (unchanged
+ *     behavior, byte-identical messages, same DB/SSE/event side effects),
+ *   - any manually-dispatched tool in `MANUAL_AUTHORITY_TOOLS` (e.g.
+ *     codepilot_cli_tools_install), invoked from agent-loop.ts AFTER
+ *     prefix-safe-json authority is granted and BEFORE the real side
+ *     effect runs — never duplicated, never skipped.
+ *
+ * Does not run the tool itself and does not know what "execute" means for
+ * the caller's specific tool shape — that decision, and the resulting
+ * `tool:post-use` event, stays with each caller.
+ */
+export async function resolveToolPermission(
+  name: string,
+  input: unknown,
+  ctx: NonNullable<AssembleToolsOptions['permissionContext']>,
+): Promise<ToolPermissionResolution> {
+  emitEvent('tool:pre-use', { sessionId: ctx.sessionId, toolName: name, input });
+  const result = checkPermission(name, input, ctx.permissionMode, getSessionRules(ctx.sessionId));
+
+  if (result.action === 'deny') {
+    return { action: 'deny', input, message: `Permission denied: ${result.reason || 'Tool not allowed in current mode'}` };
+  }
+
+  if (result.action === 'ask') {
+    // Emit permission_request SSE and wait for user response
+    const permId = crypto.randomBytes(8).toString('hex');
+    const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+    // Persist to DB
+    try {
+      createPermissionRequest({
+        id: permId,
+        sessionId: ctx.sessionId,
+        toolName: name,
+        toolInput: JSON.stringify(input),
+        expiresAt,
+      });
+    } catch { /* non-critical */ }
+
+    emitEvent('permission:request', { sessionId: ctx.sessionId, toolName: name, permissionId: permId });
+
+    // Emit SSE. approvalToken: HMAC over (id, expiresAt) — the route
+    // rejects approvals that don't echo it (Phase 4 ② hardening).
+    ctx.emitSSE({
+      type: 'permission_request',
+      data: JSON.stringify({
+        permissionRequestId: permId,
+        toolName: name,
+        toolInput: input,
+        description: result.reason,
+        approvalToken: issueApprovalToken(permId, expiresAt),
+        ...(ctx.agentRunId ? { agentRunId: ctx.agentRunId } : {}),
+        ...(ctx.childSessionId ? { childSessionId: ctx.childSessionId } : {}),
+      }),
+    });
+    if (ctx.agentRunId) {
+      recordSubagentRunEvent(ctx.agentRunId, {
+        type: 'permission_requested',
+        activity: `Waiting for permission: ${name}`,
+        toolName: name,
+        payload: { permissionRequestId: permId },
+      });
+    }
+
+    // Wait for user response. onTimeout pushes a permission_resolved
+    // (timeout) event down the same SSE stream so the chat UI shows the
+    // auto-deny instead of the prompt silently vanishing (A5 Step 2).
+    const permResult = await registerPendingPermission(
+      permId,
+      (input || {}) as Record<string, unknown>,
+      ctx.abortSignal,
+      () => {
+        try {
+          ctx.emitSSE(buildPermissionResolvedEvent(permId, ctx));
+        } catch {
+          // stream already closed — deny still applies
+        }
+      },
+    );
+
+    emitEvent('permission:resolved', { sessionId: ctx.sessionId, toolName: name, behavior: permResult.behavior });
+    if (ctx.agentRunId) {
+      recordSubagentRunEvent(ctx.agentRunId, {
+        type: 'permission_resolved',
+        activity: permResult.behavior === 'allow'
+          ? `Permission approved: ${name}`
+          : `Permission denied: ${name}`,
+        toolName: name,
+        payload: {
+          permissionRequestId: permId,
+          behavior: permResult.behavior,
+        },
+      });
+    }
+
+    if (permResult.behavior === 'deny') {
+      return { action: 'deny', input, message: `Permission denied by user: ${permResult.message || 'Denied'}` };
+    }
+
+    // Apply user-modified input if provided (e.g. user edited the command)
+    if (permResult.updatedInput) {
+      input = permResult.updatedInput;
+    }
+
+    // Save session-level approval for future calls (allow_session)
+    if (permResult.updatedPermissions && Array.isArray(permResult.updatedPermissions)) {
+      const existing = sessionApprovals.get(ctx.sessionId) || [];
+      existing.push({ toolName: name, pattern: '*' });
+      sessionApprovals.set(ctx.sessionId, existing);
+    }
+  }
+
+  return { action: 'execute', input };
+}
+
 // Exported for the Phase 4 @ai-sdk/mcp adapter POC
 // (src/lib/experimental/mcp-sdk-adapter-poc.ts) so the experimental path
 // reuses the EXACT production permission wrapper instead of a replica.
@@ -234,111 +394,31 @@ export function wrapWithPermissions(
       continue;
     }
 
+    // Tools with no native execute at all (execution-locked, manually
+    // dispatched after prefix-safe-json authority — see
+    // MANUAL_AUTHORITY_TOOLS above). The permission decision for these
+    // still happens, via the SAME resolveToolPermission() this wrapper
+    // calls below — just later, in agent-loop.ts, at the point authority
+    // is granted and right before the real side effect dispatches.
+    if (MANUAL_AUTHORITY_TOOLS.has(name)) {
+      wrapped[name] = t;
+      continue;
+    }
+
     // Wrap execute with permission check
     const original = t as { description?: string; inputSchema?: unknown; execute?: (...args: unknown[]) => unknown };
     wrapped[name] = tool({
       description: original.description || name,
       inputSchema: (original.inputSchema || z.object({})) as z.ZodType,
       execute: async (input: unknown, execOptions: unknown) => {
-        emitEvent('tool:pre-use', { sessionId: ctx.sessionId, toolName: name, input });
-        const result = checkPermission(name, input, ctx.permissionMode, getSessionRules(ctx.sessionId));
-
-        if (result.action === 'deny') {
-          return `Permission denied: ${result.reason || 'Tool not allowed in current mode'}`;
-        }
-
-        if (result.action === 'ask') {
-          // Emit permission_request SSE and wait for user response
-          const permId = crypto.randomBytes(8).toString('hex');
-          const expiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
-
-          // Persist to DB
-          try {
-            createPermissionRequest({
-              id: permId,
-              sessionId: ctx.sessionId,
-              toolName: name,
-              toolInput: JSON.stringify(input),
-              expiresAt,
-            });
-          } catch { /* non-critical */ }
-
-          emitEvent('permission:request', { sessionId: ctx.sessionId, toolName: name, permissionId: permId });
-
-          // Emit SSE. approvalToken: HMAC over (id, expiresAt) — the route
-          // rejects approvals that don't echo it (Phase 4 ② hardening).
-          ctx.emitSSE({
-            type: 'permission_request',
-            data: JSON.stringify({
-              permissionRequestId: permId,
-              toolName: name,
-              toolInput: input,
-              description: result.reason,
-              approvalToken: issueApprovalToken(permId, expiresAt),
-              ...(ctx.agentRunId ? { agentRunId: ctx.agentRunId } : {}),
-              ...(ctx.childSessionId ? { childSessionId: ctx.childSessionId } : {}),
-            }),
-          });
-          if (ctx.agentRunId) {
-            recordSubagentRunEvent(ctx.agentRunId, {
-              type: 'permission_requested',
-              activity: `Waiting for permission: ${name}`,
-              toolName: name,
-              payload: { permissionRequestId: permId },
-            });
-          }
-
-          // Wait for user response. onTimeout pushes a permission_resolved
-          // (timeout) event down the same SSE stream so the chat UI shows the
-          // auto-deny instead of the prompt silently vanishing (A5 Step 2).
-          const permResult = await registerPendingPermission(
-            permId,
-            (input || {}) as Record<string, unknown>,
-            ctx.abortSignal,
-            () => {
-              try {
-                ctx.emitSSE(buildPermissionResolvedEvent(permId, ctx));
-              } catch {
-                // stream already closed — deny still applies
-              }
-            },
-          );
-
-          emitEvent('permission:resolved', { sessionId: ctx.sessionId, toolName: name, behavior: permResult.behavior });
-          if (ctx.agentRunId) {
-            recordSubagentRunEvent(ctx.agentRunId, {
-              type: 'permission_resolved',
-              activity: permResult.behavior === 'allow'
-                ? `Permission approved: ${name}`
-                : `Permission denied: ${name}`,
-              toolName: name,
-              payload: {
-                permissionRequestId: permId,
-                behavior: permResult.behavior,
-              },
-            });
-          }
-
-          if (permResult.behavior === 'deny') {
-            return `Permission denied by user: ${permResult.message || 'Denied'}`;
-          }
-
-          // Apply user-modified input if provided (e.g. user edited the command)
-          if (permResult.updatedInput) {
-            input = permResult.updatedInput;
-          }
-
-          // Save session-level approval for future calls (allow_session)
-          if (permResult.updatedPermissions && Array.isArray(permResult.updatedPermissions)) {
-            const existing = sessionApprovals.get(ctx.sessionId) || [];
-            existing.push({ toolName: name, pattern: '*' });
-            sessionApprovals.set(ctx.sessionId, existing);
-          }
+        const resolution = await resolveToolPermission(name, input, ctx);
+        if (resolution.action === 'deny') {
+          return resolution.message;
         }
 
         // Execute the original tool (with possibly updated input from permission approval)
         if (original.execute) {
-          const output = await original.execute(input, execOptions);
+          const output = await original.execute(resolution.input, execOptions);
           emitEvent('tool:post-use', { sessionId: ctx.sessionId, toolName: name });
           return output;
         }
