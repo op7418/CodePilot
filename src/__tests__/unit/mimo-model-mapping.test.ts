@@ -126,7 +126,7 @@ describe('MiMo resolver honors a user-set model (no silent revert) — #577A', (
 
 // ── Wiring source pins (connect dialog pre-fill) ─────────────────────────────
 
-describe('connect dialog pre-fills the model field from the preset default (#577A)', () => {
+describe('connect dialog pre-fills exposed model fields from the preset default (#577A)', () => {
   const presetsSrc = fs.readFileSync(
     path.resolve(__dirname, '../../components/settings/provider-presets.tsx'),
     'utf8',
@@ -144,11 +144,11 @@ describe('connect dialog pre-fills the model field from the preset default (#577
     );
   });
 
-  it('create mode pre-fills modelName from preset.defaultModelId (not empty)', () => {
+  it('create mode pre-fills modelName only when the preset exposes model_names', () => {
     assert.match(
       dialogSrc,
-      /setModelName\(preset\.defaultModelId \|\| ""\)/,
-      'create mode must pre-fill the model field from the preset default',
+      /setModelName\(\s*preset\.fields\.includes\("model_names"\)\s*\?\s*\(preset\.defaultModelId \|\| ""\)\s*:\s*""\s*,?\s*\)/,
+      'create mode must pre-fill the model field from the preset default without seeding a hidden default for mapping-only presets',
     );
   });
 });
