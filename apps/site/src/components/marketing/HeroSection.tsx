@@ -1,9 +1,9 @@
-import Image from 'next/image';
+import { BrandLogo } from '@/components/BrandLogo';
 import type { MarketingContent } from '../../../content/marketing/en';
-import { ChatDemo } from './ChatDemo';
+import { ScreenshotCarousel } from './ScreenshotCarousel';
 import { TypewriterWords } from './TypewriterWords';
-import { RainbowButton } from '@/components/ui/rainbow-button';
-import { FlickeringGrid } from '@/components/ui/flickering-grid';
+import { buttonVariants } from '@/components/ui/button-variants';
+import { cn } from '@/lib/utils';
 
 export function HeroSection({
   content,
@@ -13,8 +13,8 @@ export function HeroSection({
   locale: string;
 }) {
   return (
-    <section className="relative overflow-hidden">
-      {/* Blue-gray gradient background */}
+    <section className="relative mx-4 overflow-hidden sm:mx-6 lg:mx-10">
+      {/* Neutral surface keeps the product screenshots in focus. */}
       <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-transparent to-muted" />
 
       <div className="relative">
@@ -25,7 +25,7 @@ export function HeroSection({
               href={content.notice.href}
               target="_blank"
               rel="noopener noreferrer"
-              className="group mx-auto mb-7 block max-w-3xl rounded-lg bg-[linear-gradient(90deg,hsl(var(--color-1)),hsl(var(--color-5)),hsl(var(--color-3)),hsl(var(--color-4)),hsl(var(--color-2)))] p-px text-left shadow-sm transition-transform hover:-translate-y-0.5"
+              className="group mx-auto mb-7 block max-w-3xl rounded-lg border border-border bg-muted p-px text-left shadow-sm transition-transform hover:-translate-y-0.5"
             >
               <div className="rounded-[7px] bg-background/95 px-5 py-4 backdrop-blur">
                 <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 text-sm font-semibold text-foreground sm:justify-start">
@@ -47,51 +47,25 @@ export function HeroSection({
             </a>
           ) : null}
 
-          <Image
-            src="/logo.png"
-            alt="CodePilot"
-            width={80}
-            height={80}
-            className="mx-auto h-24 w-24 md:h-28 md:w-28"
-            priority
-          />
+          <BrandLogo size={96} priority className="mx-auto h-20 w-20 md:h-24 md:w-24" />
 
           <h1 className="mt-5 text-[28px] font-semibold leading-snug text-foreground md:text-[34px] lg:text-[40px]">
             {content.tagline}{' '}
             <TypewriterWords locale={locale} />
           </h1>
+          <p className="mx-auto mt-4 max-w-xl text-base leading-relaxed text-muted-foreground md:text-lg">
+            {content.description}
+          </p>
 
           <div className="mt-7 flex items-center justify-center">
-            <a href="https://github.com/op7418/CodePilot/releases/latest" target="_blank" rel="noopener noreferrer">
-              <RainbowButton className="h-14 rounded-full px-14 text-lg">
-                {content.cta}
-              </RainbowButton>
+            <a href="https://github.com/op7418/CodePilot/releases/latest" target="_blank" rel="noopener noreferrer" className={cn(buttonVariants(), 'rainbow-glow h-14 rounded-full px-14 text-lg')}>
+              {content.cta}
             </a>
           </div>
         </div>
 
-        {/* Animated chat demo with flickering grid background */}
-        <div className="relative mx-auto mt-12 max-w-[1000px] px-6 md:mt-14">
-          {/* FlickeringGrid — shifted down, masked with radial gradient for soft edges */}
-          <div
-            className="absolute -inset-x-24 -bottom-32 top-24 z-0"
-            style={{
-              maskImage: 'radial-gradient(ellipse at center, black 30%, transparent 75%)',
-              WebkitMaskImage: 'radial-gradient(ellipse at center, black 30%, transparent 75%)',
-            }}
-          >
-            <FlickeringGrid
-              className="absolute inset-0 size-full"
-              squareSize={4}
-              gridGap={6}
-              color="#6B7280"
-              maxOpacity={0.4}
-              flickerChance={0.1}
-            />
-          </div>
-          <div className="relative z-10">
-            <ChatDemo />
-          </div>
+        <div className="relative mx-auto mt-12 max-w-[1120px] px-4 pb-16 md:mt-14 md:px-10 md:pb-24">
+          <ScreenshotCarousel items={content.screenshots} labels={content.carousel} />
         </div>
       </div>
     </section>

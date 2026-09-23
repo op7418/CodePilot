@@ -12,6 +12,8 @@
 - 修改或新增文件后更新下方索引
 - 检索本目录前先读此文件
 
+当前新增：[TokenDance 接入](active/tokendance-integration.md)（已随 v0.67.15 Shipped；正式 CI、20 资产与包内接口/图标复核通过，真实生成与 packaged 授权 smoke 待执行）。
+
 ## 目录语义（四类目录）
 
 `docs/exec-plans/` 下的执行计划分四类，**AI 只从 `active/` 领任务**：
@@ -101,8 +103,14 @@
 
 | 文件 | 主题 | 状态 |
 |------|------|------|
-| [active/windows-unsigned-native-auto-update-2026-08-26.md](active/windows-unsigned-native-auto-update-2026-08-26.md) | **Windows 无签名原生自动更新与差分下载**：不申请 Microsoft/Azure/PFX 签名，固定 GitHub 单一信任根；stable 发布 `latest.yml` + NSIS blockmap，Linux 保持手动 | ✅ `v0.67.10` bootstrap 已 Shipped：正式 run 全绿、20 资产 Latest Release、Mac/Windows metadata 与外置 blockmap/checksum 已公开复核；Windows RC-A→RC-B 真实差分/完整回退 smoke 待执行，不冒充 `Smoke passed` |
+| [memory-runtime-decoupling.md](active/memory-runtime-decoupling.md) | Runtime 无关记忆核心/来源更正遗忘/成功回合生命周期；辅助凭据与遥测治理，用户授权全部问题修复 | Shipped v0.67.17；第三轮 Review passed，5704 pass / 1 skip、隔离UI、正式CI与公开20资产审计通过；真账号 smoke / Sentry发布后观察待验 |
+| [active/gemini-native-ai-studio.md](active/gemini-native-ai-studio.md) | AI Studio Gemini 3.8 Flash Native 接入、历史状态/思考参数/截断提示与 AI SDK 能力审计 | Shipped v0.67.17（含数字枚举修复）；SDK执行校验、正式CI与公开20资产审计通过，full 5704 pass / 1 skip，真实Gemini问候通过；完整工具执行与Windows会话smoke待执行 |
+| [active/astra-openai-oauth-compatibility.md](active/astra-openai-oauth-compatibility.md) | **Astra / OpenAI OAuth / Fable 5.1 兼容修复**：刷新并发、非阻塞目录、恢复提示、冷缓存能力与 Fable 协议 | 🟡 Code complete + Tests pass：5518 pass / 1 skip、后续旧聊天 E2E 2 pass；真实账号 smoke 待验证 |
+| [active/cli-maintenance-and-release-notes-rendering-2026-08-28.md](active/cli-maintenance-and-release-notes-rendering-2026-08-28.md) | **CLI 更新提醒、一键升级与 Release Notes 安全渲染**：按 selected binary/package-root 证明 Claude/Codex 安装渠道，same-channel latest、Windows shim/WinGet/standalone 更新、provider maintenance lease、app-update/quit lifecycle latch 与 post-version 验证；GitHub Atom HTML 经 strict sanitize 渲染 | 🟡 Review accepted，已随 `v0.67.11` Shipped；正式 package/资产门禁通过，真实 UpdateDialog、CLI before→after 与 Windows clean VM smoke 待执行 |
+| [active/post-sentry-scan-remediation-2026-08-27.md](active/post-sentry-scan-remediation-2026-08-27.md) | **2026-08-27 Sentry 生产问题修复闭环**：原 updater/utility/token/DB/media 修复；09-07 增补 collector 异常所有权、保存失败双语提示与快捷建议冷却 | Shipped v0.67.16；最终 full 5584 pass / 1 skip、UI 5/5；初始 DB 空读、Windows EOF 与生产停增验证仍开放 |
+| [active/windows-unsigned-native-auto-update-2026-08-26.md](active/windows-unsigned-native-auto-update-2026-08-26.md) | **Windows 无签名原生自动更新与差分下载**：不申请 Microsoft/Azure/PFX 签名，固定 GitHub 单一信任根；stable 发布 `latest.yml` + NSIS blockmap，Linux 保持手动 | ✅ `v0.67.10` bootstrap 与 `v0.67.11` 后继 stable 均已 Shipped；20 资产 Latest immutable Release、Mac/Windows metadata、blockmap/checksum/provenance 已复核；Windows 真实差分/完整回退 smoke 待执行 |
 | [active/composer-model-route-permission-consolidation.md](active/composer-model-route-permission-consolidation.md) | **Composer 模型路线、能力参数与权限入口收口**：Favorites 精确组合 + Runtime 左栏、Provider 分组模型右栏、能力描述符、上下文/Send 末端布局与权限档位双向映射 | 🟡 本轮 UI/定向 unit/scoped E2E 通过；三 Runtime 真实 effective-wire smoke 待执行（Tier 2） |
+| [active/runtime-thread-ownership-and-handoff.md](active/runtime-thread-ownership-and-handoff.md) | **Runtime 会话所有权、交接与成本可见性（P0/P1）**：首次执行锁定 Runtime；完整路线原子写入；同 Runtime 在原聊天跨服务商换模型并承接历史；目录校验对齐执行层；普通 Picker 不创建或跳转聊天 | 🟡 9 月 5 日两项 P2 续接修复 Tests pass：5485 pass / 1 skip、E2E 3/3；已有原聊天切换 Dev smoke；真实视觉 smoke、独立复审与原计划其他长历史 smoke 待跑 |
 | [active/workspace-surface-sidebar-pin-and-inspector.md](active/workspace-surface-sidebar-pin-and-inspector.md) | **Workspace Surface Sidebar**：Files/Git/Browser 等模块统一注册、项目级 pin、瞬时“+”与 tab own close、Primary + Inspector 双 lane、`canonicalWorkspaceKey` 与 v13 可逆迁移 | 🟡 Add/Pin/Unpin/own-close/reload scoped E2E 通过；Diff/Artifact → Inspector 人工验收仍待执行 |
 | [active/browser-webcontentsview-poc.md](active/browser-webcontentsview-poc.md) | **Browser WebContentsView 技术 POC**：验证三平台 bounds/IME/overlay/shortcut/zoom/crash/session/permission/download；只交付 Smoke Ledger、风险矩阵与 go/no-go，不合入产品代码 | 🧭 BLOCKED / INCONCLUSIVE，已被 `<webview>` MVP 路线取代；Windows/Linux 未跑，不伪造 GO |
 | [active/browser-surface-mvp.md](active/browser-surface-mvp.md) | **Browser Surface MVP**：hardened `<webview>`、Main attach gate、workspace partition、tabs/navigation/permission/download policy 与统一 Surface 接入 | 🟡 Code complete / macOS dev smoke passed；packaged、Windows/Linux、下载与 tab 恢复待执行 |
@@ -111,7 +119,7 @@
 | [active/production-observation-remediation-2026-08-07.md](active/production-observation-remediation-2026-08-07.md) | **0.65 生产观察修复闭环**：补 Sentry IP/Geo null tombstone、Electron 启动 session、Windows 外链 Promise 失败反馈，以及 Native 残缺 tool-call 历史的诚实配对修复 | 🔄 Phase 0 完成，Phase 1–4 实施中；新 stable packaged/Sentry cohort 待发布后验收 |
 | [active/windows-review-remediation-2026-08-07.md](active/windows-review-remediation-2026-08-07.md) | **Windows 适配独立审查修复闭环**：修复 Provider secret 迁移启动阻断、无 `rg` 正则回退卡死、macOS `//`/`/mnt` 路径误判与非 Windows PowerShell 恢复文案；P2 逐项修复或登记 | 🟡 Code complete + Tests pass + Review passed；Windows packaged smoke 待执行 |
 | [active/harness-home-user-owned-core.md](active/harness-home-user-owned-core.md) | **Harness Home Umbrella**：用户所有的 Assistant files/services、跨 Runtime Capability Packages 与 Assets；普通文件始终可读，助理自动服务显式激活，能力通过 Broker 相互调用，不再建设独立审美/workflow 系统 | 🔄 Program A/B foundation 与默认助理切片已落地；当前 Program C 按用户纠正重写，待 Claude 审查 |
-| [active/default-assistant-heartbeat-system-notification.md](active/default-assistant-heartbeat-system-notification.md) | **P0 默认助理 → 心跳 → 系统通知纵向闭环**：新用户默认用户自有助理目录、老路径 no-touch、零会话侧栏入口、heartbeat desired/actual 自愈、Electron Main 单 owner 的 durable native notification、系统提示音与点击回会话 | 🟡 Code complete + Tests pass + Review passed（本地范围）；三平台 packaged native/sound/click smoke 待用户验收与发布门禁 |
+| [active/default-assistant-heartbeat-system-notification.md](active/default-assistant-heartbeat-system-notification.md) | **P0 默认助理 → 心跳 → 系统通知纵向闭环**：新用户默认用户自有助理目录、老路径 no-touch、零会话侧栏入口、heartbeat desired/actual 自愈、全 priority Main-owned durable native notification、交互任务完成/审批提醒与点击回会话 | 🟡 P0.5 Review accepted，已随 `v0.67.11` Shipped；三平台 packaged native show/sound/click smoke 待完成 |
 | [active/harness-home-core-adapters.md](active/harness-home-core-adapters.md) | **Program A — Harness Core / Repository / Adapter Kits**：file-backed canonical repository、单写者/事务写/外部编辑对账、SecretStore、L0/L1 HarnessAdapter conformance、L2/L3 RuntimeAdapter 与 CodePilot Full Reference | 🟡 A1–A4 code/tests + recursive neutrality/repository hardening 完成；真实凭据 Tier 2 smoke 待最终验收 |
 | [active/harness-home-asset-library.md](active/harness-home-asset-library.md) | **Program B — Producer-backed Asset Library**：复用 Gallery/media pipeline，按真实 producer 注册 kind，完成 backfill、lineage、typed reference、HTML bundle materialization 与 trust/CSP；无 producer 的 component/document 不进首版 schema/UI | 🟡 B0–B3、Codex media 去重、真实本地 Browser smoke 与 review hardening 完成；packaged/human UI gate 待最终验收 |
 | [active/harness-home-context-capability-routing.md](active/harness-home-context-capability-routing.md) | **Program C — Assistant 服务激活与统一能力包**：窄 assistant binding 只门控 Memory 自动服务/Heartbeat，不限制目录文件；Skill/MCP/CLI/builtin/renderer/model adapter 归入一个 Capability Package，通过 Broker 相互调用；`creative` 验证可视化效果、policy 与图像/视频模型扩展，推荐页后移 | 📋 按用户纠正与竞品调研重写完成，待 Claude Code 审查；P0 服务激活 → P1 Package/Broker → P2 creative |
@@ -171,6 +179,8 @@
 
 | 文件 | 主题 | 完成日期 |
 |------|------|----------|
+| [completed/issue-685-route-identity.md](completed/issue-685-route-identity.md) | #685：保持已选路由、同 Provider 唯一 upstream 兼容；targeted 27/27，发版 full 5584 pass / 1 skip；Shipped v0.67.16、Windows 会话真机待验 | 2026-09-14 |
+| [completed/site-visual-refresh-2026-09-04.md](completed/site-visual-refresh-2026-09-04.md) | 官网与 README 视觉更新；Phase 8 恢复完整中英文 Dev 截图（接受系统标记）、两层连续贝塞尔圆角；typecheck/lint/UI smoke 通过，未部署 | 2026-09-05 |
 | [completed/windows-runtime-recovery-hardening.md](completed/windows-runtime-recovery-hardening.md) | **Windows Runtime 诊断、恢复与凭据加固**：统一 Path Identity 与三 Runtime Doctor，展示 Codex sandbox 真实阶段；desktop_only 恢复入口经 Windows DEV 用户验收；Provider key 从明文 SQLite 迁到 safeStorage 保护的版本化密文；跨机真实凭据与 standalone sandbox 矩阵保留为复查清单 | 2026-08-07 |
 | [completed/codex-thread-storage-isolation.md](completed/codex-thread-storage-isolation.md) | **Codex 会话存储隔离**：CodePilot-owned `CODEX_HOME` / SQLite、只迁移 `codex_codepilot` 历史、Harness live mirror 与凭据降级模式可观察；真实 app-server resume/索引 smoke 通过 | 2026-08-03 |
 | [completed/document-system-governance.md](completed/document-system-governance.md) | **文档体系治理**：基于 2026-06-05 文档健康审计清理 active 语义污染，建立 deferred / superseded 目录，归档合并与 preview 旧计划，升级 docs drift 防线（结构化 banner + 归档桶内部链接完整性），并修复归档桶 21 处失效相对链接 | 2026-06-05 |

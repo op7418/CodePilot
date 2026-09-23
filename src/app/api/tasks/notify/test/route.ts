@@ -1,10 +1,10 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { getNotificationEvent, listNotificationDeliveries } from '@/lib/db';
-import { validateNotificationConsumerRequest } from '@/lib/notification-claim-policy';
+import { validateRendererNotificationTestRequest } from '@/lib/notification-claim-policy';
 import { sendNotification } from '@/lib/notification-manager';
 
 export async function POST(request: NextRequest) {
-  const policy = validateNotificationConsumerRequest(request, 'renderer-toast');
+  const policy = validateRendererNotificationTestRequest(request);
   if (!policy.ok) return NextResponse.json({ error: policy.error }, { status: policy.status });
 
   const result = await sendNotification({

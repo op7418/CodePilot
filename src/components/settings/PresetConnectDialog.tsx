@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
+import { TokenDanceAuthorize } from "./TokenDanceAuthorize";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -52,6 +53,7 @@ interface PresetConnectDialogProps {
   onSave: (data: ProviderFormData) => Promise<void>;
   /** When set, dialog operates in edit mode (pre-fills from existing provider) */
   editProvider?: ApiProvider | null;
+  onAuthorized?: (providerId: string) => void;
 }
 
 export function PresetConnectDialog({
@@ -60,6 +62,7 @@ export function PresetConnectDialog({
   onOpenChange,
   onSave,
   editProvider,
+  onAuthorized,
 }: PresetConnectDialogProps) {
   const isEdit = !!editProvider;
   const [apiKey, setApiKey] = useState("");
@@ -95,6 +98,7 @@ export function PresetConnectDialog({
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [authorizing, setAuthorizing] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: { code: string; message: string; suggestion: string; recoveryActions?: Array<{ label: string; url?: string; action?: string }> } } | null>(null);
   const { t } = useTranslation();
@@ -134,6 +138,7 @@ export function PresetConnectDialog({
   })();
 
   const handleTestConnection = async () => {
+    if (authorizing) return;
     // Belt-and-suspenders: the button disabled state already enforces
     // this, but guard here in case something bypasses the UI (keyboard
     // event, third-party DOM manipulation).
@@ -308,6 +313,7 @@ export function PresetConnectDialog({
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (authorizing) return;
     setError(null);
 
     // Anthropic-protocol presets (any preset that isn't pinned to a vendor
@@ -548,6 +554,12 @@ export function PresetConnectDialog({
               </div>
             ) : null}
           </div>
+        )}
+
+        {open && (preset.key === 'tokendance' || preset.key === 'tokendance-anthropic') && onAuthorized && (
+          <TokenDanceAuthorize key={`${preset.key}:${editProvider?.id || 'new'}`} presetKey={preset.key} providerId={editProvider?.id}
+            onPendingChange={setAuthorizing}
+            onConnected={(providerId) => { onAuthorized(providerId); onOpenChange(false); }} />
         )}
 
         <form onSubmit={handleSubmit} className="space-y-4 min-w-0 mt-6">
@@ -840,7 +852,7 @@ export function PresetConnectDialog({
                 type="button"
                 variant="outline"
                 onClick={handleTestConnection}
-                disabled={saving || testing || !canTest}
+                disabled={saving || testing || authorizing || !canTest}
                 className="gap-1.5"
               >
                 {testing ? <SpinnerGap size={14} className="animate-spin" /> : <CodePilotIcon name="diagnose" size="sm" aria-hidden />}
@@ -848,7 +860,7 @@ export function PresetConnectDialog({
               </Button>
               <Button
                 type="submit"
-                disabled={saving || testing || !canTest}
+                disabled={saving || testing || authorizing || !canTest}
                 className="gap-2"
                 title={!canTest ? (isZh ? '请先填写 API Key 再连接' : 'Fill the API Key before connecting') : undefined}
               >

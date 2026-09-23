@@ -1,3 +1,6 @@
+import { createStreamTurnOutcome, NON_SUCCESSFUL_TERMINAL_FINISH_REASONS } from './stream-turn-outcome';
+import { enqueueCommittedMemoryTurn, getMemoryTurnUserMessageId } from './memory-lifecycle';
+import { getAssistantMemoryWorkspace } from './memory-binding';
 // Server-side SSE collection + assistant persistence for POST /api/chat.
 //
 // Extracted out of `route.ts` (Session ownership rework): Next App Router only
@@ -11,20 +14,26 @@ import { isSessionStateResultError } from '@/lib/error-classifier';
 import {
   addMessage,
   getSession,
-  getSetting,
   updateSdkSessionId,
-  updateSessionModel,
   syncSdkTasks,
   isLockOwner,
   updateMessageStreamCheckpoint,
   updateMessageStreamStatus,
 } from '@/lib/db';
 import { notifySessionComplete, notifySessionError } from '@/lib/telegram-bot';
+import {
+  notifyInteractiveChatApproval,
+  notifyInteractiveChatCompleted,
+} from '@/lib/interactive-chat-notifications';
 import { extractCompletion } from '@/lib/onboarding-completion';
 import { saveMediaToLibrary } from '@/lib/media-saver';
 import type { SSEEvent, TokenUsage, MessageContentBlock, MediaBlock, ExternalSource } from '@/types';
+import { isRuntimeId } from '@/lib/runtime/runtime-id';
+import { attachNormalizedTurnUsage } from '@/lib/runtime/turn-usage';
+import { attachNativeStep, parseNativeStepHistory } from './native-step-history';
 
 const ASSISTANT_CHECKPOINT_INTERVAL_MS = 120;
+
 /**
  * Serialize assistant blocks with the same shape used by historical rendering.
  * Checkpoints and terminal persistence must share this helper so refreshing
@@ -34,7 +43,7 @@ function serializeAssistantBlocks(blocks: readonly MessageContentBlock[]): strin
   const cleanedBlocks = blocks;
   const hasStructuredBlocks = cleanedBlocks.some(
     (block) =>
-      block.type === 'tool_use'
+      Boolean(block.nativeStep) || block.type === 'tool_use'
       || block.type === 'tool_result'
       || block.type === 'thinking'
   );
@@ -68,7 +77,7 @@ function buildAssistantSnapshot(
  *
  * Session ownership (I1/DP1 ownership gate): `lockId` is this turn's
  * session-lock owner token (minted at route.ts :85). EVERY session-level write
- * below — sdk_session_id / model / SDK tasks / the assistant `addMessage` — is
+ * below — sdk_session_id / SDK tasks / the assistant `addMessage` — is
  * gated on `isLockOwner(sessionId, lockId)`. A superseded turn (its lock taken
  * over by a newer send after Stop→watchdog release) reaches here LATE and must
  * NOT write: its writes would clobber the new owner's state and (DP1) splice its
@@ -89,6 +98,8 @@ export async function collectStreamResponse(
   onComplete?: () => void,
   opts?: {
     suppressNotifications?: boolean;
+    /** Terminal DB writes have settled; post-save model calls are still background work. */
+    onPersistenceSettled?: (saved: boolean) => void;
     /** Phase 2 semantic title generation. Present only when this turn is the
      *  session's FIRST real user turn (the route sets it from the fallback-title
      *  CAS return value). Fired below only on a clean, persisted completion. */
@@ -100,7 +111,9 @@ export async function collectStreamResponse(
     };
   },
 ) {
+  const memoryUserMessageId = getMemoryTurnUserMessageId(sessionId);
   const reader = stream.getReader();
+  const memoryOutcome = createStreamTurnOutcome();
   const contentBlocks: MessageContentBlock[] = [];
   let currentText = '';
   let thinkingText = '';
@@ -109,11 +122,14 @@ export async function collectStreamResponse(
   let tokenUsage: TokenUsage | null = null;
   let hasError = false;
   let errorMessage = '';
+  let sawSuccessfulResult = false;
+  let sawNonSuccessfulTerminalResult = false;
   let lastSavedAssistantMsgId: string | null = null;
   let checkpointMessageId: string | null = null;
   let lastCheckpointAt = 0;
   // Dedup layer: skip duplicate tool_result events by tool_use_id
   const seenToolResultIds = new Set<string>();
+  const notifiedPermissionRequestIds = new Set<string>();
 
   const persistCheckpoint = (force = false): void => {
     const now = Date.now();
@@ -183,8 +199,38 @@ export async function collectStreamResponse(
         if (line.startsWith('data: ')) {
           try {
             const event: SSEEvent = JSON.parse(line.slice(6));
-            if (event.type === 'permission_request' || event.type === 'tool_output') {
-              // Skip permission_request and tool_output events - not saved as message content
+            memoryOutcome.observe(event);
+            if (event.type === 'permission_request') {
+              // Permission prompts are not transcript content, but they are a
+              // first-class native notification. The server-side collector is
+              // the single cross-Runtime source, so navigation/reload cannot
+              // make the reminder disappear or duplicate it.
+              if (!opts?.suppressNotifications && isLockOwner(sessionId, lockId)) {
+                try {
+                  const permission = JSON.parse(event.data) as {
+                    permissionRequestId?: unknown;
+                    toolName?: unknown;
+                  };
+                  const permissionRequestId = typeof permission.permissionRequestId === 'string'
+                    ? permission.permissionRequestId
+                    : '';
+                  if (permissionRequestId && !notifiedPermissionRequestIds.has(permissionRequestId)) {
+                    await notifyInteractiveChatApproval({
+                      sessionId,
+                      sessionTitle: telegramOpts.sessionTitle,
+                      toolName: typeof permission.toolName === 'string' ? permission.toolName : undefined,
+                    });
+                    notifiedPermissionRequestIds.add(permissionRequestId);
+                  }
+                } catch (error) {
+                  console.warn(
+                    `[chat/route] failed to queue approval notification for session ${sessionId}:`,
+                    error instanceof Error ? error.message : String(error),
+                  );
+                }
+              }
+            } else if (event.type === 'tool_output') {
+              // Streaming tool output is not saved as message content.
             } else if (event.type === 'thinking') {
               // Accumulate thinking content with phase separation (--- between phases)
               if (thinkingPhaseEnded) {
@@ -197,6 +243,15 @@ export async function collectStreamResponse(
               currentText += event.data;
               if (thinkingText) thinkingPhaseEnded = true;
               persistCheckpoint();
+            } else if (event.type === 'native_step') {
+              const step = await parseNativeStepHistory(JSON.parse(event.data));
+              if (step) {
+                if (thinkingText) contentBlocks.push({ type: 'thinking', thinking: thinkingText });
+                if (currentText) contentBlocks.push({ type: 'text', text: currentText });
+                thinkingText = ''; currentText = ''; thinkingPhaseEnded = false;
+                attachNativeStep(contentBlocks, step);
+                persistCheckpoint(true);
+              }
             } else if (event.type === 'tool_use') {
               if (thinkingText) thinkingPhaseEnded = true;
               // Flush any accumulated text before the tool use block
@@ -275,21 +330,20 @@ export async function collectStreamResponse(
                 // skip malformed tool_result data
               }
             } else if (event.type === 'status') {
-              // Capture SDK session_id and model from init event and persist them.
+              // Persist the continuation reference, never the reported model:
+              // status.model is an upstream observation, not the committed
+              // picker route. Overwriting it breaks alias-based second turns.
               // I1/DP1 owner gate: a superseded turn must not write session-level
-              // state — skip both writes (diagnostic-log only) if we no longer own
+              // state — skip the write (diagnostic-log only) if we no longer own
               // the lock.
               try {
                 const statusData = JSON.parse(event.data);
-                if (statusData.session_id || statusData.model) {
+                if (statusData.session_id) {
                   if (!isLockOwner(sessionId, lockId)) {
-                    console.warn(`[chat/route] stale owner (lockId superseded), skipping status session_id/model write for session ${sessionId}`);
+                    console.warn(`[chat/route] stale owner (lockId superseded), skipping status session_id write for session ${sessionId}`);
                   } else {
                     if (statusData.session_id) {
                       updateSdkSessionId(sessionId, statusData.session_id);
-                    }
-                    if (statusData.model) {
-                      updateSessionModel(sessionId, statusData.model);
                     }
                   }
                 }
@@ -317,8 +371,29 @@ export async function collectStreamResponse(
             } else if (event.type === 'result') {
               try {
                 const resultData = JSON.parse(event.data);
+                const finishReason = typeof resultData.finish_reason === 'string'
+                  ? resultData.finish_reason
+                  : null;
+                if (
+                  finishReason
+                  && NON_SUCCESSFUL_TERMINAL_FINISH_REASONS.has(finishReason)
+                ) {
+                  // Codex emits a second usage-only result after the terminal
+                  // interrupted/inProgress result. Keep this sticky so that
+                  // follow-up accounting cannot turn a stopped turn back into
+                  // a successful completion.
+                  sawNonSuccessfulTerminalResult = true;
+                }
                 if (resultData.usage) {
-                  tokenUsage = resultData.usage;
+                  const rawUsage = resultData.usage as TokenUsage;
+                  const routeSession = getSession(sessionId);
+                  tokenUsage = routeSession && isRuntimeId(routeSession.runtime_pin)
+                    ? attachNormalizedTurnUsage(rawUsage, {
+                        runtimeId: routeSession.runtime_pin,
+                        providerInstanceId: routeSession.provider_id || undefined,
+                        modelId: routeSession.model || undefined,
+                      })
+                    : rawUsage;
                   persistCheckpoint(true);
                 }
                 if (resultData.is_error) {
@@ -332,6 +407,8 @@ export async function collectStreamResponse(
                         ? resultData.errors.join('\n')
                         : resultData.subtype) || 'The conversation ended with an error';
                   }
+                } else if (!sawNonSuccessfulTerminalResult) {
+                  sawSuccessfulResult = true;
                 }
                 // Also capture session_id from result if we missed it from init.
                 // #629 — EXCEPT a stale-resume is_error result: resultData.session_id
@@ -423,6 +500,21 @@ export async function collectStreamResponse(
       }
     }
   } finally {
+    // A durable success event shared by Desktop and Bridge, independent of Runtime.
+    if (lastSavedAssistantMsgId !== null) {
+      try {
+        enqueueCommittedMemoryTurn({
+          sessionId, assistantMessageId: lastSavedAssistantMsgId, userMessageId: memoryUserMessageId ?? null,
+          successful: memoryOutcome.successful && !hasError,
+          ownerValid: isLockOwner(sessionId, lockId),
+          systemTurn: !!opts?.suppressNotifications, entryPoint: 'desktop', blocks: contentBlocks,
+        });
+      } catch { console.warn('[memory] MEMORY_JOB_ENQUEUE_FAILED'); }
+    }
+
+    // Publish before any asynchronous completion effects. A later notification
+    // or cleanup failure must not turn a confirmed DB write into a save warning.
+    opts?.onPersistenceSettled?.(lastSavedAssistantMsgId !== null || contentBlocks.length === 0);
     // ── Server-side completion detection (reliable path) ──
     // After persisting the assistant message, check for onboarding/checkin
     // fences and process them directly on the server. This ensures completion
@@ -436,9 +528,9 @@ export async function collectStreamResponse(
       // 1. Check for onboarding-complete fence
       const completion = extractCompletion(fullText);
       if (completion) {
-        const workspacePath = getSetting('assistant_workspace_path');
         const session = getSession(sessionId);
-        if (workspacePath && session && session.working_directory === workspacePath) {
+        const workspacePath = session && getAssistantMemoryWorkspace(session);
+        if (workspacePath) {
           await processCompletionServerSide(completion, workspacePath, sessionId);
         }
       }
@@ -447,55 +539,23 @@ export async function collectStreamResponse(
       console.error('[chat API] Server-side completion detection failed:', e);
     }
 
-    // Memory extraction: auto-extract durable memories every N turns (assistant projects only)
-    if (!opts?.suppressNotifications) {
-      try {
-        const workspacePath = getSetting('assistant_workspace_path');
-        const session = getSession(sessionId);
-        if (workspacePath && session && session.working_directory === workspacePath) {
-          const { shouldExtractMemory, hasMemoryWritesInResponse, extractMemories } = await import('@/lib/memory-extractor');
-
-          const fullTextForMemory = contentBlocks
-            .filter((b): b is Extract<MessageContentBlock, { type: 'text' }> => b.type === 'text')
-            .map((b) => b.text)
-            .join('');
-
-          // For memory-write detection, serialize ALL blocks (including tool_use/tool_result)
-          // so that hasMemoryWritesInResponse can see memory file paths in tool calls.
-          const fullResponseForWriteCheck = JSON.stringify(contentBlocks);
-
-          // Load buddy rarity for extraction interval
-          let buddyRarity: string | undefined;
-          try {
-            const { loadState } = await import('@/lib/assistant-workspace');
-            const st = loadState(workspacePath);
-            buddyRarity = st.buddy?.rarity;
-          } catch { /* ignore */ }
-
-          // Only extract if: interval met + AI didn't already write memory this turn
-          if (shouldExtractMemory(buddyRarity, sessionId) && !hasMemoryWritesInResponse(fullResponseForWriteCheck)) {
-            const { getMessages: getMsgs } = await import('@/lib/db');
-            const { messages: recent } = getMsgs(sessionId, { limit: 6, excludeHeartbeatAck: true });
-            const recentForExtraction = recent.map(m => ({ role: m.role, content: m.content }));
-
-            // Fire-and-forget: don't block the response
-            extractMemories(recentForExtraction, workspacePath).catch(() => {});
-          }
-        }
-      } catch { /* best effort */ }
-    }
-
     // ── Phase 2: semantic title generation (background, fire-and-forget) ──
     // Preconditions, all required:
     //   - the route marked this as the session's first real user turn,
     //   - the turn ended cleanly (`hasError` covers thrown errors AND inline
-    //     `error` SSE events; an aborted/Stopped turn lands here too),
+    //     `error` SSE events; interrupted/inProgress terminal results are
+    //     tracked separately because they are not provider errors),
     //   - the assistant row actually persisted (a turn dropped by the DP1 owner
     //     gate is a superseded turn — it must not name the new owner's chat).
     // Not awaited: `collectStreamResponse` is itself detached from the streaming
     // Response, and nothing downstream of here may wait on a provider call.
     // `generateSessionTitle` never throws; `.catch` is belt-and-braces.
-    if (opts?.titleGeneration && !hasError && lastSavedAssistantMsgId !== null) {
+    if (
+      opts?.titleGeneration
+      && !hasError
+      && !sawNonSuccessfulTerminalResult
+      && lastSavedAssistantMsgId !== null
+    ) {
       const gen = opts.titleGeneration;
 
       import('@/lib/title-generation')
@@ -526,12 +586,36 @@ export async function collectStreamResponse(
       }
     }
 
+    // Native task-completion notification. Require a successful terminal
+    // result, a persisted assistant row, and current lock ownership so a
+    // stopped/empty/superseded turn can never announce false completion.
+    if (
+      !opts?.suppressNotifications
+      && !hasError
+      && !sawNonSuccessfulTerminalResult
+      && sawSuccessfulResult
+      && lastSavedAssistantMsgId !== null
+      && isLockOwner(sessionId, lockId)
+    ) {
+      try {
+        await notifyInteractiveChatCompleted({
+          sessionId,
+          sessionTitle: telegramOpts.sessionTitle,
+        });
+      } catch (error) {
+        console.warn(
+          `[chat/route] failed to queue completion notification for session ${sessionId}:`,
+          error instanceof Error ? error.message : String(error),
+        );
+      }
+    }
+
     // Telegram notifications: completion or error (fire-and-forget)
     // Suppressed for auto-trigger turns (onboarding/heartbeat) — invisible system flows
     if (!opts?.suppressNotifications) {
       if (hasError) {
         notifySessionError(errorMessage, telegramOpts).catch(() => {});
-      } else {
+      } else if (!sawNonSuccessfulTerminalResult) {
         const textSummary = contentBlocks
           .filter((b): b is Extract<MessageContentBlock, { type: 'text' }> => b.type === 'text')
           .map((b) => b.text)

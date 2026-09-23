@@ -45,6 +45,7 @@ import type { MediaBlock } from '@/types';
 import { emitBuiltinEvent } from '@/lib/harness/builtin-event-bus';
 import { makeToolCompleted } from '@/lib/runtime/event-adapter';
 import { isXaiOAuthUsable } from '@/lib/xai-oauth-manager';
+import { prepareMediaFailureForRethrow } from '@/lib/telemetry/media-failure';
 
 export const MEDIA_SYSTEM_PROMPT = MEDIA_CAPABILITY_SYSTEM_PROMPT;
 
@@ -110,7 +111,8 @@ export function createMediaTools(options?: MediaToolOptions) {
       // `toolCallId` so the side-channel emit can be paired back to
       // the exact tool-result event in agent-loop.
       execute: async ({ filePath, title, prompt, source, model, tags }, execOptions) => {
-        const toolCallId = (execOptions as { toolCallId?: string } | undefined)?.toolCallId ?? '';
+        const execution = execOptions as { toolCallId?: string; abortSignal?: AbortSignal } | undefined;
+        const toolCallId = execution?.toolCallId ?? '';
         try {
           const { importFileToLibrary } = await import('@/lib/media-saver');
           const result = importFileToLibrary(filePath, {
@@ -164,7 +166,9 @@ export function createMediaTools(options?: MediaToolOptions) {
           }
           return `Media imported: ${localPath} (type=${mediaType})`;
         } catch (err) {
-          throw err instanceof Error ? err : new Error('Media import failed');
+          throw prepareMediaFailureForRethrow(err, 'Media import failed', {
+            userCancelled: execution?.abortSignal?.aborted === true,
+          });
         }
       },
     }),
@@ -243,7 +247,9 @@ export function createMediaTools(options?: MediaToolOptions) {
           }
           return text;
         } catch (err) {
-          throw err instanceof Error ? err : new Error('Image generation failed');
+          throw prepareMediaFailureForRethrow(err, 'Image generation failed', {
+            userCancelled: execution?.abortSignal?.aborted === true,
+          });
         }
       },
     }),
@@ -257,7 +263,11 @@ export function createMediaTools(options?: MediaToolOptions) {
         prompt: z.string().describe('Detailed video generation prompt'),
         imagePath: z.string().optional().describe('Optional single source image to animate as the first frame'),
         referenceImagePaths: z.array(z.string()).max(7).optional().describe('Optional style/content reference images; ignored when imagePath is provided'),
-        duration: z.union([z.literal(6), z.literal(10)]).optional(),
+        // Google `parameters` only accepts string enum values. AI SDK emits
+        // the pipe's numeric input schema; Zod still validates 6 | 10 before
+        // execute(), preserving both the numeric tool contract and its limits.
+        duration: z.number().pipe(z.union([z.literal(6), z.literal(10)]))
+          .optional().describe('Video duration in seconds. Must be 6 or 10; defaults to 6.'),
         aspectRatio: z.enum(['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3']).optional(),
         resolution: z.enum(['480p', '720p']).optional(),
       }),
@@ -299,7 +309,9 @@ export function createMediaTools(options?: MediaToolOptions) {
           }
           return text;
         } catch (err) {
-          throw err instanceof Error ? err : new Error('Video generation failed');
+          throw prepareMediaFailureForRethrow(err, 'Video generation failed', {
+            userCancelled: execution?.abortSignal?.aborted === true,
+          });
         }
       },
     });

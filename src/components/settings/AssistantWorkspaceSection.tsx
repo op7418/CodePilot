@@ -14,6 +14,7 @@ import { WorkspaceConfirmDialogs, type ConfirmDialogType } from "./WorkspaceConf
 import { OnboardingCard, CheckInCard } from "./WorkspaceStatusCards";
 import { OnboardingWizard } from "@/components/assistant/OnboardingWizard";
 import { AssistantAvatar } from "@/components/ui/AssistantAvatar";
+import { MemoryRecordsPanel } from "./MemoryRecordsPanel";
 import type { TranslationKey } from "@/i18n/en";
 import type { TaxonomyCategoryInfo, IndexStats, WorkspaceInfo, TabId } from "./workspace-types";
 
@@ -591,6 +592,8 @@ export function AssistantWorkspaceSection() {
           )}
         </SettingsCard>
       )}
+
+      {workspace?.path && workspace.valid !== false && <SettingsCard><MemoryRecordsPanel key={workspace.path} /></SettingsCard>}
 
       {/* Confirmation Dialogs */}
       <WorkspaceConfirmDialogs

@@ -93,7 +93,7 @@
 | `src/__tests__/e2e/project-panel.spec.ts` | launcher、加号瞬时打开/Browser gate、Standalone Inspector 无 phantom Git/divider、Unpin 保持打开、own close 不清 Pin、reload 恢复、Runtime-first Picker |
 | `src/__tests__/e2e/workspace-context-menu-actions.spec.ts` | FileTree、聊天代码块 Artifact、写文件 Diff 卡三条真实点击路径；Inspector 打开时 Files Primary 保留 |
 
-改本护栏覆盖的状态或 UI，至少跑上述三组 unit targeted 与 `project-panel.spec.ts` scoped E2E。
+改本护栏覆盖的状态或 UI，至少跑上述三组 unit targeted 与 `project-panel.spec.ts` scoped E2E。所有创建 session 的 E2E 必须在 `finally` 调用共享 `deleteTestSession`；Playwright 只能通过隔离启动器运行，不得把测试项目写入日常侧栏。
 
 ## 7. 设计决策日志
 
@@ -109,3 +109,4 @@
 - **2026-08-26** Inspector 正式支持无 Primary 的 standalone 形态；tab lane 分隔线只在两类 tab 同时存在时展示，窄侧栏返回栏只在确有可返回 Primary 时展示，避免默认 `activePrimaryId=git` 泄漏到网页预览。
 - **2026-08-26** 修复 Standalone Inspector 上通过“+”添加 Widget 后点击无可见反应：交互式 Primary 激活现在关闭 Inspector 展示但保留 preview tab；hydration 继续使用无关闭副作用的恢复路径，避免修复交互时破坏重载恢复。
 - **2026-08-26** 移除窄屏 Inspector 的“← 看板/Git/Files”来源栏；Primary 与 Inspector 已是顶部同级 Tab，内容区不再重复一套返回导航。
+- **2026-08-28** 用户反馈 dev 客户端长期堆积 `E2E Initialize Git / Sidebar Tab Close / Sidebar Hydration` 项目。根因是 scoped E2E 复用真实 dev server 且 finally 只删工作目录。现改为临时 DB + 独立 `.next-e2e-*`，三类 fixture 逐 session 删除；历史 44 条测试会话已精确清理，用户会话未动。

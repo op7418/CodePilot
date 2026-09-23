@@ -219,9 +219,19 @@ describe('bare allowedTools narrowing at the real options boundary (a05)', () =>
 
   it('read-only MCP servers stay on the wire — they are why the list exists', () => {
     const { allowedTools } = wire();
-    for (const server of ['mcp__codepilot-memory', 'mcp__codepilot-widget', 'mcp__codepilot-widget-guidelines']) {
+    for (const server of ['mcp__codepilot-memory__codepilot_memory_search', 'mcp__codepilot-memory__codepilot_memory_get', 'mcp__codepilot-memory__codepilot_memory_recent', 'mcp__codepilot-widget', 'mcp__codepilot-widget-guidelines']) {
       assert.ok(allowedTools.includes(server), `${server} should remain prompt-free`);
     }
+  });
+
+  it('memory mutations are not auto-approved through the read server prefix', () => {
+    const { allowedTools } = wire();
+    for (const name of ['codepilot_memory_remember', 'codepilot_memory_update', 'codepilot_memory_forget']) {
+      const qualified = `mcp__codepilot-memory__${name}`;
+      assert.ok(!allowedTools.some(entry => qualified === entry || qualified.startsWith(`${entry}__`)));
+      assert.notEqual(decideHostToolPermission(name).decision, 'rule-approved');
+    }
+    assert.ok(!allowedTools.includes('mcp__codepilot-memory'));
   });
 
   it('a mutating MCP tool now reaches the permission decision path', () => {
@@ -241,7 +251,7 @@ describe('bare allowedTools narrowing at the real options boundary (a05)', () =>
 
   it('heartbeat narrowing does not regress (Codex P1)', () => {
     const { allowedTools, disallowedTools } = wire({ isHeartbeatMode: true });
-    assert.deepEqual([...allowedTools], ['mcp__codepilot-memory'], 'heartbeat must stay memory-only');
+    assert.deepEqual([...allowedTools], ['mcp__codepilot-memory__codepilot_memory_search', 'mcp__codepilot-memory__codepilot_memory_get', 'mcp__codepilot-memory__codepilot_memory_recent'], 'heartbeat must stay memory-read-only');
     for (const tool of ['Bash', 'Edit', 'Write', 'Read', 'WebFetch']) {
       assert.ok(disallowedTools?.includes(tool), `heartbeat must still block ${tool}`);
     }

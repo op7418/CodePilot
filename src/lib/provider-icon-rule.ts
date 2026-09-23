@@ -13,7 +13,10 @@
  * `token-plan` match — it would steal icons across vendors.
  */
 
+import { isTokenDanceBaseUrl } from "./tokendance";
+
 export type ProviderIconKey =
+  | "tokendance"
   | "openrouter"
   | "zhipu"
   | "kimi"
@@ -37,6 +40,9 @@ export type ProviderIconKey =
 export function getProviderIconKey(name: string, baseUrl: string): ProviderIconKey {
   const lower = name.toLowerCase();
   const url = baseUrl.toLowerCase();
+
+  // Match the gateway before model-family names or protocol suffixes.
+  if (isTokenDanceBaseUrl(baseUrl) || lower.includes("tokendance") || lower.includes("词元跳动")) return "tokendance";
 
   if (lower.includes("openrouter")) return "openrouter";
   // OpenCode Go: the provider name carries a protocol suffix — "OpenCode Go

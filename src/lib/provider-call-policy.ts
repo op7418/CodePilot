@@ -6,28 +6,30 @@ import { getPreset, resolveProviderPresetIdentity } from './provider-catalog';
  * route names: every model call must make its user-interaction semantics
  * explicit before credentials can reach the wire.
  */
-export type ProviderCallScene =
-  | 'interactive_chat'
-  | 'delegated_interactive'
-  | 'active_turn_compact'
-  | 'active_turn_memory_rerank'
-  | 'user_onboarding'
-  | 'user_checkin'
-  | 'user_dashboard_refresh'
-  | 'user_cli_describe'
-  | 'user_skill_search'
-  | 'connection_test'
-  | 'automatic_title'
-  | 'automatic_memory_extract'
-  | 'automatic_quick_actions'
-  | 'automatic_dashboard_refresh'
-  | 'background_cli_describe'
-  | 'background_skill_search'
-  | 'scheduled_task'
-  | 'assistant_heartbeat'
-  | 'media_plan'
-  | 'structured_generation'
-  | 'bridge';
+export const PROVIDER_CALL_SCENES = [
+  'interactive_chat',
+  'delegated_interactive',
+  'active_turn_compact',
+  'active_turn_memory_rerank',
+  'user_onboarding',
+  'user_checkin',
+  'user_dashboard_refresh',
+  'user_cli_describe',
+  'user_skill_search',
+  'connection_test',
+  'automatic_title',
+  'automatic_memory_extract',
+  'automatic_quick_actions',
+  'automatic_dashboard_refresh',
+  'background_cli_describe',
+  'background_skill_search',
+  'scheduled_task',
+  'assistant_heartbeat',
+  'media_plan',
+  'structured_generation',
+  'bridge',
+] as const;
+export type ProviderCallScene = (typeof PROVIDER_CALL_SCENES)[number];
 
 const INTERACTIVE_ALLOWED = new Set<ProviderCallScene>([
   'interactive_chat',

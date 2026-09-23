@@ -1,5 +1,6 @@
 'use client';
 
+import Image from 'next/image';
 import { HardDrives } from '@/components/ui/icon';
 import { getProviderIconKey } from '@/lib/provider-icon-rule';
 import Anthropic from '@lobehub/icons/es/Anthropic';
@@ -34,6 +35,7 @@ interface ProviderBrandIconByKeyProps {
 
 /** Shared brand renderer for catalog entries that already own a sourced key. */
 export function ProviderBrandIconByKey({ iconKey: key, size = 18 }: ProviderBrandIconByKeyProps) {
+  if (key === 'tokendance') return <Image src="/provider-icons/tokendance.svg" alt="" width={size} height={size} unoptimized className="shrink-0" />;
   if (key === 'openrouter') return <OpenRouter size={size} />;
   if (key === 'zhipu') return <Zhipu size={size} />;
   if (key === 'kimi') return <Kimi size={size} />;

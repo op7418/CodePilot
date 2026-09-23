@@ -5,8 +5,8 @@
 
 ## 词汇表
 
-- `ensureTokenFresh()` / `ensureXaiTokenFresh()` — 每次请求前的刷新闸门；xAI 版本有进程级 single-flight。
-- OAuth bundle — access/refresh/expiry/account metadata 的单个原子 JSON setting；不拆成多个可部分写入的 key。
+- `ensureTokenFresh()` / `ensureXaiTokenFresh()` — 每次请求前的刷新闸门；OpenAI/xAI 均有进程级 single-flight。
+- OAuth 原子保存 — xAI 使用单个 JSON setting；OpenAI 保留 legacy keys 的读取兼容性，但 access/refresh/expiry/account metadata 必须在同一 SQLite transaction 内提交。
 - Virtual provider — 没有 `api_providers` DB 行、由登录状态动态注入 resolver/picker 的 provider。
 - Browser PKCE — `S256 + state + nonce` 的浏览器授权码流程；Grok Build 生产合同使用 OS 分配的动态 loopback callback 端口。
 - Device flow — 设备码授权与轮询；是浏览器/loopback 受限环境的正式替代路径。
@@ -100,3 +100,15 @@
 - 2026-08-14 — 同一上游复核确认：session auth 的文本目录来自 Build proxy authenticated `/v1/models`，文本推理靠 `x-grok-model-override` 路由实际模型；Imagine 图片/视频工具则用 fresh OAuth bearer 直连 `api.x.ai` 的媒体 endpoint。三者必须分别做窄路由与凭据 smoke，不能继续用“OAuth bearer 永不去公共 API”的旧概括。
 - 2026-08-14 — Imagine client 已落地为独立媒体 fetch：精确允许 image generation/edit、video generation/poll，401 强制 refresh 后最多重试一次；文本 proxy headers 被剥离。视频下载只接受受控 xAI CDN、限定媒体类型与 250 MiB 流式上限，产物以有 provenance 的 `MediaBlock` 进入 Gallery。自动化合同通过不替代真实订阅 entitlement/计费 smoke。
 - 2026-08-15 — Imagine 取消合同补齐四入口和行为测试：轮询/下载未完成时 Stop 冻结后续请求且不落库；下载字节已完成返回时保留并登记资产，避免丢失可能已计费的结果。本地 AbortSignal 不冒充上游撤销或退款。
+
+
+## 2026-09-05 OpenAI / Astra 修复合同
+
+- `ensureTokenFresh` 并发只执行一次 refresh；只有 generation 与原 refresh token 都仍匹配才回写或清空。logout、取消/替换登录让旧请求失效，HMR 不重置 generation。新登录清旧 metadata 和写新凭据也在一笔事务内完成。
+- 明确 invalid_grant/revoked/reused/expired/invalidated 才清凭据；网络、429/5xx、未知 4xx 保留登录并报可重试错误；刷新 10 秒超时，绝不将过期 bearer 当成功使用。
+- ID token 缺账号 ID 时可从 access token 补取；compute residency 来自 access token 的真实 claim。bearer/residency 仅进入精确 ChatGPT Codex endpoint，redirect:error，禁止自定义 host 和非 Responses SDK 路径。
+- `openai-oauth-models.ts` 用独立 OAuth 凭据发现模型，不读 app-server 的账号目录。缓存绑定 generation；真实空目录不被 fallback 补回。失败沿用同账号旧目录或 bundled 兼容候选，不能将候选说成生成 entitlement 已验证。
+- Native 和 Codex provider proxy 共用 `buildOpenAIOAuthOptions`，按模型声明发送所选 effort 与 `forceReasoning`；未知能力不强开，unsupported effort 明确拒绝，不能静默改 medium。`ultra` 不进入通用菜单。
+- 回归：`openai-oauth-compatibility.test.ts` 覆盖并发、临时/永久失败、logout 竞态、DB 半写回滚、同账号目录、真实 SDK 与生产 Native max/headers；Codex 分页/窗口见 `codex-models-dual-schema.test.ts`。本轮真实 OAuth entitlement smoke 未执行（本机独立 OAuth 未登录）。
+
+- 2026-09-05 独立审查后续：全局模型 GET 不 await OAuth 网络发现，返回同账号缓存及 pending 事实；Composer 仅在 pending 时后台轮询（20 秒上限、unmount/新请求取消），不重置已加载目录。缺失/未知 visibility 是失败而不是真空目录，不能默认可见或覆盖上次有效目录。effort 失效必须明确引导重新选择，不能静默降档；空目录不能生成空默认模型。错误标记经两个 live SSE 入口和持久化消息渲染统一本地化。Codex proxy 的本地参数拒绝必须返回结构化 invalid_request。回归：openai-oauth-compatibility、fable51-review-followup E2E。

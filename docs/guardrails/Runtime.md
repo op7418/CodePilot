@@ -1,6 +1,27 @@
 # Runtime Compatibility Filtering — 护栏
 
-CodePilot 有两条 chat 运行路径：**Claude Code Runtime**（SDK 子进程）和 **CodePilot Runtime**（@ai-sdk/* 直连）。Provider / Model / Composer 三层过滤契约必须严格对齐，否则 picker 看到的、resolver 选中的、wire 上发出去的会出现三方不一致，长期看就是用户报"模型选了 A，实际请求 B"或者"切了 runtime 但 picker 还是老模型"。
+> 2026-09-18 Google 文本协议使用 `native_only`：只暴露 `codepilot_runtime`，Claude/Codex 均有不支持原因，Codex proxy parity 为 pending。Gemini 3.8 Flash 的 low/medium/high、默认 medium、始终思考和采样参数剔除按精确模型生效；辅助 generateText 也使用相同 middleware。Native 从 DB 读取历史必须遵守摘要 rowid 边界，并把摘要带入上下文，不能重放已压缩消息。回归：`gemini-native.test.ts`（真实 SDK wire + DB）、`gemini-native.spec.ts`（真实 API 过滤与 UI）。
+
+- **Google 工具参数兼容（2026-09-19）**：当前 Google SDK 将 JSON Schema 转为 `parameters`，其中数字 `literal/enum` 会成为 API 不接受的数字枚举；即使用户只发问候，也会拒绝整轮请求。Native 视频工具使用 numeric input → `6 | 10` 校验 pipe，wire 以数字类型和描述声明时长，执行前仍严格拒绝其他数值、字符串和 null。回归必须装配真实媒体工具，对照 Grok 视频授权可用/不可用两条路径，检查实际 SDK wire，不能只用空工具集或自造 lookup 工具证明可用。新增其他带枚举的工具也需检查此兼容边界。`gemini-native.test.ts` 还必须经过真实 `streamText` + 模拟 Google SSE 验证执行门禁：duration=7 产生 invalid tool-call 和 tool-error，execute 不运行；6/10 的对照各执行一次。直接 safeParse 不能替代这项 SDK 级验证。
+
+- **Native 通用范围**：压缩 rowid 边界、摘要注入和 `finishReason=length` 的结束/截断通知作用于所有 Native Provider；65,536 输出上限及思考/采样规则才是 Gemini 3.8 专属。摘要必须合并进首条 user 消息（保留全部多模态 parts）；只有历史不以 user 开头时才可前置独立 user，不得为摘要制造连续 user turn。length 即便伴随工具调用也结束当前循环，已执行的工具及已有输出保持原记录，不自动开启下一 step。
+
+CodePilot 有三条 chat 运行路径：**Claude Code Runtime**（SDK 子进程）、**CodePilot Runtime**（@ai-sdk/* 直连）和 **Codex Runtime**（app-server thread）。Provider / Model / Composer 三层过滤契约必须严格对齐，否则 picker 看到的、resolver 选中的、wire 上发出去的会出现三方不一致。
+
+## 0. 会话 Runtime owner（2026-09-01）
+
+- `chat_sessions.runtime_pin` 在 `runtime_binding_state='bound'` 时是该聊天唯一 Runtime owner。第一次服务端接受真实 execution attempt 后即绑定；Provider 随后失败也不解锁。
+- 新聊天创建时一次保存 `runtimeId + providerInstanceId + modelId`。已有聊天只可通过 `/api/chat/sessions/:id/route` 和 `expected_route_revision` 原子改 route；通用 session PATCH 不再接受 route 字段。
+- `bound` 会话禁止原地跨 Runtime。普通 Composer Picker 必须将 Runtime lane 置灰，仍只允许 owner Runtime 内 capability 支持的 route 变化；不得因点击普通下拉而自动调用 handoff、创建聊天或跳转。Handoff API 只允许由未来独立、明确标注“在新聊天中继续”并带确认的入口调用，来源聊天、原生 session/thread ref 和 route revision 均不改变。
+- `legacy_unbound` 只能由用户显式 recovery；普通 `unbound` 的 auto/retry/queue fail closed。助理、heartbeat、task、bridge 等无人值守会话必须在创建时携带明确完整 route 并直接绑定。
+- 同 Runtime 必须支持已配置、兼容的 Provider+Model 切换，保持产品聊天 ID、消息和页面不变。`RuntimeContinuationPolicy` 中 Claude/Native 为 `replay_context`，Codex 同 Provider model 为 `in_session`、Provider 变化为 `replay_context`；不得因底层 thread 绑定 Provider 而要求新建产品聊天（2026-09-05 用户反馈修订）。
+- Codex 换 Provider、MCP fingerprint 变化或 resume 失败时，新底层 thread 首轮消费该聊天已有摘要和经过压缩边界过滤的最近 DB history。成功 resume 不重复注入历史；旧 ref 保留到新 thread 的 `turn/start` 被接受后再替换，启动/输入失败重试仍须带历史。切回先前 Provider 使用当前聊天最新历史，不能恢复旧分支。
+- Codex replacement 的历史选择由 `codex/continuation-context.ts` 按 token 预算驱动：从 caller history 的最早 rowid 向前分页，限定同 session、summary coverage boundary，排除 heartbeat ACK / 内部切换标记；不能将 API 的 200 条 seed 误当成完整历史，也不能提前按单条 5000/1000 字符截断。无 rowid 的合成历史不自行扩大查询；当前 prompt 和 snapshot 之后的新行不得重复重放。
+- replacement 恢复历史图片时，只解析 user 消息的前缀附件元数据，经真实项目根目录的 realpath/containment 校验后重放。目标模型明确支持视觉才附加历史 localImage；能力缺失/不支持时保留可用文件引用并明确 pixels 未附加，文件缺失/越界给 unavailable 事实。不得从 assistant/tool 文本解析附件，不得发送预算外历史的图片。预算含包装及图片估算余量，不冒充实际 token 用量；正常 resume 的本轮图片输入保持原样。回归：`codex-continuation-context.test.ts`。
+- route 校验使用 execution resolver 的 DB + 当前 catalog 模型视图，继续尊重手动隐藏、精确模型 identity、Runtime 兼容性和凭据检查；不能要求先访问 Settings 把模型落库。显式选择 Codex Account 时允许有 2500ms 上限的模型发现，不能把路由模块空缓存判成模型不存在；Main recovery safe mode 下仍只能读缓存，全局被动 feed 不因此启动 Codex。
+- managed child 只允许使用父 owner 对应 Runtime；child 的 Provider+Model route 不得绑定或修改父 session。
+- route CAS 的 409 `ROUTE_REVISION_CONFLICT` 响应必须携带权威 session 快照；客户端采用完整 route、binding state、owner 与 revision 后再让用户重试。不得只更新 revision（会让下一次发送带着旧 Provider/Model），也不得丢弃快照让窗口永久重复旧 revision。
+- Runtime wire id 只用于存储和 API。owner 横幅、handoff 卡片与 transcript marker 统一经 `runtimeDisplayLabelKey()` 显示产品名，不得把 `claude_code` / `codepilot_runtime` / `codex_runtime` 直出给用户。
 
 ## 1. 词汇表
 
@@ -8,7 +29,7 @@ CodePilot 有两条 chat 运行路径：**Claude Code Runtime**（SDK 子进程�
 |---|---|---|
 | `agent_runtime` setting | `'auto' \| 'native' \| 'claude-code-sdk'` | DB `settings` 表，用户在 Settings → CLI 设置 |
 | Concrete runtime | `'native' \| 'claude-code-sdk'` | `resolveRuntime()` 输出（`runtime/registry.ts`） |
-| `ChatRuntime` | `'claude_code' \| 'codepilot_runtime'` | `chat-runtime.ts` 把 concrete 映射到 chat-side 词汇 |
+| `RuntimeId` / `ChatRuntime` | `'claude_code' \| 'codepilot_runtime' \| 'codex_runtime'` | `runtime/runtime-id.ts` 注册表派生；`ChatRuntime` 是兼容别名 |
 | `ChatRuntimeParam` | `ChatRuntime \| 'auto'` | API query / hook 参数；`'auto'` = server 端用 `getActiveChatRuntime()` 自己解析 |
 | `ProviderRuntimeCompat` | `claude_code_ready` / `claude_code_verified` / `claude_code_experimental` / `codepilot_only` / `media_only` / `unknown` | `getProviderCompat()` (`runtime-compat.ts`) |
 | `ModelRuntimeCompat` | `{ chat?, tool_capable?, thinking_capable?, claude_code_compatible?, codepilot_runtime_compatible?, media? }` | `getModelCompat()` (`runtime-compat.ts`) |
@@ -191,6 +212,7 @@ Provider 或模型切换后，descriptor 必须从同一 runtime-filtered group 
   - send 路径前必须 gate `noCompatibleProvider` + `fetchState`
 - 改 Codex model discovery / transport：覆盖 frame chunk/CRLF/multibyte/exact-cap/oversize/no-newline、RPC deadline、10 caller single-flight、cooldown/force 与 unhealthy-idle recycle；日志 fixture 中不得出现 frame/prompt/path/token 内容。
 - 新增任何 Codex app-server 直达入口时必须复用 `getCodexAppServer()` 的 recovery-safe-mode gate，不得自行 spawn 绕过 Main owner。
+- 新增任何 Claude SDK query 或 Codex CLI/app-server spawn 入口时，还必须在真正 spawn 前经过 `assertCliProviderLaunchAllowed(provider)`；CLI maintenance lease 覆盖 update command、进程树清理与 post-verify 全窗口。不得绕过 `CliMaintenance.md` 的 provider gate，也不得在 gate active 时静默排队旧请求。
 - 新增 Composer 模型参数时必须先有 request wire + source breadcrumb，再进入 descriptor；UI 截图、模型容量或名字匹配不能作为 selectable 证据。
 - 新增 sub-agent adapter：必须定义 model allowlist / alias canonicalization / effective provenance，并消费共同 workflow/task/dependency compiler；未证明的能力 fail closed，不得实现第四套 queued/依赖等待语义
 
@@ -202,7 +224,7 @@ Provider 或模型切换后，descriptor 必须从同一 runtime-filtered group 
 4. **`fetchAll` 重新拉时不重置 `fetchState`** → `provider-changed` 事件 refetch 期间旧 groups 仍生效，runtime gate 短暂打开。每次 fetchAll 头部 `setFetchState('idle')`
 5. **没 abort 旧 fetch** → 慢的旧请求晚到覆盖新请求结果。`useRef<AbortController>` + 每次 fetchAll 头部 `controller.abort()`，`.then` / `.catch` 检查 `signal.aborted`
 6. **catch 合成 env synthetic 后下游 derivation 仍按"groups 空 = noCompatibleProvider"判** → 矛盾。`noCompatibleProvider = fetchState === 'loaded' && providerGroups.length === 0`，failed 状态里 groups.length=1 不算 noCompatibleProvider
-7. **MessageInput auto-correct fire `onProviderModelChange(currentProviderIdValue, fallback)` 时，`currentProviderIdValue` 是 hook 内部 fallback group 的 id 而非 prop providerId** → 写回 session 的是 fallback provider，正确。但 Composer 顶层那次 `useProviderModels` 必须返回**同步过的** resolved pair，不能让 ChatView 的 `currentProviderId` state 落后于 hook 的 resolved 信号 → ChatView 用 useEffect 监听 `providerWasFilteredOut` + PATCH session 同步
+7. **MessageInput auto-correct fire `onProviderModelChange(currentProviderIdValue, fallback, { isAuto: true })` 时，`currentProviderIdValue` 是 hook 内部 fallback group 的 id 而非 prop providerId** → Composer 本地显示应采用这对 resolved identity，但 `isAuto` 不得写 session route。unbound 会话由第一次手动 Send 原子保存完整 route；bound 会话若持久 route 已不可用则进入恢复面，不能由 catalog refetch 静默改写。
 8. **父模型在一个 turn 内同时生成 A/B tool input，SDK 随后按 A→B 串行执行** → B 的 prompt 仍在 A 结果产生前冻结，不能据此宣称 B 获得 A 输出。依赖必须走 `workflow_id/task_key/depends_on` 与 app-side durable handoff。
 9. **AI SDK 不认识第三方 Responses 模型就静默丢 reasoning** → 对 preset-verified transport 显式 `forceReasoning`，并用真实 outbound body 测试；不能只断言 providerOptions 内存对象。若同一模型在 Anthropic / Responses 上使用不同 ID（例如 GLM-5.3），override 必须来自 exact-model wire capability；effort alias 也必须 provider-scoped，禁止把 DeepSeek 的 `xhigh→high` 变成所有端点的全局规则。
 10. **把 OpenAI Responses 附加字段原样发给兼容端点** → 供应商只承诺的子集才保留。DeepSeek 当前不声明 reasoning summary，fetch 边界必须剥离 SDK 自动生成的 `reasoning.summary`。
@@ -211,6 +233,7 @@ Provider 或模型切换后，descriptor 必须从同一 runtime-filtered group 
 13. **CodePilot Provider 的 Codex effort 复用 Codex Account 模型缓存** → GLM 等第三方目录的 Max 会被静默夹成 High，Auto 也无法采用供应商默认档。Codex Account 只信当前账号 `model/list`；CodePilot Provider 必须信精确 preset/model catalog 的 `supportedEffortLevels/defaultEffortLevel`。`xhigh/max` 的语法兼容证据可来自当前 app-server `model/list` vocabulary，或在账号未登录/目录冷缓存时来自已初始化本机 binary 的保守版本门（当前实际验证下限为稳定版 `0.144.2`）。版本门必须复用严格、prerelease-aware 的 `codex --version` 解析器；`0.144.2-alpha.*` 和仅在任意 user-agent 中夹带三元组的字符串都不得放行。不得为了使用 CodePilot Provider 要求登录或刷新 Codex Account；旧/未知 binary 必须可见失败，禁止静默降级。
 14. **把“没有 effort allowlist”误判成“不是原生 Responses”** → 已验证 Responses transport 会退回 generic path，丢 reasoning summary 或错误附带 effort。transport 能力与可选 effort 档位是两个字段：前者建立 Responses context，后者为空时仍走原生 Responses，但 body 不得出现 `reasoning.effort`。历史 GLM-5-Turbo fixture 保留用于钉住这一通用不变量；它不再代表当前 GLM Coding Plan 目录。
 15. **把供应商标称的“1M”擅自换算成 1,048,576** → 若官方示例实际配置 1,000,000，会让接近满窗时的剩余比例被系统性高估。没有精确 token 数的第一方依据时使用供应商配置值或十进制标称值，并在 source breadcrumb 说明精度边界；不得把 MB/MiB 习惯套到 token 上。
+16. **CLI 更新只在开始前检查 idle** → 最长五分钟的安装窗口仍可启动并锁住正在被替换的 binary。Provider spawn 必须服从 TTL/heartbeat lease；utility recovery 必须先恢复 gate，再允许 Runtime 恢复。
 
 ## 6. 测试覆盖
 
@@ -221,6 +244,7 @@ Provider 或模型切换后，descriptor 必须从同一 runtime-filtered group 
 | `src/__tests__/unit/env-models-single-source.test.ts` | canonical env 目录三方单一出口；SDK 五行 convenience cache 注入后 `opus-5` 仍保留、动态入口只追加、固定 alias 不被改名 |
 | `src/__tests__/unit/runtime-selection.test.ts` | inlined `predictNativeRuntime` (registry side effects 隔离) |
 | `src/__tests__/unit/sdk-availability.test.ts` | sdk-runtime 直接 import（被 barrel registerRuntime 调用前先 init），测 isAvailable 各路径 |
+| `src/__tests__/unit/cli-maintenance-contract.test.ts` + `cli-maintenance-security.test.ts` | provider lease TTL/recovery bootstrap 与 Claude/Codex spawn gate source contract |
 | `src/__tests__/unit/subagent-orchestration.test.ts` | Provider+Model route、三 Runtime 工具/权限继承、hosted search、requested/effective view |
 | `src/__tests__/unit/subagent-virtual-provider-routes.test.ts` | OAuth virtual Provider 的 picker/Sub-agent route 同源；xAI/OpenAI 正例、未认证/disabled/Claude Code 负例 |
 | `src/__tests__/unit/process-proxy-env.test.ts` | Electron/Codex 两道 child env、显式/system proxy 优先级、Windows casing、loopback bypass |
@@ -261,3 +285,31 @@ Provider 或模型切换后，descriptor 必须从同一 runtime-filtered group 
 - **2026-08-15** 扩展 effort 版本门改为复用 app-server auto-review 已使用的严格 semver/prerelease 比较器；只接受 bare release、锚定的 `codex-cli <release>`，或锚定的 `Codex Desktop/<release>` app-server user agent，稳定版 `0.144.2` 可用但同 core 的 alpha 不可用，避免无关 user-agent 中的版本误命中。production smoke 进一步钉住 ChatGPT.app 当前 `Codex Desktop/0.147.0-alpha.6.5 (...)` 格式，防止严格化时误拒真实 bundle。
 - **2026-08-26** GLM-5.3-Flash 复用第一方 preset-scoped 双 transport：Claude 发 `glm-5.3-flash[1m]`，Codex Responses 发 `glm-5.3-flash`；两路径都只开放官方 Low/High/Max、默认 Max，Flash 额外开放 vision。ID override、effort alias 与 vision 都不能按名称泄漏到聚合 Provider；Codex 工具页示例目录尚未同步 Flash，真实套餐 turn 继续留在 Smoke Ledger，不用 synthetic body 冒充 entitlement。
 - **2026-08-26 review P3** GLM 文档只承诺 1M，官方配置使用 1,000,000；catalog 与 fallback 统一从 1,048,576 降为 1,000,000，并修正旧模型自动路由的 overview 引用。此变更宁可保守显示容量，也不允许无来源的 4.7% 余量。
+
+
+## 2026-09-05 Astra 上下文与模型发现
+
+- API 的 Astra 1050000 不能作为 Codex 默认窗口。`getContextWindow` 要有 `channel` 事实才返回 Astra 容量；Codex 默认有效窗口 258400、API 1050000，未给通道返回未知。
+- Codex Account 显式发送时，历史预算通过 `getCodexContextBudget` 在 2500ms 内读取 `config/read(cwd)` 的项目级配置和 CodePilot-owned home 的模型 metadata，按最大窗口限制 override 后乘 effective percent。未知/失败降为保守通道 fallback；被动模型 feed 不因此启动进程。实际 tokenUsage 的 modelContextWindow 仍是显示真源，预算不冒充用量。
+- `model/list` 消费全部分页、按 id 去重，重复 cursor 有界失败；视觉能力来自真实 inputModalities，不按型号名猜。回归在 `codex-models-dual-schema.test.ts`，包括 Astra 第二页、未知能力、覆盖至更大/更小窗口及最大值 clamp。
+
+## 2026-09-05 审查后续：冷缓存与 Fable 5.1
+
+- Codex replacement 在冷缓存时允许通过已经运行的 client 有界调用 model/list（2.5 秒），供历史图片与 effort 使用；不得借此从被动目录启动 app-server。失败继续 unknown 与显式图片降级。回归：codex-models-dual-schema。
+- Fable 5.1 使用精确 upstream `claude-fable-5-1`，作为独立选项保留旧 Fable/角色默认。adaptive 始终开启、effort low/medium/high/xhigh/max；Native 使用 auto/none 工具选择。不得为强制工具需求静默转换用户语义。多步 SDK 请求的 signed thinking 之前 system/tools/messages 必须保持不变；跨回合 DB 重建不携带过期 thinking，摘要/模型切换不得再混回旧签名。当前测试验证 Native 的真实 SDK wire，不能冒充 Anthropic 真签名校验；新增 per-message effort/turn system/progress beta 须另立协议验证。
+
+
+## 2026-09-14 #685：已选路由与运行时回报分离
+
+- `chat_sessions.model` 是用户提交的 route model identity；SDK/Native `status.model` 是运行时观察值，collector 不得用它覆盖 route，也不得借 status 绕过 `route_revision` CAS。续接引用 `sdk_session_id` 仍由现有 lock owner gate 写入；模型观察值继续留在 SSE/usage 元数据中。
+- `resolveChatMessageRoute` 是普通消息的 identity gate。Provider 未随请求回显时仍固定使用 session Provider，不能回退默认/env；明确不同 Provider 立即拒绝。
+- 兼容旧版已写成 upstream 的会话只作读取：必须在同一 Provider 的 live enabled catalog 唯一匹配到本次请求的 modelId，并且当前 Runtime 兼容、实际 resolver upstream 一致。stored ID 若本身是另一条 catalog modelId，或多个 alias 共享它、映射隐藏/删除/修改，不能自动解释为同一路线。虚拟账号路线继续精确 identity。
+- 兼容不改 owner、历史、Provider 或 route_revision；真正改 route 仍走用户显式 CAS。无法无歧义恢复的旧会话继续要求明确重选，不能按显示名或跨 Provider 猜测。
+- 回归：`chat-message-route.test.ts`（多 Provider 连续/重开、旧 upstream、反例和 Native/Codex owner 兼容）、`chat-message-route-http.test.ts`（真实 POST 双回合与错路由在持久化/Runtime 前拒绝）、`collect-owner-gate.test.ts`（owner 也不覆盖 model、stale owner 不写续接状态）。
+
+## 2026-09-21：辅助执行与 Memory
+
+- Claude settings 的 SDK 子进程可用性与 Native transport 可用性分别判断；settings-only 不能证明 direct transport 持有 key。辅助请求使用显式 Provider 快照与场景 policy，瞬态失败及非凭据 4xx 有界冷却，仅明确 credentials 根因等待配置变化；缺失/不可执行有可见状态，不偷切厂商。辅助 Haiku 选择不能改变共享 resolver 的 small 默认语义。
+- Memory 数据、查询、来源和写入由中立服务拥有，Runtime 只包装协议。读写权限分离、显式助理绑定、成功回合事件与验证边界见 [Memory Guardrail](Memory.md)。
+
+- 2026-09-22：可选记忆重排在构造期捕获 identity 故障，不得打断 Runtime 聊天或丢掉基础 Memory 工具。超时/非法输出/异常均明确报告确定性降级；主聊天可用性不依赖辅助 HMAC 文件。

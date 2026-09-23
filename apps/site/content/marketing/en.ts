@@ -1,3 +1,5 @@
+import { siteConfig } from '../../src/lib/site.config';
+
 export interface MarketingContent {
   hero: {
     notice?: {
@@ -9,9 +11,11 @@ export interface MarketingContent {
     };
     title: string;
     tagline: string;
+    description: string;
     cta: string;
     secondaryCta: string;
     screenshots: { src: string; alt: string; caption: string }[];
+    carousel: { label: string };
   };
   features: {
     title: string;
@@ -38,7 +42,7 @@ export interface MarketingContent {
   faq: {
     title: string;
     titleLight: string;
-    items: { q: string; a: string }[];
+    items: { q: string; a: string; link?: { label: string; href: string } }[];
   };
   audience: {
     title: string;
@@ -57,6 +61,11 @@ export interface MarketingContent {
     title: string;
     titleLight: string;
     viewAll: string;
+    readMore: string;
+    close: string;
+    source: string;
+    unavailable: string;
+    emptyBody: string;
   };
   cta: {
     title: string;
@@ -73,20 +82,32 @@ export interface MarketingContent {
 export const en: MarketingContent = {
   hero: {
     title: 'CodePilot',
-    tagline: 'Your multi-model AI agent for',
+    tagline: 'Your AI workspace for',
+    description: siteConfig.description,
     cta: 'Download',
     secondaryCta: 'Documentation',
+    carousel: { label: 'Inside CodePilot' },
     screenshots: [
-      { src: '/screenshots/chat.svg', alt: 'Chat interface', caption: 'Multi-session chat with Code, Plan, and Ask modes' },
-      { src: '/screenshots/providers.svg', alt: 'Provider management', caption: 'Connect and switch between AI providers' },
-      { src: '/screenshots/mcp-skills.svg', alt: 'MCP and Skills', caption: 'Extend with MCP servers and Skills' },
-      { src: '/screenshots/workspace.svg', alt: 'Assistant Workspace', caption: 'Inspect files and review changes in real time' },
-      { src: '/screenshots/bridge.svg', alt: 'Bridge messaging', caption: 'Continue conversations from your phone' },
+      {
+        "src": "/screenshots/en/chat-window.webp",
+        "alt": "A new conversation",
+        "caption": "Project conversations and a personal assistant in one workspace"
+      },
+      {
+        "src": "/screenshots/en/plugins-window.webp",
+        "alt": "Skills and extensions",
+        "caption": "Manage Skills, MCP servers, and command-line tools"
+      },
+      {
+        "src": "/screenshots/en/providers-window.webp",
+        "alt": "Connect your AI services",
+        "caption": "Choose subscriptions, API keys, third-party services, or local models"
+      }
     ],
   },
   features: {
-    title: 'One client for all your AI providers.',
-    titleLight: 'Conversations, 17+ providers, MCP extensions, and project context — in one place.',
+    title: 'Your agents, in one workspace.',
+    titleLight: 'Work with conversations, files, tools, and a personal assistant.',
     subtitle: '',
     items: [
       {
@@ -96,28 +117,28 @@ export const en: MarketingContent = {
       },
       {
         icon: 'Layers',
-        title: 'Code · Plan · Ask',
-        description: 'Three modes for different workflows.',
+        title: 'Multiple agents',
+        description: 'Choose your agent for each new conversation.',
       },
       {
         icon: 'Shield',
         title: 'Permission control',
-        description: 'Confirm before Claude modifies files.',
+        description: 'Set how your agent requests approval.',
       },
       {
         icon: 'FolderOpen',
-        title: 'Assistant Workspace',
+        title: 'Project workspace',
         description: 'Inspect files and review changes live.',
       },
       {
         icon: 'Brain',
-        title: 'Persona & Memory',
-        description: 'Consistent behavior across sessions.',
+        title: 'Personal assistant',
+        description: 'Keep preferences and memories in your assistant workspace.',
       },
       {
         icon: 'Sparkles',
-        title: 'Skills',
-        description: 'Reusable prompt patterns you can share.',
+        title: 'Skills & tools',
+        description: 'Extend your agent with Skills, MCP, and CLI tools.',
       },
       {
         icon: 'Bookmark',
@@ -126,24 +147,24 @@ export const en: MarketingContent = {
       },
       {
         icon: 'Compass',
-        title: 'Onboarding',
-        description: 'Auto-detect project structure on first run.',
+        title: 'Guided setup',
+        description: 'Connect services and set up your assistant.',
       },
     ],
   },
   openSource: {
-    title: 'Fully open source.',
-    titleLight: 'Use your own API key. No middleman, no markup.',
+    title: 'Source available.',
+    titleLight: 'Read the code, connect your services, and help improve CodePilot.',
     highlights: [
       {
         icon: 'Code',
-        title: 'Open Source',
-        description: 'Every line of code is public on GitHub. Audit, fork, or contribute.',
+        title: 'Read the source',
+        description: 'Code is published on GitHub under BSL 1.1, with terms for personal and commercial use.',
       },
       {
         icon: 'Key',
-        title: 'Bring Your Own Key',
-        description: 'Connect directly to Anthropic, OpenAI, Google, or any provider with your own API key.',
+        title: 'Your services',
+        description: 'Connect supported subscriptions, API credentials, or local models. Your provider sets usage and billing.',
       },
       {
         icon: 'Users',
@@ -156,33 +177,49 @@ export const en: MarketingContent = {
   },
   faq: {
     title: 'Frequently asked questions.',
-    titleLight: 'Everything you need to know before getting started.',
+    titleLight: 'Accounts, agents, privacy, and getting started.',
     items: [
       {
-        q: 'Is CodePilot really free?',
-        a: 'Yes. CodePilot is completely free and open source. You only pay for the API usage from your chosen provider.',
+        "q": "Can I use CodePilot for free?",
+        "a": "CodePilot publishes its source under BSL 1.1. Personal, educational, nonprofit, and evaluation use is free. Use in products or services offered to third parties for a fee, or internal use by organizations with more than 100 employees, requires a separate commercial license. Your AI provider charges for model subscriptions and API usage.",
+        "link": {
+          "label": "Read the license",
+          "href": "https://github.com/op7418/CodePilot/blob/main/LICENSE"
+        }
       },
       {
-        q: 'Which AI providers are supported?',
-        a: 'Anthropic, OpenRouter, AWS Bedrock, Google Vertex, Zhipu GLM, Kimi, Moonshot, MiniMax, Volcengine Ark, Xiaomi MiMo, Aliyun Bailian, Ollama, LiteLLM, and any Anthropic-compatible or OpenAI-compatible endpoint — 17+ providers out of the box.',
+        "q": "Do I need a subscription or an API key?",
+        "a": "You need a working model connection: a supported subscription sign-in, API key, plan credentials, or a local model service. A Claude Code subscription is not required. Available connections differ by agent, and the app shows providers and models for the selected agent. Your provider determines account limits and billing."
       },
       {
-        q: 'Do I need a Claude Code subscription?',
-        a: 'No. CodePilot works with your own API key directly — no Claude Code subscription required.',
+        "q": "Which AI services and models can I use?",
+        "a": "Connect services such as Anthropic, OpenRouter, DeepSeek, GLM, and Kimi, configure an Anthropic-compatible or OpenAI-compatible API, or use local models through Ollama. Model availability, tool use, and image input depend on your agent, provider, and model; not every combination is supported."
       },
       {
-        q: 'Is my data sent to CodePilot servers?',
-        a: 'No. All API calls go directly from your machine to the provider. CodePilot never sees your code or conversations.',
+        "q": "Can I switch agents in the same conversation?",
+        "a": "Choose Claude Code, Codex, or CodePilot when starting a conversation. After the first message, that conversation stays with its selected agent; start a new conversation to use another agent. You can change compatible models or providers within the same agent, which may affect context caching and cost."
       },
       {
-        q: 'Which platforms are supported?',
-        a: 'CodePilot ships prebuilt downloads for macOS (Apple Silicon & Intel) and Windows (x64) on the GitHub releases page. Linux (x64 & arm64) is supported by building from source.',
+        "q": "Do I have to install the Claude Code or Codex CLI?",
+        "a": "The built-in CodePilot agent works without an additional CLI. Choosing Claude Code or Codex requires its corresponding CLI and a valid sign-in or provider credentials. Follow the setup guidance in the app. Available tools and model capabilities depend on the agent you choose."
       },
+      {
+        "q": "Where do my conversations and data go?",
+        "a": "Conversation history and settings are stored locally. AI requests send relevant messages, attachments, and tool results to your chosen provider. Networked extensions such as MCP and Bridge also exchange data with their respective services. Stable releases include anonymous error and release-health reporting, which you can disable in settings; restart the app for the change to fully take effect."
+      },
+      {
+        "q": "Which platforms are supported, and how do I update?",
+        "a": "Prebuilt installers are available for macOS (Apple Silicon and Intel), Windows (x64), and Linux (x64 / arm64). Linux downloads include AppImage, DEB, and RPM packages. Current stable macOS and Windows releases support in-app update checks; Linux updates require downloading and installing a new package.",
+        "link": {
+          "label": "Download the latest release",
+          "href": "https://github.com/op7418/CodePilot/releases/latest"
+        }
+      }
     ],
   },
   audience: {
     title: 'Built for daily use.',
-    subtitle: 'For developers who work with AI every day.',
+    subtitle: 'For people working with AI on projects and everyday tasks.',
     items: [
       {
         title: 'Long-lived codebases',
@@ -190,7 +227,7 @@ export const en: MarketingContent = {
       },
       {
         title: 'Multiple providers',
-        description: 'Switch between providers and MCP servers without friction.',
+        description: 'Choose compatible providers and tools for each task.',
       },
       {
         title: 'Persistent context',
@@ -198,7 +235,7 @@ export const en: MarketingContent = {
       },
       {
         title: 'Work on the go',
-        description: 'Continue tasks from your phone while Claude keeps working.',
+        description: 'Message your desktop agent through a configured Bridge channel while CodePilot is running.',
       },
     ],
   },
@@ -212,13 +249,13 @@ export const en: MarketingContent = {
       },
       {
         step: '2',
-        title: 'Add your AI provider',
-        description: 'Pick from 17+ presets or add a custom endpoint.',
+        title: 'Connect an AI service',
+        description: 'Sign in, add API credentials, or connect a local model service.',
       },
       {
         step: '3',
         title: 'Start a conversation',
-        description: 'Connect Workspace, MCP, or Bridge as needed.',
+        description: 'Choose an agent and model, then open your project or personal assistant.',
       },
     ],
   },
@@ -236,10 +273,15 @@ export const en: MarketingContent = {
     title: 'What\'s New',
     titleLight: 'in CodePilot',
     viewAll: 'View all releases on GitHub',
+    readMore: 'Read release notes',
+    close: 'Close release notes',
+    source: 'View on GitHub',
+    unavailable: 'Release notes are currently unavailable. You can find every release on GitHub.',
+    emptyBody: 'No release notes were provided for this version.',
   },
   cta: {
     title: 'Ready to try CodePilot?',
-    description: 'Download and connect your favorite AI provider in minutes.',
+    description: 'Connect an AI service and start your first task.',
     primary: 'Download',
     secondary: 'Read the docs',
   },

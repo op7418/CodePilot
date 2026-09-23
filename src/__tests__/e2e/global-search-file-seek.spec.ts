@@ -2,6 +2,7 @@ import { test, expect, type Page } from '@playwright/test';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { deleteTestSession } from '../helpers';
 
 async function createSession(page: Page, title: string, workingDirectory: string) {
   const res = await page.request.post('/api/chat/sessions', {
@@ -33,10 +34,12 @@ test.describe('Global Search file deep-link seek UX', () => {
       await fs.writeFile(fillerB, `export const b${i} = ${i};\n`, 'utf8');
     }
 
-    const sessionA = await createSession(page, `E2E Search Session A ${suffix}`, rootA);
-    const sessionB = await createSession(page, `E2E Search Session B ${suffix}`, rootB);
+    let sessionA: string | undefined;
+    let sessionB: string | undefined;
 
     try {
+      sessionA = await createSession(page, `E2E Search Session A ${suffix}`, rootA);
+      sessionB = await createSession(page, `E2E Search Session B ${suffix}`, rootB);
       // 1) First locate in session A.
       await page.goto(`/chat/${sessionA}?file=${encodeURIComponent(fileA)}&seek=seek1`);
       // T3 migration: file-search deep links now open Files Primary inside the
@@ -57,6 +60,8 @@ test.describe('Global Search file deep-link seek UX', () => {
       await expect(page.locator('#file-tree-highlight')).toContainText('target-b.ts', { timeout: 15_000 });
       await expect(page).toHaveURL(new RegExp(`/chat/${sessionB}\\?`));
     } finally {
+      await deleteTestSession(page, sessionA);
+      await deleteTestSession(page, sessionB);
       await fs.rm(rootA, { recursive: true, force: true });
       await fs.rm(rootB, { recursive: true, force: true });
     }

@@ -22,6 +22,7 @@ export interface UtilityProcessFailureMetrics {
 export interface UtilityProcessFailureInput extends UtilityProcessFailureMetrics {
   reason: string;
   exitCode?: number | null;
+  platform?: NodeJS.Platform | string;
 }
 
 export interface UtilityProcessFailureEvent {
@@ -31,6 +32,11 @@ export interface UtilityProcessFailureEvent {
   extra: Record<string, string | number>;
   fingerprint: string[];
 }
+
+const WINDOWS_EXPECTED_SHUTDOWN_EXIT_CODES = new Set([
+  0x4001_0004, // DBG_TERMINATE_PROCESS: commonly emitted during OS teardown.
+  0xc000_026b, // STATUS_DLL_INIT_FAILED_LOGOFF: window station is shutting down.
+]);
 
 const NUMERIC_EXTRA_KEYS = [
   'utilityRssBytes',
@@ -64,6 +70,27 @@ function categoryForReason(reason: UtilityProcessFailureReason): string {
   return 'UTILITY_PROCESS_UNEXPECTED_EXIT';
 }
 
+function categoryForUnexpectedExit(
+  exitCode: number | null | undefined,
+  platform: NodeJS.Platform | string | undefined,
+): string {
+  if (!Number.isInteger(exitCode)) return 'UTILITY_PROCESS_UNEXPECTED_EXIT';
+  if (exitCode === 0) return 'UTILITY_PROCESS_UNEXPECTED_CLEAN_EXIT';
+  if (platform === 'win32' && Number(exitCode) > 0x7fff_ffff) {
+    return 'UTILITY_PROCESS_PLATFORM_TERMINATION';
+  }
+  return 'UTILITY_PROCESS_NONZERO_EXIT';
+}
+
+export function isExpectedUtilityProcessExit(
+  input: Pick<UtilityProcessFailureInput, 'reason' | 'exitCode' | 'platform'>,
+): boolean {
+  return normalizeReason(input.reason) === 'unexpected_exit'
+    && input.platform === 'win32'
+    && Number.isInteger(input.exitCode)
+    && WINDOWS_EXPECTED_SHUTDOWN_EXIT_CODES.has(Number(input.exitCode));
+}
+
 function addFiniteNonNegative(
   output: Record<string, string | number>,
   key: string,
@@ -93,9 +120,12 @@ function addPlatformExitCode(
  */
 export function buildUtilityProcessFailureEvent(
   input: UtilityProcessFailureInput,
-): UtilityProcessFailureEvent {
+): UtilityProcessFailureEvent | null {
   const reason = normalizeReason(input.reason);
-  const category = categoryForReason(reason);
+  if (isExpectedUtilityProcessExit(input)) return null;
+  const category = reason === 'unexpected_exit'
+    ? categoryForUnexpectedExit(input.exitCode, input.platform)
+    : categoryForReason(reason);
   const extra: Record<string, string | number> = { lifecycleReason: reason };
   addPlatformExitCode(extra, input.exitCode);
   for (const key of NUMERIC_EXTRA_KEYS) {

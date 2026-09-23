@@ -9,21 +9,21 @@ interface WordItem {
 }
 
 const WORDS_EN: WordItem[] = [
-  { text: 'Development', color: '#3b82f6' },   // blue
-  { text: 'Design', color: '#f59e0b' },         // amber
-  { text: 'Writing', color: '#10b981' },         // emerald
-  { text: 'Research', color: '#8b5cf6' },        // violet
-  { text: 'Debugging', color: '#ef4444' },       // red
-  { text: 'Prototyping', color: '#06b6d4' },     // cyan
+  { text: 'Development', color: 'currentColor' },
+  { text: 'Design', color: 'currentColor' },
+  { text: 'Writing', color: 'currentColor' },
+  { text: 'Research', color: 'currentColor' },
+  { text: 'Debugging', color: 'currentColor' },
+  { text: 'Prototyping', color: 'currentColor' },
 ];
 
 const WORDS_ZH: WordItem[] = [
-  { text: '开发', color: '#3b82f6' },
-  { text: '设计', color: '#f59e0b' },
-  { text: '写作', color: '#10b981' },
-  { text: '调研', color: '#8b5cf6' },
-  { text: '调试', color: '#ef4444' },
-  { text: '原型', color: '#06b6d4' },
+  { text: '开发', color: 'currentColor' },
+  { text: '设计', color: 'currentColor' },
+  { text: '写作', color: 'currentColor' },
+  { text: '调研', color: 'currentColor' },
+  { text: '调试', color: 'currentColor' },
+  { text: '原型', color: 'currentColor' },
 ];
 
 export function TypewriterWords({ locale }: { locale: string }) {

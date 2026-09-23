@@ -24,11 +24,16 @@ import { createWidgetMcpServer } from '@/lib/widget-guidelines';
 import { createNotificationMcpServer } from '@/lib/notification-mcp';
 import { getBuiltinMcpServer } from '@/lib/codex/builtin-mcp-servers';
 import { POST } from '@/app/api/codex/mcp/[server]/route';
-import { getSetting, setSetting } from '@/lib/db';
+import { getSetting, setSetting, createSession } from '@/lib/db';
+
+import { bindAssistantMemory } from '@/lib/memory-binding';
 
 let ws: string;
 let otherWs: string;
 let priorAssistantWs: string | undefined;
+let sessionId: string;
+let projectSessionId: string;
+let planSessionId: string;
 before(() => {
   ws = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-mem-mcp-'));
   fs.writeFileSync(path.join(ws, 'memory.md'), '# Long-term\nMEMTEST_MARKER preferred language is Chinese.\n', 'utf-8');
@@ -36,6 +41,11 @@ before(() => {
   fs.writeFileSync(path.join(otherWs, 'memory.md'), 'SECRET other-workspace memory\n', 'utf-8');
   priorAssistantWs = getSetting('assistant_workspace_path');
   setSetting('assistant_workspace_path', ws);
+  sessionId = createSession('memory test', undefined, undefined, ws).id;
+  bindAssistantMemory(sessionId);
+  projectSessionId = createSession('ordinary project memory', undefined, undefined, otherWs).id;
+  planSessionId = createSession('plan memory', undefined, undefined, ws, 'plan').id;
+  bindAssistantMemory(planSessionId);
 });
 after(() => {
   setSetting('assistant_workspace_path', priorAssistantWs ?? '');
@@ -56,14 +66,14 @@ function callRoute(server: string, headers: Record<string, string>, body = INIT_
 }
 
 describe('built-in MCP reuse (in-memory)', () => {
-  it('memory: exposes the 3 ClaudeCode tools and reads the workspace', async () => {
+  it('memory: default adapter exposes 6 shared read/write tools and reads the workspace', async () => {
     const [clientT, serverT] = InMemoryTransport.createLinkedPair();
     const { instance } = createMemorySearchMcpServer(ws);
     await instance.connect(serverT);
     const client = new Client({ name: 'test', version: '1.0.0' });
     await client.connect(clientT);
     const tools = (await client.listTools()).tools.map((t) => t.name).sort();
-    assert.deepEqual(tools, ['codepilot_memory_get', 'codepilot_memory_recent', 'codepilot_memory_search']);
+    assert.deepEqual(tools, ['codepilot_memory_forget', 'codepilot_memory_get', 'codepilot_memory_recent', 'codepilot_memory_remember', 'codepilot_memory_search', 'codepilot_memory_update']);
     const recent = await client.callTool({ name: 'codepilot_memory_recent', arguments: {} });
     assert.match((recent.content as { text: string }[])[0]?.text ?? '', /MEMTEST_MARKER/);
     await client.close();
@@ -198,20 +208,47 @@ describe('built-in MCP route — /api/codex/mcp/[server]', () => {
     assert.equal(res.status, 404);
   });
 
-  it('memory without/with wrong workspace → 403 (scoped to configured workspace)', async () => {
+  it('memory without a session or with a mismatched workspace → 403', async () => {
     assert.equal((await callRoute('codepilot_memory', accept)).status, 403); // no header
     assert.equal(
-      (await callRoute('codepilot_memory', { ...accept, 'x-codepilot-workspace-path': otherWs })).status,
+      (await callRoute('codepilot_memory', { ...accept, 'x-codepilot-workspace-path': otherWs, 'x-codepilot-session-id': sessionId })).status,
       403, // attacker-chosen dir
     );
   });
 
-  it('memory with the configured workspace → 200 initialize', async () => {
-    const res = await callRoute('codepilot_memory', { ...accept, 'x-codepilot-workspace-path': ws });
+  it('memory with the session workspace → 200 initialize', async () => {
+    const res = await callRoute('codepilot_memory', { ...accept, 'x-codepilot-workspace-path': ws, 'x-codepilot-session-id': sessionId });
     assert.equal(res.status, 200);
     const json = (await res.json()) as { result?: { serverInfo?: { name?: string } }; error?: unknown };
     assert.equal(json.error, undefined);
     assert.equal(json.result?.serverInfo?.name, 'codepilot-memory');
+  });
+
+  it('ordinary project is denied; bound assistant retains write approval and Plan read-only', async () => {
+    const projectHeaders = { ...accept, 'x-codepilot-workspace-path': otherWs, 'x-codepilot-session-id': projectSessionId };
+    assert.equal((await callRoute('codepilot_memory', projectHeaders)).status, 403);
+    assert.equal((await callRoute('codepilot_memory_write', projectHeaders)).status, 403);
+    assert.equal(getBuiltinMcpServer('codepilot_memory')?.elicitationPolicy, 'auto_accept');
+    assert.equal(getBuiltinMcpServer('codepilot_memory_write')?.elicitationPolicy, 'user_approval');
+    const planHeaders = { ...accept, 'x-codepilot-workspace-path': ws, 'x-codepilot-session-id': planSessionId };
+    assert.equal((await callRoute('codepilot_memory', planHeaders)).status, 200);
+    assert.equal((await callRoute('codepilot_memory_write', planHeaders)).status, 403);
+    for (const [serverName, expected] of [
+      ['codepilot_memory', ['codepilot_memory_get', 'codepilot_memory_recent', 'codepilot_memory_search']],
+      ['codepilot_memory_write', ['codepilot_memory_forget', 'codepilot_memory_remember', 'codepilot_memory_update']],
+    ] as const) {
+      const instance = getBuiltinMcpServer(serverName)!.create({ workspacePath: ws, sessionId });
+      const [clientTransport, serverTransport] = InMemoryTransport.createLinkedPair();
+      const client = new Client({ name: 'memory-permission-fixture', version: '1.0.0' });
+      try {
+        await instance.connect(serverTransport);
+        await client.connect(clientTransport);
+        assert.deepEqual((await client.listTools()).tools.map(tool => tool.name).sort(), [...expected]);
+      } finally {
+        await client.close();
+        await instance.close();
+      }
+    }
   });
 
   it('widget → 200 initialize WITHOUT a workspace header (no file access, not scoped)', async () => {

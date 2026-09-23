@@ -5,6 +5,7 @@ import fs from 'fs';
 import path from 'path';
 import { registerMediaGenerationAsset } from '@/lib/assets/service';
 import { resolveCodePilotDataDir } from '@/lib/codepilot-data-dir';
+import { MediaUserActionError } from '@/lib/media-error';
 
 /**
  * Resolve `<dataDir>/.codepilot-media` PER-CALL so test setups that
@@ -161,7 +162,7 @@ export function stageFileForMediaPreview(
 ): { localPath: string } {
   const resolved = resolveSourcePath(filePath, opts.cwd);
   if (!fs.existsSync(resolved) || !fs.statSync(resolved).isFile()) {
-    throw new Error(`File not found: ${resolved}`);
+    throw new MediaUserActionError('MEDIA_SOURCE_NOT_FOUND', `File not found: ${resolved}`);
   }
   const mediaDir = ensureMediaDir();
   if (
@@ -302,7 +303,7 @@ export function importFileToLibrary(
   // not the app process cwd which is typically the project root.
   const resolved = resolveSourcePath(filePath, opts.cwd);
   if (!fs.existsSync(resolved)) {
-    throw new Error(`File not found: ${resolved}`);
+    throw new MediaUserActionError('MEDIA_SOURCE_NOT_FOUND', `File not found: ${resolved}`);
   }
 
   const ext = path.extname(resolved).toLowerCase();

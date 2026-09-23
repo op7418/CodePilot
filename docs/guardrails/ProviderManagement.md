@@ -1,5 +1,7 @@
 # Provider Management — 护栏
 
+> 2026-09-18：`google-ai-studio` 是独立的 Google 文本 API preset，位于官方 API 分组，使用 AI Studio key 与 `generativelanguage.googleapis.com/v1beta`。它不复用 `gemini-image` 或 Vertex；连接测试必须走 Google generateContent，不能落入 Anthropic messages。模型、思考档位与上下文窗口由 catalog 提供。回归：`gemini-native.test.ts`、`gemini-native.spec.ts`。
+
 Settings > Providers 是 CodePilot 的"服务资产中心"，所有 provider 的连接 / 编辑 / 删除 / 默认设定都从这里出。这块不变量被破坏时，用户的体验是：刚连接的 provider 不出现、点删除连带把别的 session 搞坏、添加流程把生产 endpoint 写错、或者全局默认模型被悄悄改成另一个 provider 的。每条都很难复现，且都是真实发生过的回归。
 
 ## 1. 词汇表
@@ -120,6 +122,8 @@ catalog-only plan 有一个更窄的持久升级例外：Settings > Models 的 p
 
 Add Model 对话框不能再用 `alreadyAdded:boolean` 压平身份状态。服务端必须区分 `current_enabled`、`current_hidden`、`legacy_upgrade_available`、`identity_conflict`、`missing`；隐藏项返回真实 `existingModelId` 并提供 PATCH 重新启用，legacy 只在上述精确指纹成立时升级。同一 current wire 同时有 hidden canonical 与唯一 enabled direct row 时，enabled row 是真实可用 identity，不得被 hidden canonical 整体拖成 hidden/conflict；多个 enabled current 或其他歧义仍 fail closed。冲突项不静默覆盖目标行，必须返回 typed 409 + 真实 conflict model ids，并提供进入 Models 的恢复动作；Renderer 必须本地化 typed code，且 2xx/409 后都重拉候选与父模型列表（merge 可能已补其它目录行），不能显示英文 route fallback 或乐观翻成本地成功。catalog-only plan 的精确目录候选若重新添加，由 POST 服务端使用 catalog 真源恢复 capabilities/source/order；renderer 只传身份，不能把目录模型降级为 manual 空能力行。
 
+冲突恢复入口必须真正显示对应模型记录：切到“全部”、清空模型搜索与渠道筛选，并滚动/聚焦服务端返回的真实冲突行。不能只关闭 Add Model 弹窗；普通关闭则保留原筛选。恢复查看本身不得调用模型写接口、启用、覆盖或删除行，文案应区分模型行身份与 `role_models_json` 角色映射。用户记录的具体来源未知时，不得靠扩大迁移范围来消除提示。
+
 ### 4.2 user_edited 守护
 
 `provider_models.user_edited` 标记用户改过的行。`applyDiscoveryDiff()` (`db.ts:1986`) 必须保留这些行的 `display_name` / `capabilities_json` / `enabled` / `sort_order`，仅刷新 `upstream_model_id` / `last_refreshed_at` / `source`。
@@ -235,6 +239,7 @@ UI 展示在 Models 页 row 上的 source badge。删除按钮**仅**对 `source
 | `src/__tests__/unit/provider-resolver.test.ts` | catalog merge / DB 优先 / hidden 抑制 / role models 拉取 |
 | `src/__tests__/unit/foundation-refresh-user-path-contract.test.ts` | Models GET 的真实三行存量套餐升级、Add Model stable/upstream identity 与五态/conflict recovery、hidden 恢复、catalog 重加能力保真、零写幂等与非 plan 反例 |
 | `src/__tests__/unit/catalog-capabilities-roundtrip.test.ts` | catalog metadata round-trip、read merge 用户保护、upstream 去重、冲突安全与排序避让 |
+| `src/__tests__/e2e/model-identity-conflict.spec.ts` | 真实临时 DB + 编译页面：隐藏/改名旧 haiku、空角色映射，冲突查看清筛选并定位；普通关闭保留筛选；模型数据前后相同，无模型写请求 |
 | `src/__tests__/unit/deepseek-v4-flash-adaptation.test.ts` | Flash 0731 + Pro 0813 exact preset/model wire 门、legacy env 默认层叠、DeepSeek Anthropic effort + Codex Responses 请求形状、Claude suffix/聚合渠道反例 |
 | `src/__tests__/unit/qwen-token-plan-catalog.test.ts` | Qwen 三套餐白名单、默认角色、usage policy |
 | `src/__tests__/unit/xai-provider.test.ts` | xAI API Key preset、Responses、官方 endpoint 边界 |
@@ -251,6 +256,8 @@ UI 展示在 Models 页 row 上的 source badge。删除按钮**仅**对 `source
 
 ## 10. 设计决策日志
 
+- **2026-09-04** Windows 用户反馈经 macOS 隔离复现后，只修确定的冲突恢复 UI 缺口：原按钮只关闭弹窗，hidden 行仍被默认 enabled 筛选挡住。新增清筛选、滚动、聚焦与短暂高亮，双语文案说明角色映射与模型记录独立；用户真实旧行来源待确认，身份判定与数据迁移保护保持原合同。
+
 - **2026-04-25** 已连接服务默认页**不**展示未添加 — 解决"用户分不清自己连了哪些"。Add Service 单独入口
 - **2026-04-25** Add Service / 已连接服务建立对齐分组；**2026-07-21** 随独立 OAuth/Code Plan 信息架构更新为 **5 段分组**。
 - **2026-04-26** 拆 verified vs experimental tier — 见 `Runtime.md` §7
@@ -266,3 +273,16 @@ UI 展示在 Models 页 row 上的 source badge。删除按钮**仅**对 `source
 - **2026-08-24** implementation review 收口后按已发布 git 历史补齐 sonnet→`sonnet` 的 gen-0 `GLM-4.7`、`GLM-5-Turbo`/`GLM-5.2` 与 haiku→`haiku` 的 `GLM-4.5-Air` 指纹，删除 upstream=`glm-5-turbo` 的无来源猜测；gen-0 与后续三行完整目录 fixture 都验证目标槽原位升级、非目标 opus 保留。mutation 后 UI 重拉服务端真源；canonical current 不被额外旧行拖成死路，真正 conflict 有行为断言并显示具体恢复动作。
 - **2026-08-24** presence 进一步明确 enabled-first：hidden canonical 与唯一 enabled direct current wire 并存时返回 `current_enabled` 并指向 enabled row；只有没有 enabled current 时 hidden canonical 才代表 `current_hidden`。
 - **2026-08-26** GLM Coding Plan 当前目录收敛为 GLM-5.3 + GLM-5.3-Flash；旗舰 stable `sonnet` 与默认角色保持 5.3，快速 stable `haiku` 升级 Flash。Models GET 仍为非破坏 merge：迁移已知 pristine haiku 指纹、补当前缺失行，但不删除或停用历史 Turbo/4.7 行；当前目录事实与存量数据清理由不同动作负责。
+
+
+## TokenDance 接入合同（2026-09-05）
+
+- 2026-09-18 用户指定：添加服务菜单的 TokenDance 卡片位于“授权登录”，不再在“第三方 / 中转兼容”重复展示；仍打开原来的授权码/手动 Key 双入口对话框。此调整只涉及添加入口，保存后仍是普通 DB Provider，不能伪装为 OAuth 虚拟订阅或据此改写已连接服务分类。
+
+- 添加菜单只显示 `tokendance`；同一连接 Native/Codex 使用 Chat Completions，Claude Code 使用 Messages relay。保留旧 `tokendance-anthropic` 编辑/重授权；不改已有 protocol、ID、Key 和聊天。模型能力由 exact-host + 官方协议快照限定，不能把 Kimi K3 等未声明 Messages 的模型标成 Claude 可用；实时目录必须按 `supported_protocols` 筛选，不以名称推测协议。只排除未声明聊天协议的模型；声明 Chat Completions 的 TTS 可以进入发现列表，但默认隐藏，不宣称适合聊天。公开目录不证明 Key 有效，连接测试必须执行真实协议小请求。
+- OAuth 创建的是普通 API Key，沿用加密 provider 存储与原连接 ID；不得变成虚拟订阅或以重建聊天完成重授权。取消/超时/替换 flow 后迟到兑换不得落库，完整 Key/code/verifier 不得进入状态 API、UI 或日志。
+- App URL 固定 `https://www.codepilot.sh/`，同时写授权参数与所有模型请求 `X-App-URL`。精确 origin/path gate 与 `redirect:error` 先于上游网络请求。
+- `TokenDance-Recovery-Action` 只在失败时处理已知值；充值、重新授权、周期额度分别指引，未知值保留原协议错误。Claude 子进程使用 AUTH_TOKEN，通过固定 Messages relay 保留恢复事实；未映射的角色与 small helper 回退到本轮已选模型，不能请求内置 Claude ID，也不覆盖显式角色映射；不得把余额问题折叠成通用鉴权失败或自动删除 Key。
+- 证据：`tokendance.test.ts`（真实 SDK/代理 wire、PKCE、加密与取消竞态）与 `tokendance-integration.spec.ts`（隔离 Dev UI）。真实账号/计费/打包 smoke 另行记录，不能以 mock 代替。
+
+- TokenDance 的 Provider badge 必须说明多协议/按模型支持，不能描述为通用 Anthropic 模板或暗示实测。Models 筛选使用同一模型级 tier，Codex parity 按该连接的实际协议分类；不可用 reason 经 typed dictionary 按 locale 返回。

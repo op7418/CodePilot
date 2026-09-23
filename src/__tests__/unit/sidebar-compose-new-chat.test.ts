@@ -46,3 +46,22 @@ describe('assistant top-level header has a compose new-chat entry', () => {
     );
   });
 });
+
+describe('sidebar empty-chat creation preserves the atomic route contract', () => {
+  it('does not send the legacy model/provider pair without a Runtime', () => {
+    assert.doesNotMatch(
+      chatList,
+      /getCurrentModelAndProvider|codepilot:last-model|codepilot:last-provider-id/,
+      'an empty-chat entry must not reconstruct a partial route from localStorage',
+    );
+
+    const createBodies = [...chatList.matchAll(
+      /body:\s*JSON\.stringify\(\{\s*working_directory:\s*([^,}\s]+)\s*\}\)/g,
+    )];
+    assert.equal(
+      createBodies.length,
+      3,
+      'folder selection, global new chat, and project/assistant compose must all create an unbound session using only working_directory',
+    );
+  });
+});

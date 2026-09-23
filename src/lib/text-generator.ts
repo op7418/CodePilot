@@ -1,6 +1,6 @@
 import { streamText } from 'ai';
 import { createModel } from './ai-provider';
-import type { ResolvedProvider } from './provider-resolver';
+import type { AiSdkConfig, ResolvedProvider } from './provider-resolver';
 import { assertProviderCallAllowed, type ProviderCallScene } from './provider-call-policy';
 import { reportProviderFailure } from './telemetry/provider-failure';
 import { toMarkableProviderFailure } from './telemetry/provider-marker';
@@ -10,6 +10,8 @@ export interface StreamTextParams {
   providerId: string;
   /** Exact provider snapshot supplied by fail-closed background calls. */
   resolvedProvider?: ResolvedProvider;
+  /** Captured Native transport config; supplied only with a provider snapshot. */
+  resolvedConfig?: AiSdkConfig;
   model: string;
   system: string;
   prompt: string;
@@ -69,6 +71,7 @@ export async function* streamTextFromProvider(params: StreamTextParams): AsyncIt
       callScene: params.callScene,
       providerId: params.providerId,
       resolvedProvider: params.resolvedProvider,
+      resolvedConfig: params.resolvedConfig,
       model: params.model,
     });
     resolvedForTelemetry = resolved;

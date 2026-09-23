@@ -25,6 +25,7 @@ import { useTranslation } from '@/hooks/useTranslation';
 import type { TranslationKey } from '@/i18n';
 import { CodePilotIcon } from '@/components/ui/semantic-icon';
 import type { ChatRuntime } from '@/lib/chat-runtime-shared';
+import { runtimeDisplayLabelKey } from '@/lib/runtime/runtime-display';
 
 export const RUNTIME_SWITCH_MARKER_PREFIX = '[__RUNTIME_SWITCH__';
 
@@ -47,9 +48,11 @@ export function parseRuntimeSwitchMarker(content: string): RuntimeSwitchPayload 
   if (!toMatch) return null;
   const fromVal = fromMatch?.[1];
   const toVal = toMatch[1];
-  if (toVal !== 'claude_code' && toVal !== 'codepilot_runtime') return null;
+  if (toVal !== 'claude_code' && toVal !== 'codepilot_runtime' && toVal !== 'codex_runtime') return null;
   const from: ChatRuntime | '' =
-    fromVal === 'claude_code' || fromVal === 'codepilot_runtime' ? fromVal : '';
+    fromVal === 'claude_code' || fromVal === 'codepilot_runtime' || fromVal === 'codex_runtime'
+      ? fromVal
+      : '';
   return { from, to: toVal };
 }
 
@@ -65,12 +68,7 @@ interface RuntimeSwitchMarkerProps {
 
 export function RuntimeSwitchMarker({ payload }: RuntimeSwitchMarkerProps) {
   const { t } = useTranslation();
-  const labelOf = (r: ChatRuntime | '') =>
-    r === 'codepilot_runtime'
-      ? t('runtimeSelector.codepilotRuntime' as TranslationKey)
-      : r === 'claude_code'
-        ? t('runtimeSelector.claudeCode' as TranslationKey)
-        : t('runtimeSwitchMarker.followGlobal' as TranslationKey);
+  const labelOf = (runtime: ChatRuntime | '') => t(runtimeDisplayLabelKey(runtime));
 
   const text = payload.from
     ? t('runtimeSwitchMarker.changedFromTo' as TranslationKey, {

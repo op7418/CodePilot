@@ -160,6 +160,9 @@ interface MessageInputProps {
   /** Model picker left lane. Selecting a Runtime changes the effective
    * session runtime before the matching model route is chosen. */
   onRuntimeChange?: (runtime: RuntimeId) => void;
+  /** Keep the combined picker available for safe same-Runtime model changes,
+   * while making its Runtime lane read-only for a started chat. */
+  runtimeChangeDisabled?: boolean;
   /** Controls consolidated into the input shell by the parent-owned session
    * flows. Slots keep New Chat and ChatView autonomous while sharing layout. */
   permissionControl?: ReactNode;
@@ -234,6 +237,7 @@ export function MessageInput({
   onPendingContextSubTotalsChange,
   blockingReasonIds,
   onRuntimeChange,
+  runtimeChangeDisabled,
   permissionControl,
   runStatusControl,
   context1m = false,
@@ -1184,7 +1188,7 @@ export function MessageInput({
   // `bg-background/80`; macOS profile drops alpha so vibrancy shows
   // through the composer hood.
   return (
-    <div className="bg-[var(--platform-surface-bar)] backdrop-blur-lg px-4 pt-2 pb-1">
+    <div className="bg-[var(--platform-surface-bar)] backdrop-blur-lg px-4 pt-2 pb-4">
       <div className="mx-auto w-full max-w-3xl">
         <div className="relative">
           {/* Slash Command / File Popover */}
@@ -1319,7 +1323,7 @@ export function MessageInput({
                   globalDefaultProvider={globalDefaultProvider}
                   runtimeApplied={runtime === 'auto' ? runtimeApplied : runtime}
                   onRuntimeChange={onRuntimeChange}
-                  runtimeChangeDisabled={isStreaming}
+                  runtimeChangeDisabled={isStreaming || runtimeChangeDisabled}
                   isLoading={isProviderLoading}
                 />
 

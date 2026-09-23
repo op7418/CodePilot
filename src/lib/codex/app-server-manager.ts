@@ -46,6 +46,11 @@ import {
 } from '../server-lifecycle-contract';
 import { isServerRecoverySafeMode } from '../server-recovery-safe-mode';
 import { codexReleaseAtLeast } from './release-version';
+import {
+  assertCliProviderLaunchAllowed,
+  isCliMaintenanceActive,
+} from '../cli-maintenance-lease';
+import { isCodexDesktopManagedPath } from '../cli-install-channel';
 
 interface SpawnedTransport extends CodexTransport {
   readonly proc: ChildProcessWithoutNullStreams;
@@ -469,9 +474,7 @@ export function getWindowsCodexCandidates(
 
 /** Paths managed by the Windows app installer are not assumed executable. */
 export function isWindowsDesktopCodexPath(candidatePath: string): boolean {
-  const normalized = candidatePath.replace(/\//g, '\\').toLowerCase();
-  return normalized.includes('\\program files\\windowsapps\\')
-    || normalized.includes('\\microsoft\\windowsapps\\codex');
+  return isCodexDesktopManagedPath(candidatePath, 'win32');
 }
 
 /** Cheap existence-only candidate scan. No subprocesses are spawned here. */
@@ -849,6 +852,7 @@ export function buildCodexAppServerArgs(codexHome: string): string[] {
  * they want a non-throwing path.
  */
 export async function getCodexAppServer(): Promise<ManagedAppServer> {
+  assertCliProviderLaunchAllowed('codex');
   if (isServerRecoverySafeMode()) {
     throw new Error('Codex app-server is disabled while CodePilot is in recovery safe mode');
   }
@@ -1059,6 +1063,20 @@ export async function disposeCodexAppServer(): Promise<void> {
     // path may itself throw — ignore, the goal is just to free.
   }
   lastAvailability = { kind: 'unknown' };
+}
+
+export type CodexMaintenanceQuiesceResult = 'idle' | 'active' | 'gate_missing';
+
+/**
+ * Called only after the provider maintenance gate is visible. It never kills
+ * an active turn; an idle cached app-server is disposed so Windows installers
+ * do not collide with the selected executable during replacement.
+ */
+export async function quiesceCodexForCliMaintenance(): Promise<CodexMaintenanceQuiesceResult> {
+  if (!isCliMaintenanceActive('codex')) return 'gate_missing';
+  if (currentHealthState && currentHealthState.activeTurnIds.size > 0) return 'active';
+  await disposeCodexAppServer();
+  return 'idle';
 }
 
 /**

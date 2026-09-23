@@ -41,6 +41,7 @@ import { createMediaTools } from '@/lib/builtin-tools/media';
 import type { RuntimeRunEvent } from '@/lib/runtime/contract';
 import { promptNeedsMedia } from '@/lib/media-capability-prompt';
 import { extractMcpAbortSignal } from '@/lib/image-gen-mcp';
+import { isTelemetryFailureHandled } from '@/lib/telemetry/provider-marker';
 
 const REPO_ROOT = path.resolve(__dirname, '../../..');
 const readSrc = (rel: string): string =>
@@ -171,11 +172,18 @@ describe('codepilot_import_media — side-channel emit on failure', () => {
     const tools = createMediaTools({ sessionId });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const importTool = tools.codepilot_import_media as any;
-    await assert.rejects(
-      () => importTool.execute(
+    const failure = await importTool.execute(
         { filePath: '/non/existent/file.png' },
         { toolCallId: 'call-1' },
-      ),
+      ).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+    assert.ok(failure, 'the tool must still reject the user-visible failure');
+    assert.equal(
+      isTelemetryFailureHandled(failure),
+      true,
+      'missing local media is product-owned and must not create an automatic Sentry Issue',
     );
 
     // No side-channel emit on failure (the importFileToLibrary call

@@ -171,86 +171,64 @@ export function searchWorkspace(
   query: string,
   options?: { limit?: number },
 ): SearchResult[] {
-  const limit = options?.limit ?? 5;
+  return searchWorkspaceSnapshot(loadManifest(dir), loadChunks(dir), query, {
+    ...options,
+    hotset: loadHotset(dir),
+  });
+}
+
+/** Score content before selecting candidates: a body-only match is a real hit. */
+export function searchWorkspaceSnapshot(
+  manifest: readonly ManifestEntry[],
+  chunks: readonly ChunkEntry[],
+  query: string,
+  options?: { limit?: number; hotset?: HotsetFile },
+): SearchResult[] {
   const keywords = parseQuery(query);
   if (keywords.length === 0) return [];
-
-  const manifest = loadManifest(dir);
-
-  // Load hotset for score boosting
-  const hotset = loadHotset(dir);
-  const pinnedSet = new Set(hotset.pinned);
-  const frequentMap = new Map<string, number>();
-  for (const f of hotset.frequent) {
-    frequentMap.set(f.path, f.count);
-  }
-
-  // Score every manifest entry
-  const scored = manifest.map(entry => {
-    const { score: baseScore, source } = scoreManifest(entry, keywords);
-    let score = baseScore;
-
-    // Boost pinned files
-    if (pinnedSet.has(entry.path)) {
-      score += 5;
-    }
-    // Boost frequently accessed files (diminishing returns, cap at +4)
-    const freq = frequentMap.get(entry.path);
-    if (freq) {
-      score += Math.min(4, Math.log2(freq + 1));
-    }
-
-    return { entry, score, source };
-  });
-
-  // Take top 2*limit candidates by manifest score
-  scored.sort((a, b) => b.score - a.score);
-  const candidates = scored.filter(s => s.score > 0).slice(0, limit * 2);
-
-  if (candidates.length === 0) return [];
-
-  // Load all chunks once, group by noteId
-  const allChunks = loadChunks(dir);
+  const pinned = new Set(options?.hotset?.pinned ?? []);
+  const frequent = new Map(options?.hotset?.frequent.map(f => [f.path, f.count]) ?? []);
   const chunksByNote = new Map<string, ChunkEntry[]>();
-  for (const chunk of allChunks) {
-    const list = chunksByNote.get(chunk.noteId) || [];
+  for (const chunk of chunks) {
+    const list = chunksByNote.get(chunk.noteId) ?? [];
     list.push(chunk);
     chunksByNote.set(chunk.noteId, list);
   }
 
-  // For each candidate, find the best chunk
   const results: SearchResult[] = [];
-
-  for (const candidate of candidates) {
-    const chunks = chunksByNote.get(candidate.entry.noteId) || [];
+  for (const entry of manifest) {
+    // Raw managed record history is never retrieval content. Active records
+    // are supplied as logical memory/records/<id>.md projections by MemoryService.
+    const normalizedPath = path.posix.normalize(entry.path.replace(/\\/g, '/')).toLowerCase();
+    if (normalizedPath === 'memory/records.md' || normalizedPath.startsWith('memory/.records-')
+      || normalizedPath.split('/').some(part => part === '.assistant' || part === '.git')
+      || normalizedPath === '..' || normalizedPath.startsWith('../')
+      || path.posix.isAbsolute(normalizedPath) || path.win32.isAbsolute(entry.path)) continue;
+    const { score: metadataScore, source } = scoreManifest(entry, keywords);
+    let bestChunk: ChunkEntry | undefined;
     let bestChunkScore = 0;
-    let bestChunk: ChunkEntry | null = null;
-
-    for (const chunk of chunks) {
-      const cs = scoreChunk(chunk, keywords);
-      if (cs > bestChunkScore) {
-        bestChunkScore = cs;
+    for (const chunk of chunksByNote.get(entry.noteId) ?? []) {
+      const score = scoreChunk(chunk, keywords);
+      if (score > bestChunkScore) {
         bestChunk = chunk;
+        bestChunkScore = score;
       }
     }
-
-    const totalScore = candidate.score + bestChunkScore;
-    const snippet = bestChunk
-      ? bestChunk.text.slice(0, 300)
-      : candidate.entry.summary.slice(0, 300);
-    const heading = bestChunk?.heading ?? candidate.entry.headings[0] ?? '';
-
+    // Hotset may rank relevant results, but cannot manufacture a match.
+    if (metadataScore + bestChunkScore <= 0) continue;
+    const score = metadataScore + bestChunkScore
+      + (pinned.has(entry.path) ? 5 : 0)
+      + Math.min(4, Math.log2((frequent.get(entry.path) ?? 0) + 1));
     results.push({
-      path: candidate.entry.path,
-      heading,
-      snippet,
-      score: totalScore,
-      source: bestChunkScore > candidate.score ? 'content' : candidate.source,
+      path: entry.path,
+      heading: bestChunk?.heading ?? entry.headings[0] ?? '',
+      snippet: bestChunk?.text.slice(0, 300) ?? entry.summary.slice(0, 300),
+      score,
+      source: bestChunkScore > metadataScore ? 'content' : source,
     });
   }
-
-  results.sort((a, b) => b.score - a.score);
-  return results.slice(0, limit);
+  results.sort((a, b) => b.score - a.score || (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));
+  return results.slice(0, options?.limit ?? 5);
 }
 
 // ---------------------------------------------------------------------------

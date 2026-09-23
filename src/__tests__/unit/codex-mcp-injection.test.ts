@@ -93,13 +93,15 @@ describe('runtime.ts — start/resume injection wiring (source pins)', () => {
     // (and proxy injection) travels on every continuation turn.
     assert.match(
       runtimeSrc,
-      /thread\/resume['"]\s*,\s*\{\s*threadId:[^}]*\.\.\.threadParams/,
+      /thread\/resume['"]\s*,\s*\{\s*threadId,[^}]*\.\.\.threadParams/,
       'thread/resume must spread ...threadParams (carry MCP config on resume)',
     );
   });
 
   it('the resume decision is gated on the MCP config fingerprint', () => {
-    assert.match(runtimeSrc, /existingMcpFingerprint\s*===\s*mcpFingerprint/);
+    const continuation = fs.readFileSync(path.resolve(__dirname, '../../lib/codex/thread-continuation.ts'), 'utf-8');
+    assert.match(runtimeSrc, /prepareCodexThread\(\{[\s\S]{0,150}mcpFingerprint,/);
+    assert.match(continuation, /ref\.metadata\?\.mcpConfigFingerprint \?\? ''\) === input\.mcpFingerprint/);
     assert.ok(
       runtimeSrc.includes('fingerprintCodexMcpConfig'),
       'runtime must compute the MCP fingerprint',

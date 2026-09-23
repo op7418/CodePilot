@@ -1,3 +1,5 @@
+import { MEMORY_SEARCH_SYSTEM_PROMPT, MEMORY_WRITE_SYSTEM_PROMPT } from '@/lib/memory-service';
+import { getSessionMemoryWorkspace } from '@/lib/memory-binding';
 /**
  * Codex AgentRuntime implementation.
  *
@@ -35,9 +37,9 @@ import type {
   RuntimeStreamOptions,
 } from '@/lib/runtime/types';
 import type { RuntimeRunEvent } from '@/lib/runtime/contract';
-import type { RuntimeContextAccountingSnapshot, FileAttachment } from '@/types';
+import type { RuntimeContextAccountingSnapshot, FileAttachment, ConversationHistoryItem } from '@/types';
 import type { CodexThreadResumeResponse, CodexThreadStartResponse } from './types';
-import { buildCodexTurnInput } from './turn-input';
+import { prepareCodexThread, startCodexTurnWithContext } from './thread-continuation';
 import { composeCodexDeveloperInstructions } from './developer-instructions';
 // Phase 4 — Codex Context Accounting (2026-05-20). Imported at top so
 // the closure-scoped cache + run_completed supplementary result event
@@ -57,7 +59,7 @@ import {
   getCodexAvailability,
 } from './app-server-manager';
 import { resolveCodexEffort, resolveCodexProviderEffort } from './effort';
-import { getCachedCodexEffortLevels, getCachedCodexEffortVocabulary } from './models';
+import { getCachedCodexEffortLevels, getCachedCodexEffortVocabulary, getCodexModelForTurn } from './models';
 import { getResolvedModelEffortContract, resolveProvider } from '@/lib/provider-resolver';
 import { reconcileCodexPermissionEcho, resolveCodexPermissionWire } from './permission';
 import { buildReviewEvent } from '@/lib/permission/review-event';
@@ -99,7 +101,7 @@ import {
   ACCEPT_ELICITATION,
   DECLINE_ELICITATION,
 } from './mcp-elicitation';
-import { getSetting } from '@/lib/db';
+import { getSetting, getSession } from '@/lib/db';
 import { subscribeBuiltinEvents } from './proxy/builtin-event-bus';
 import { createCodexAccountManagedTools } from './proxy/builtin-bridge';
 import {
@@ -110,7 +112,6 @@ import {
 import {
   getRuntimeSessionRef,
   setRuntimeSessionRef,
-  clearRuntimeSessionRef,
 } from '@/lib/runtime/session-store';
 import {
   abortCodexTurnController,
@@ -330,7 +331,7 @@ export const codexRuntime: AgentRuntime = {
         // chat/route.ts collectStreamResponse picks it up via the
         // standard `tokenUsage = resultData.usage` path.
         let codexUsageCache:
-          | { inputTokens: number; outputTokens: number; contextWindow: number | null }
+          | { inputTokens: number; cachedInputTokens: number | null; outputTokens: number; contextWindow: number | null }
           | null = null;
 
         // Phase 7 — per-turn ToolInvocationAccumulator. Wired in the
@@ -595,20 +596,19 @@ export const codexRuntime: AgentRuntime = {
           // perception_only until then (codex-user-mcp-wiring guardrail).
           const codexMcpServers: CodexMcpServersConfig = {};
           const assistantWorkspacePath = getSetting('assistant_workspace_path');
-          if (
-            assistantWorkspacePath &&
-            options.workingDirectory &&
-            // realpath-normalized compare (trailing slash / symlink safe) —
-            // same helper the route authorizes with, so "inject" and
-            // "authorized" never disagree.
-            sameRealPath(options.workingDirectory, assistantWorkspacePath)
-          ) {
-            const mem = buildCodexMemoryMcpConfig({
-              baseUrl: resolveCodexProxyBaseUrl(),
-              workspacePath: assistantWorkspacePath,
-              sessionId,
+          const memoryWorkspace = getSessionMemoryWorkspace(sessionId, options.workingDirectory);
+          if (memoryWorkspace) {
+            const memory = buildCodexMemoryMcpConfig({
+              baseUrl: resolveCodexProxyBaseUrl(), workspacePath: memoryWorkspace, sessionId,
             });
-            codexMcpServers[mem.name] = mem.entry;
+            codexMcpServers[memory.name] = memory.entry;
+            if (options.permissionMode !== 'plan') {
+              const writes = buildCodexMemoryMcpConfig({
+                baseUrl: resolveCodexProxyBaseUrl(), workspacePath: memoryWorkspace, sessionId,
+                serverName: 'codepilot_memory_write',
+              });
+              codexMcpServers[writes.name] = writes.entry;
+            }
           }
           // Widget MCP (Phase 8 #31) — keyword-gated, the SAME gate the
           // ClaudeCode path uses (`promptNeedsWidget`, shared from
@@ -770,7 +770,10 @@ export const codexRuntime: AgentRuntime = {
               ].join('\n')
             : '';
           const developerInstructions = composeCodexDeveloperInstructions(
-            options.systemPrompt,
+            [options.systemPrompt,
+              codexMcpServers.codepilot_memory ? MEMORY_SEARCH_SYSTEM_PROMPT : '',
+              codexMcpServers.codepilot_memory_write ? MEMORY_WRITE_SYSTEM_PROMPT : '',
+            ].filter(Boolean).join('\n\n'),
             accountDelegationInstructions,
           );
           const threadParams = {
@@ -799,66 +802,31 @@ export const codexRuntime: AgentRuntime = {
               }
             : threadParams;
 
-          // ── thread resolution: resume if we have a ref + provider AND
-          // MCP fingerprint match, else start ──
+          // Preserve the product chat and its old ref until a replacement
+          // thread has accepted the first turn containing the saved history.
           const existingRef = getRuntimeSessionRef(sessionId, 'codex_runtime');
-          const existingProviderBinding =
-            typeof existingRef?.metadata?.providerId === 'string'
-              ? existingRef.metadata.providerId
-              : '';
-          // Phase 8 Phase 2 — the MCP fingerprint the existing thread was
-          // started with. A change (workspace switch, MCP config edit)
-          // invalidates resume the same way a provider switch does.
-          const existingMcpFingerprint =
-            typeof existingRef?.metadata?.mcpConfigFingerprint === 'string'
-              ? existingRef.metadata.mcpConfigFingerprint
-              : '';
           const refMetadata = { providerId: requestedProviderId, mcpConfigFingerprint: mcpFingerprint };
-          let threadId: string;
-          if (
-            existingRef &&
-            existingProviderBinding === requestedProviderId &&
-            existingMcpFingerprint === mcpFingerprint
-          ) {
-            try {
+          const thread = await prepareCodexThread({
+            existingRef,
+            providerId: requestedProviderId,
+            mcpFingerprint,
+            resume: async (threadId) => {
               const result = await client.request<CodexThreadResumeResponse>('thread/resume', {
-                threadId: existingRef.token,
+                threadId,
                 ...threadParams,
               });
               applyPermissionEcho(result);
-              threadId = existingRef.token;
-            } catch {
-              // Resume failed (thread archived / unknown id) → start fresh.
+            },
+            start: async () => {
               const result = await client.request<CodexThreadStartResponse>(
                 'thread/start',
                 threadStartParams,
               );
               applyPermissionEcho(result);
-              threadId = result.thread.id;
-              setRuntimeSessionRef(sessionId, {
-                runtimeId: 'codex_runtime',
-                token: threadId,
-                metadata: refMetadata,
-              });
-            }
-          } else {
-            // No ref yet, OR provider switched, OR the MCP config changed.
-            // In every "switched" case the old thread is now stale (wrong
-            // proxy injection or wrong tool set); clear before writing the
-            // new binding so a partial write can't leave a stale id behind.
-            if (existingRef) clearRuntimeSessionRef(sessionId, 'codex_runtime');
-            const result = await client.request<CodexThreadStartResponse>(
-              'thread/start',
-              threadStartParams,
-            );
-            applyPermissionEcho(result);
-            threadId = result.thread.id;
-            setRuntimeSessionRef(sessionId, {
-              runtimeId: 'codex_runtime',
-              token: threadId,
-              metadata: refMetadata,
-            });
-          }
+              return result.thread.id;
+            },
+          });
+          const { threadId } = thread;
 
           unsubscribers.push(registerCodexDynamicToolRoute(threadId, {
             forwardMcp: (req) =>
@@ -937,6 +905,7 @@ export const codexRuntime: AgentRuntime = {
               if (event.type === 'usage_updated') {
                 codexUsageCache = {
                   inputTokens: event.inputTokens ?? 0,
+                  cachedInputTokens: event.cachedInputTokens ?? null,
                   outputTokens: event.outputTokens ?? 0,
                   contextWindow: event.contextWindow ?? null,
                 };
@@ -1003,6 +972,9 @@ export const codexRuntime: AgentRuntime = {
                   const usage: Record<string, unknown> = {};
                   if (codexUsageCache) {
                     usage.input_tokens = codexUsageCache.inputTokens;
+                    if (codexUsageCache.cachedInputTokens !== null) {
+                      usage.cache_read_input_tokens = codexUsageCache.cachedInputTokens;
+                    }
                     usage.output_tokens = codexUsageCache.outputTokens;
                     if (codexUsageCache.contextWindow !== null) {
                       usage.context_window = codexUsageCache.contextWindow;
@@ -1096,11 +1068,17 @@ export const codexRuntime: AgentRuntime = {
           // global clamp downgraded them to `high` behind the user's back.
           // Unknown/undeclared tiers are omitted (never coerced); a cold
           // cache yields no capability info and falls back to the
-          // conservative clamp inside resolveCodexEffort. cacheOnly read —
-          // turn/start must never spawn an app-server (P0.3).
+          // conservative clamp inside resolveCodexEffort. Replacement threads
+          // may discover capabilities through the already-running client;
+          // this must never spawn an app-server from the passive feed (P0.3).
           // codex_runtime only; Claude Code / Native keep the full union.
           let codexEffort: string | undefined;
+          let supportsImages: boolean | undefined;
           if (requestedProviderId === 'codex_account') {
+            if (!thread.resumed) {
+              const model = await getCodexModelForTurn(options.model, async () => ({ client }));
+              supportsImages = model?.inputModalities.includes('image');
+            }
             const declaredEfforts = await getCachedCodexEffortLevels(options.model);
             codexEffort = resolveCodexEffort(options.effort, declaredEfforts);
           } else {
@@ -1118,6 +1096,12 @@ export const codexRuntime: AgentRuntime = {
             const contract = resolvedExactly
               ? getResolvedModelEffortContract(resolvedProvider, options.model)
               : {};
+            if (resolvedExactly) {
+              const ids = [options.model, resolvedProvider.model, resolvedProvider.upstreamModel];
+              supportsImages = resolvedProvider.availableModels.find(candidate =>
+                ids.includes(candidate.modelId) || (!!candidate.upstreamModelId && ids.includes(candidate.upstreamModelId)),
+              )?.capabilities?.vision;
+            }
             // The app-server is already initialized at this point, so this
             // cache-only availability read exposes its binary version without
             // requiring a Codex Account login or spawning another process.
@@ -1136,13 +1120,35 @@ export const codexRuntime: AgentRuntime = {
           // image / localImage blocks (wire format from the POC — see
           // docs/research/codex-image-input-poc/FINDINGS.md).
           const turnFiles = options.runtimeOptions?.files as FileAttachment[] | undefined;
-          const turnResult = await client.request<{ turn: { id: string } }>('turn/start', {
-            threadId,
-            input: buildCodexTurnInput(options.prompt, turnFiles),
-            ...(options.workingDirectory ? { cwd: options.workingDirectory } : {}),
-            ...(options.model ? { model: options.model } : {}),
-            ...(codexEffort ? { effort: codexEffort } : {}),
-            ...codexPermission.turn,
+          const turnResult = await startCodexTurnWithContext({
+            thread,
+            prompt: options.prompt,
+            files: turnFiles,
+            sessionId,
+            // Uploads belong to the product project, even when the native
+            // session's sdk_cwd has moved into a subdirectory.
+            workingDirectory: !thread.resumed
+              ? getSession(sessionId)?.working_directory || options.workingDirectory
+              : options.workingDirectory,
+            supportsImages,
+            history: options.runtimeOptions?.conversationHistory as
+              ConversationHistoryItem[] | undefined,
+            sessionSummary: options.runtimeOptions?.sessionSummary as string | undefined,
+            sessionSummaryBoundaryRowid: options.runtimeOptions?.sessionSummaryBoundaryRowid as number | undefined,
+            tokenBudget: options.runtimeOptions?.fallbackTokenBudget as number | undefined,
+            startTurn: (input) => client.request<{ turn: { id: string } }>('turn/start', {
+              threadId,
+              input,
+              ...(options.workingDirectory ? { cwd: options.workingDirectory } : {}),
+              ...(options.model ? { model: options.model } : {}),
+              ...(codexEffort ? { effort: codexEffort } : {}),
+              ...codexPermission.turn,
+            }),
+            saveThread: () => setRuntimeSessionRef(sessionId, {
+              runtimeId: 'codex_runtime',
+              token: threadId,
+              metadata: refMetadata,
+            }),
           });
           activeCodexTurns.set(sessionId, { threadId, turnId: turnResult.turn.id });
           if (pendingAbort) {

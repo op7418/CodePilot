@@ -158,6 +158,25 @@ describe('title generation trigger — g01', () => {
     assert.equal(getSession(sessionId)!.title, 'Fallback title');
   });
 
+  it('does NOT fire for a Codex interrupted result followed by usage accounting', async () => {
+    const { sessionId, lockId } = freshSession();
+    await collectStreamResponse(
+      streamOf([
+        sse('text', 'partial answer before Stop'),
+        sse('result', { finish_reason: 'interrupted' }),
+        sse('result', { usage: { input_tokens: 3, output_tokens: 1 } }),
+      ]),
+      sessionId,
+      lockId,
+      NO_TELEGRAM,
+      undefined,
+      { suppressNotifications: true, titleGeneration: TITLE_CTX },
+    );
+    await drainMicrotasks();
+    assert.equal(generationFired(), false, 'Codex usage accounting must not rename a Stopped turn');
+    assert.equal(getSession(sessionId)!.title, 'Fallback title');
+  });
+
   it('does NOT fire when the assistant row was dropped by the owner gate', async () => {
     const { sessionId } = freshSession();
     // A superseded turn: it carries a stale lockId, so its writes are dropped.
@@ -214,7 +233,7 @@ describe('trigger is off the hot path — g01 structural pins', () => {
   it('generation is gated on a clean, persisted turn', () => {
     assert.match(
       collectSrc,
-      /if \(opts\?\.titleGeneration && !hasError && lastSavedAssistantMsgId !== null\)/,
+      /opts\?\.titleGeneration\s*&& !hasError\s*&& !sawNonSuccessfulTerminalResult\s*&& lastSavedAssistantMsgId !== null/,
     );
   });
 

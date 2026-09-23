@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
+import { deleteTestSession } from '../helpers';
 
 function getDbPath() {
   const dataDir = process.env.CLAUDE_GUI_DATA_DIR || path.join(os.homedir(), '.codepilot');
@@ -49,16 +50,18 @@ test.describe('Global Search modes UX', () => {
     await fs.mkdir(rootB, { recursive: true });
     await fs.writeFile(filePathA, 'export const alpha = true;\n', 'utf8');
 
-    const sessionA = await createSession(page, sessionTitleA, rootA);
-    const sessionB = await createSession(page, sessionTitleB, rootB);
-    addMessage(sessionA, 'user', `User says ${messageTokenA}`);
-    addMessage(sessionB, 'assistant', `Assistant says ${messageTokenB}`);
+    let sessionA: string | undefined;
+    let sessionB: string | undefined;
 
     const searchInput = page.locator(
       'input[data-slot="command-input"], input[placeholder*="Search"], input[placeholder*="搜索"]'
     ).first();
 
     try {
+      sessionA = await createSession(page, sessionTitleA, rootA);
+      sessionB = await createSession(page, sessionTitleB, rootB);
+      addMessage(sessionA, 'user', `User says ${messageTokenA}`);
+      addMessage(sessionB, 'assistant', `Assistant says ${messageTokenB}`);
       await page.goto(`/chat/${sessionA}`);
 
       // Open global search from the sidebar trigger (language-agnostic fallback).
@@ -95,8 +98,8 @@ test.describe('Global Search modes UX', () => {
       await page.getByText(fileNameA).first().click();
       await expect(page).toHaveURL(new RegExp(`/chat/${sessionA}\\?file=`), { timeout: 10_000 });
     } finally {
-      await page.request.delete(`/api/chat/sessions/${sessionA}`, { timeout: 5_000 }).catch(() => {});
-      await page.request.delete(`/api/chat/sessions/${sessionB}`, { timeout: 5_000 }).catch(() => {});
+      await deleteTestSession(page, sessionA);
+      await deleteTestSession(page, sessionB);
       await fs.rm(rootA, { recursive: true, force: true });
       await fs.rm(rootB, { recursive: true, force: true });
     }

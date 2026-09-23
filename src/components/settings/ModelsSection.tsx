@@ -44,7 +44,7 @@ import { showToast, updateToast } from "@/hooks/useToast";
 import type { TranslationKey } from "@/i18n";
 import { getProviderIcon } from "./provider-presets";
 import { CodexAccountModelsBlock } from "./CodexAccountModelsBlock";
-import { getProviderCompat, getModelCompat, compatLabel, compatTone, compatDotColor, compatTooltip } from "@/lib/runtime-compat";
+import { getProviderCompat, getModelCompat, getModelCompatTier, compatLabel, compatTone, compatDotColor, compatTooltip } from "@/lib/runtime-compat";
 import {
   Select,
   SelectContent,
@@ -976,6 +976,36 @@ export function ModelsSection() {
   // has had time to spot what was scrolled to.
   const [highlightedModelKey, setHighlightedModelKey] = useState<string | null>(null);
 
+  const handleReviewModels = useCallback((providerId: string, modelIds: string[]) => {
+    setOpenRouterSearchTarget(null);
+    setViewFilter('all');
+    setRuntimeFilter('all');
+    setSearch('');
+
+    // Wait for the filter change to render hidden rows and for the dialog
+    // to unmount. This is navigation only: never enable or replace a row.
+    requestAnimationFrame(() => {
+      for (const modelId of modelIds) {
+        const key = `${providerId}::${modelId}`;
+        const row = document.querySelector<HTMLElement>(
+          `[data-model-row="${CSS.escape(key)}"]`,
+        );
+        if (!row) continue;
+        row.focus({ preventScroll: true });
+        row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+        setHighlightedModelKey(key);
+        setTimeout(() => {
+          setHighlightedModelKey(cur => cur === key ? null : cur);
+        }, 2400);
+        return;
+      }
+      // A row can disappear after discovery; still reveal its provider.
+      const section = document.getElementById(`provider-section-${providerId}`);
+      section?.focus({ preventScroll: true });
+      section?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+  }, []);
+
   // Focus signal from ProviderCard's "管理模型" jump or RuntimePanel's
   // "去启用此模型" recovery action. Three sessionStorage keys:
   //   codepilot:models-focus-provider  → provider id (required)
@@ -1051,18 +1081,16 @@ export function ModelsSection() {
       bundlesOut = bundlesOut
         .map(b => {
           const providerCompat = getProviderCompat(b.provider);
-          // Filter rows by checking each model's compat against the
-          // selected provider tier. The `runtimeFilter` value is a
-          // provider-tier label (e.g. `claude_code_verified`); a row
-          // belongs to the visible set when its provider lives in that
-          // tier AND `getModelCompat` doesn't strip it for being media.
+          // Mixed-protocol providers must be filtered by each model's tier.
           const filteredModels = b.models.filter(m => {
-            if (providerCompat !== runtimeFilter) return false;
-            const cap = getModelCompat({
+            const args = {
+              providerBaseUrl: b.provider.base_url,
               modelId: m.model_id,
               upstreamModelId: m.upstream_model_id || undefined,
               providerCompat,
-            });
+            };
+            if (getModelCompatTier(args) !== runtimeFilter) return false;
+            const cap = getModelCompat(args);
             // Drop media-only rows and rows that have no chat-side flag
             // (a defensive zero-flag check; today this matches if a
             // future capability ever marks a row entirely non-chat).
@@ -1366,7 +1394,7 @@ export function ModelsSection() {
         <Select value={runtimeFilter} onValueChange={(v) => setRuntimeFilter(v as RuntimeFilter)}>
           <SelectTrigger
             className="w-[180px] shrink-0"
-            title={isZh ? '按接入渠道筛选服务商' : 'Filter providers by access channel'}
+            title={isZh ? '按模型接入能力筛选' : 'Filter models by access capability'}
           >
             <SelectValue />
           </SelectTrigger>
@@ -1439,6 +1467,7 @@ export function ModelsSection() {
         <section
           key={provider.id}
           id={`provider-section-${provider.id}`}
+          tabIndex={-1}
           className="space-y-3 scroll-mt-4"
         >
           {/* Section header — split across two rows so the actions stay
@@ -1481,10 +1510,10 @@ export function ModelsSection() {
                     <TooltipTrigger asChild>
                       <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground cursor-help shrink-0">
                         <span className={cn('size-1.5 rounded-full', compatDotColor(providerCompat))} aria-hidden />
-                        {compatLabel(providerCompat, isZh)}
+                        {compatLabel(providerCompat, isZh, provider)}
                       </span>
                     </TooltipTrigger>
-                    <TooltipContent>{compatTooltip(providerCompat, isZh)}</TooltipContent>
+                    <TooltipContent>{compatTooltip(providerCompat, isZh, provider)}</TooltipContent>
                   </Tooltip>
                 )}
                 {/* "默认" role indicator — also lifted up from Row 2.
@@ -1634,6 +1663,7 @@ export function ModelsSection() {
                   <div
                     key={model.id}
                     data-model-row={`${provider.id}::${model.model_id}`}
+                    tabIndex={-1}
                     className={cn(
                       'px-4 py-3 flex items-center gap-3 transition-colors duration-700',
                       highlightedModelKey === `${provider.id}::${model.model_id}`
@@ -1969,6 +1999,7 @@ export function ModelsSection() {
           onOpenChange={(open) => { if (!open) setOpenRouterSearchTarget(null); }}
           providerId={openRouterSearchTarget.id}
           providerName={openRouterSearchTarget.name}
+          onReviewModels={(modelIds) => handleReviewModels(openRouterSearchTarget.id, modelIds)}
           onModelAdded={() => refetchProviderBundle(openRouterSearchTarget.id)}
           onManualFallback={() => {
             // Search hit a runtime error (key invalid, upstream 5xx,

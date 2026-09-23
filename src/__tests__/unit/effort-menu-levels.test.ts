@@ -432,10 +432,13 @@ describe('both composer entries wire the s07 effect helper + a sourced notice (s
       // came first, an auto-correct would skip the clear. The helper call must
       // precede the isAuto early-return.
       const helperIdx = src.indexOf('resolveModelSwitchEffortEffect(');
-      const skipIdx = src.indexOf('opts?.isAuto) return');
-      assert.ok(helperIdx !== -1 && skipIdx !== -1,
+      const skipIdx = src.indexOf('opts?.isAuto && !runtimeWasExplicitlySelected) return');
+      const effectiveSkipIdx = skipIdx !== -1
+        ? skipIdx
+        : src.indexOf('opts?.isAuto) return');
+      assert.ok(helperIdx !== -1 && effectiveSkipIdx !== -1,
         `${label}: expected both the helper call and the isAuto persist-skip`);
-      assert.ok(helperIdx < skipIdx,
+      assert.ok(helperIdx < effectiveSkipIdx,
         `${label}: the effort clear must run before the isAuto persist-skip`);
     });
   }

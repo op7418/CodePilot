@@ -50,8 +50,22 @@ after(() => {
   }
 });
 
-function createParentSession(title: string) {
-  return db.createSession(title, 'sonnet', '', tempDataDir, 'code', 'provider-parent');
+function createParentSession(
+  title: string,
+  runtime: 'codepilot_runtime' | 'claude_code' | 'codex_runtime' = 'codex_runtime',
+) {
+  return db.createSession(
+    title,
+    'sonnet',
+    '',
+    tempDataDir,
+    'code',
+    'provider-parent',
+    undefined,
+    undefined,
+    undefined,
+    { runtimeId: runtime, state: 'bound', source: 'inherited_owner' },
+  );
 }
 
 describe('subagent_runs durable lifecycle', () => {
@@ -301,7 +315,7 @@ describe('subagent_runs durable lifecycle', () => {
   });
 
   it('queues a dependent task and injects the upstream durable result before execution', async () => {
-    const session = createParentSession('workflow dependency handoff');
+    const session = createParentSession('workflow dependency handoff', 'claude_code');
     const upstream = db.startSubagentRun({
       id: 'workflow-upstream',
       parentSessionId: session.id,
@@ -352,7 +366,7 @@ describe('subagent_runs durable lifecycle', () => {
   });
 
   it('keeps a concurrently accepted downstream task queued until its upstream attempt settles', async () => {
-    const session = createParentSession('parallel dependency wait');
+    const session = createParentSession('parallel dependency wait', 'codepilot_runtime');
     const upstream = db.startSubagentRun({
       id: 'parallel-upstream',
       parentSessionId: session.id,
@@ -522,7 +536,7 @@ describe('subagent_runs durable lifecycle', () => {
   });
 
   it('fails a missing upstream quickly so reverse tool order cannot deadlock a serial Runtime', async () => {
-    const session = createParentSession('workflow missing upstream');
+    const session = createParentSession('workflow missing upstream', 'claude_code');
     const downstream = db.startSubagentRun({
       id: 'workflow-missing-downstream',
       parentSessionId: session.id,
@@ -597,7 +611,7 @@ describe('subagent_runs durable lifecycle', () => {
   });
 
   it('rejects duplicate task keys unless the failed logical task is explicitly retried', () => {
-    const session = createParentSession('workflow duplicate task');
+    const session = createParentSession('workflow duplicate task', 'codepilot_runtime');
     const first = db.startSubagentRun({
       id: 'workflow-task-first',
       parentSessionId: session.id,
@@ -642,7 +656,7 @@ describe('subagent_runs durable lifecycle', () => {
   });
 
   it('rejects an indirect workflow cycle before creating the closing task', () => {
-    const session = createParentSession('workflow cycle');
+    const session = createParentSession('workflow cycle', 'codepilot_runtime');
     db.startSubagentRun({
       id: 'cycle-task-a',
       parentSessionId: session.id,
@@ -657,8 +671,8 @@ describe('subagent_runs durable lifecycle', () => {
     assert.throws(() => db.startSubagentRun({
       id: 'cycle-task-b',
       parentSessionId: session.id,
-      runtime: 'codex_runtime',
-      toolName: 'codepilot_spawn_subagent',
+      runtime: 'codepilot_runtime',
+      toolName: 'Agent',
       agentName: 'Task B',
       workflowId: 'cycle-workflow',
       taskKey: 'b',
@@ -674,7 +688,7 @@ describe('subagent_runs durable lifecycle', () => {
   });
 
   it('keeps retries under one logical run while preserving physical attempts', () => {
-    const session = createParentSession('logical retry');
+    const session = createParentSession('logical retry', 'claude_code');
     const first = db.startSubagentRun({
       id: 'attempt-first',
       logicalRunId: 'research-weather',
@@ -745,7 +759,7 @@ describe('subagent_runs durable lifecycle', () => {
   });
 
   it('bounds event history and returns coalesced updates through an incremental cursor', () => {
-    const session = createParentSession('bounded event cursor');
+    const session = createParentSession('bounded event cursor', 'codepilot_runtime');
     const started = db.startSubagentRun({
       id: 'attempt-bounded-events',
       logicalRunId: 'bounded-events',
@@ -805,7 +819,7 @@ describe('subagent_runs durable lifecycle', () => {
   });
 
   it('rejects an explicit retry while the prior logical attempt is running or settling', () => {
-    const session = createParentSession('logical retry active guard');
+    const session = createParentSession('logical retry active guard', 'claude_code');
     const first = db.startSubagentRun({
       id: 'attempt-active-first',
       logicalRunId: 'research-active',
@@ -901,8 +915,10 @@ describe('subagent_runs durable lifecycle', () => {
   });
 
   it('stores durable lifecycle facts for every managed Runtime', () => {
-    const session = createParentSession('all runtime durability');
+    const sessions = [];
     for (const runtime of ['codepilot_runtime', 'claude_code', 'codex_runtime'] as const) {
+      const session = createParentSession(`all runtime durability: ${runtime}`, runtime);
+      sessions.push(session);
       const runId = `run-${runtime}`;
       db.startSubagentRun({
         id: runId,
@@ -924,7 +940,7 @@ describe('subagent_runs durable lifecycle', () => {
       assert.equal(settled?.result_text, `${runtime} result`);
     }
     assert.deepEqual(
-      new Set(db.listSubagentRuns(session.id).map((run) => run.runtime)),
+      new Set(sessions.flatMap(session => db.listSubagentRuns(session.id)).map((run) => run.runtime)),
       new Set(['codepilot_runtime', 'claude_code', 'codex_runtime']),
     );
   });
@@ -940,7 +956,7 @@ describe('subagent_runs durable lifecycle', () => {
         requestedModel: 'model-x',
         prompt: 'Do work.',
       }),
-      /FOREIGN KEY constraint failed/,
+      /SUBAGENT_PARENT_RUNTIME_UNBOUND/,
     );
   });
 

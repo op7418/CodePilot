@@ -1,4 +1,5 @@
 import type { TelemetryLayer } from './contract';
+import { telemetryCallScene, telemetryFailureKind } from './diagnostics';
 
 type UnknownRecord = Record<string, unknown>;
 
@@ -16,6 +17,8 @@ const ALLOWED_TAGS = new Set([
   'runtime.id',
   'runtime.layer',
   'status.class',
+  'call.scene',
+  'failure.kind',
 ]);
 
 const ALLOWED_EXTRAS = new Set([
@@ -33,6 +36,7 @@ const ALLOWED_EXTRAS = new Set([
   'signal',
   'timeoutStage',
   'truncated',
+  'telemetrySuppressedCount',
   'utilityArrayBuffersBytes',
   'utilityExternalBytes',
   'utilityHeapLimitBytes',
@@ -57,10 +61,9 @@ export function sanitizeText(value: unknown, maxLength = 512): string {
   for (const pattern of SECRET_PATTERNS) text = text.replace(pattern, '[redacted]');
   text = text
     .replace(/https?:\/\/[^\s)\]}]+/gi, '[url]')
-    .replace(/file:\/\/[^\s)\]}]+/gi, '[local-path]')
-    .replace(/\/Users\/[^/\s]+/g, '/Users/<user>')
-    .replace(/\/home\/[^/\s]+/g, '/home/<user>')
-    .replace(/[A-Za-z]:\\Users\\[^\\\s]+/g, 'C:\\Users\\<user>')
+    .replace(/file:\/\/[^\r\n]+/gi, '[local-path]')
+    .replace(/(?:\/Users\/|\/home\/)[^\r\n]+/g, '[local-path]')
+    .replace(/[A-Za-z]:\\Users\\[^\r\n]+/g, '[local-path]')
     .replace(/\b[0-9a-f]{8}-[0-9a-f-]{27,}\b/gi, '[id]')
     .replace(/\b[0-9a-f]{24,}\b/gi, '[id]');
   if (text.length <= maxLength) return text;
@@ -190,6 +193,8 @@ export function sanitizeTelemetryEvent<T extends object>(
   if (options.platform) filteredTags['os.platform'] = sanitizeText(options.platform, 32);
   if (options.arch) filteredTags['os.arch'] = sanitizeText(options.arch, 32);
   for (const [key, value] of Object.entries(tags)) {
+    if (key === 'call.scene') { filteredTags[key] = telemetryCallScene(value); continue; }
+    if (key === 'failure.kind') { filteredTags[key] = telemetryFailureKind(value); continue; }
     if (ALLOWED_TAGS.has(key)) filteredTags[key] = sanitizeText(value, 64);
   }
   mutable.tags = filteredTags;
@@ -198,6 +203,10 @@ export function sanitizeTelemetryEvent<T extends object>(
   const filteredExtra: UnknownRecord = {};
   for (const [key, value] of Object.entries(extra)) {
     if (!ALLOWED_EXTRAS.has(key)) continue;
+    if (key === 'telemetrySuppressedCount') {
+      if (typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= 1_000_000) filteredExtra[key] = value;
+      continue;
+    }
     filteredExtra[key] = typeof value === 'string' ? sanitizeText(value, 128) : value;
   }
   mutable.extra = filteredExtra;

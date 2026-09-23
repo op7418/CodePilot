@@ -224,6 +224,9 @@ describe('findCodexBinary — Windows standalone and desktop discovery', () => {
     assert.equal(isWindowsDesktopCodexPath(
       'C:\\Users\\tester\\AppData\\Local\\Programs\\OpenAI\\Codex\\bin\\codex.exe',
     ), false);
+    assert.equal(isWindowsDesktopCodexPath(
+      'C:\\Users\\tester\\AppData\\Local\\Programs\\ChatGPT\\resources\\bin\\codex.exe',
+    ), true);
   });
 
   it('RuntimePanel explains the desktop-only state and independent CLI recovery', () => {

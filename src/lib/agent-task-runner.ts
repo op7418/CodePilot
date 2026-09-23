@@ -48,6 +48,8 @@
 import type { ScheduledTask, TaskRunStatus } from '@/types';
 import { normalizePermissionProfile } from '@/lib/permission/profile';
 import { classifyHeartbeatOutcome, isHeartbeatContentEmpty } from '@/lib/heartbeat';
+import { isRuntimeId } from '@/lib/runtime/runtime-id';
+import { resolveAutomaticSessionRoute } from '@/lib/runtime/automatic-session-route';
 
 export interface AgentTaskRunResult {
   status: TaskRunStatus;
@@ -75,7 +77,7 @@ export interface AgentTaskRunResult {
  * subsequent runs reuse the same conversation.
  */
 export async function ensureTaskBoundSession(task: ScheduledTask): Promise<string> {
-  const { getSession, createSession, updateScheduledTask, updateSessionRuntime } =
+  const { getSession, createSession, updateScheduledTask } =
     await import('@/lib/db');
   if (task.session_id) {
     const existing = getSession(task.session_id);
@@ -104,7 +106,9 @@ export async function ensureTaskBoundSession(task: ScheduledTask): Promise<strin
     // overwrite task.session_id with the new task-bound id). The
     // task-bound session always has source='task' — it's set on
     // creation by `createSession(..., 'task')`.
-    if (existing && existing.source === 'task') {
+    if (existing && existing.source === 'task'
+      && existing.runtime_binding_state === 'bound'
+      && isRuntimeId(existing.runtime_pin)) {
       return existing.id;
     }
     // Otherwise fall through — even if `existing` is defined but
@@ -153,6 +157,14 @@ export async function ensureTaskBoundSession(task: ScheduledTask): Promise<strin
   // asking less, not for granting more.
   const inheritedPermissionProfile = normalizePermissionProfile(originSession?.permission_profile);
 
+  if (!originSession
+    || originSession.runtime_binding_state !== 'bound'
+    || !isRuntimeId(originSession.runtime_pin)
+    || !inheritedProviderId
+    || !inheritedModel) {
+    throw new Error('Scheduled task requires a bound origin session with a complete route.');
+  }
+
   const newSession = createSession(
     `[Task] ${task.name}`,
     inheritedModel,
@@ -165,16 +177,12 @@ export async function ensureTaskBoundSession(task: ScheduledTask): Promise<strin
     // The task's name is the session's identity — never re-derive it from
     // whatever prompt the runner happens to send first.
     'system',
+    {
+      runtimeId: originSession.runtime_pin,
+      state: 'bound',
+      source: 'inherited_owner',
+    },
   );
-  // Inherit runtime_pin separately — createSession doesn't take it as
-  // an arg today (it's a Phase 2 column added later). Lift the same
-  // pin so the task-bound session honors the origin's per-session
-  // runtime commitment.
-  if (originSession?.runtime_pin) {
-    try {
-      updateSessionRuntime(newSession.id, originSession.runtime_pin);
-    } catch { /* best-effort */ }
-  }
   // Persist session_id back to the task so next run reuses the
   // session. Best-effort: if the update fails for any reason, the next
   // run will create a second session — not ideal but not corrupt.
@@ -219,25 +227,39 @@ async function resolveBuddySessionId(): Promise<string | undefined> {
   const existing = getLatestSessionByWorkingDirectory(workspacePath, {
     includeSources: ['user'],
   });
-  if (existing) return existing.id;
+  if (existing) {
+    if (existing.runtime_binding_state === 'bound'
+      && isRuntimeId(existing.runtime_pin)
+      && existing.provider_id
+      && existing.model) {
+      return existing.id;
+    }
+    throw new Error('Assistant heartbeat session needs Runtime recovery before background execution.');
+  }
   // Lazy create. Source='user' so the session appears in the main
   // chat list — heartbeat speak-up is part of the assistant
   // conversation the user opens manually later. Permission profile
   // 'default' so tool gating still applies once the user starts
   // chatting in it.
+  const route = resolveAutomaticSessionRoute('assistant_heartbeat');
   const fresh = createSession(
     'Assistant heartbeat',
-    undefined,
+    route.modelId,
     undefined,
     workspacePath,
     'code',
-    undefined,
+    route.providerId,
     'default',
     'user',
     // 'system' even though source is 'user': the user can chat here later, but
     // "Assistant heartbeat" is what makes this session findable in the list.
     // Renaming it from the user's first reply would lose that.
     'system',
+    {
+      runtimeId: route.runtimeId,
+      state: 'bound',
+      source: 'assistant_session_create',
+    },
   );
   return fresh.id;
 }
@@ -432,8 +454,21 @@ export async function runScheduledAgentTask(
     // refuse here too: write the run as failed with the reason and
     // bail. The user can fix the session's provider in the chat UI
     // and re-run from the WaitingForPermissionPanel / scheduler.
+    if (!session
+      || session.runtime_binding_state !== 'bound'
+      || !isRuntimeId(session.runtime_pin)
+      || !session.provider_id
+      || !session.model) {
+      const error = 'Cannot run task: the session has no bound Runtime route. Open the chat and recover its Runtime before re-running.';
+      updateTaskRunLog(runId, {
+        status: 'failed',
+        error,
+        duration_ms: Date.now() - startedAt,
+      });
+      return { runId, status: 'failed', error, sessionId };
+    }
     const effectiveSessionRuntime = resolveRuntimeForSession({
-      runtime_pin: session?.runtime_pin || '',
+      runtime_pin: session.runtime_pin,
     });
     const resolved = resolveProviderForSession(
       {

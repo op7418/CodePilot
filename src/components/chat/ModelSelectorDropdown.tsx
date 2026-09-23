@@ -390,6 +390,9 @@ export function ModelSelectorDropdown({
                   key={runtimeId}
                   type="button"
                   disabled={runtimeChangeDisabled}
+                  title={runtimeChangeDisabled
+                    ? t('composer.runtimeLocked' as TranslationKey)
+                    : undefined}
                   onClick={() => handleRuntimeSelect(runtimeId)}
                   className={cn(
                     'flex h-10 w-full items-center gap-2 rounded-lg px-2 text-left text-xs disabled:cursor-not-allowed disabled:opacity-50',

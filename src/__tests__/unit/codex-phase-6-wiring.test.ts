@@ -841,23 +841,34 @@ describe('MessageInput auto-correct — manual-only side effects (Phase 6 P0)', 
     );
   });
 
-  it('ChatView handleProviderModelChange early-returns on opts.isAuto (no session PATCH)', () => {
+  it('ChatView auto-correct stays local until an explicit route mutation or first Send', () => {
     const src = fs.readFileSync(
       path.join(repoRoot, 'components/chat/ChatView.tsx'),
       'utf8',
     );
-    // PATCHing the session on a silent fallback would persist a
-    // model the user never picked — the next page load would surface
-    // the auto-corrected pair as their "real" selection. Must not.
-    //
-    // s07 (2026-07-18) moved the effort-effect block ABOVE this guard so the
-    // helper's isAuto branch stays live, but the invariant is unchanged: the
-    // isAuto early-return must still fire BEFORE the session PATCH. Assert that
-    // ordering directly (stronger than a fixed-distance grep).
+    // Catalog auto-correct is observational for every chat. An unbound Runtime
+    // selection remains local until first Send can persist the complete route
+    // and first_execution owner in one CAS mutation. This prevents a stale
+    // "explicit Runtime" permission from authorizing a later catalog refetch.
     assert.match(
       src,
-      /opts\?\.isAuto\)\s*return;[\s\S]{0,400}fetch\(`\/api\/chat\/sessions\//,
-      'isAuto must early-return before the session PATCH so a silent fallback is not persisted',
+      /if \(opts\?\.isAuto\) return;/,
+      'every silent auto-correct must return before route persistence.',
+    );
+    assert.doesNotMatch(
+      src,
+      /pendingRuntimeSelectionRef|runtimeWasExplicitlySelected/,
+      'Runtime selection must not leave a durable permission for a later auto-correct callback.',
+    );
+    assert.match(
+      src,
+      /runtimeBindingState\s*===\s*'unbound'[\s\S]{0,1800}?await commitRoute\([\s\S]{0,500}?bindForExecution:\s*true/,
+      'first Send must persist the selected route and owner atomically.',
+    );
+    assert.match(
+      src,
+      /handleRuntimePinChange\s*=\s*useCallback[\s\S]{0,180}if \(runtimeSelectionLocked\) return;/,
+      'a bound/started chat must reject Runtime lane changes before local picker state changes.',
     );
   });
 });

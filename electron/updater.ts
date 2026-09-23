@@ -6,6 +6,8 @@ import yaml from 'js-yaml';
 import {
   boundedUpdateText,
   classifyUpdaterError,
+  consumeUpdaterDownloadPromise,
+  createUpdaterFailureReporter,
   resolveUpdaterPublisherVerification,
   resolveUpdaterSupport,
   resolveUpdaterFeedChannel,
@@ -14,6 +16,11 @@ import {
   type UpdaterInstallResult,
   type UpdaterSnapshot,
 } from '../src/lib/updater-contract';
+import {
+  getInstallLifecycleOwner,
+  releaseInstallLifecycle,
+  tryAcquireInstallLifecycle,
+} from './install-lifecycle-coordinator';
 
 const CHECK_INTERVAL_MS = 8 * 60 * 60 * 1000;
 const INSTALL_HANDOFF_TIMEOUT_MS = 15_000;
@@ -119,6 +126,11 @@ function recordUpdaterError(error: unknown): void {
   scheduleRetry();
 }
 
+const recordUpdaterErrorOnce = createUpdaterFailureReporter(
+  () => snapshot.phase,
+  recordUpdaterError,
+);
+
 function applyUpdateInfo(info: UpdateInfo): void {
   updateSnapshot({
     targetVersion: info.version,
@@ -140,13 +152,31 @@ async function checkForUpdates(): Promise<UpdaterSnapshot> {
   checkInFlight = (async () => {
     updateSnapshot({ phase: 'checking', errorCode: null, checkedAt: new Date().toISOString() });
     try {
-      await autoUpdater.checkForUpdates();
+      const result = await autoUpdater.checkForUpdates();
+      const autoDownloadPromise = result?.downloadPromise;
+      if (autoDownloadPromise) {
+        // electron-updater starts this Promise when autoDownload=true but does
+        // not await it from checkForUpdates(). Own the terminal rejection here
+        // so a network failure cannot escape as a process-level unhandled
+        // rejection. The shared reporter gate keeps equivalent Promise and
+        // emitter failures exactly-once.
+        const ownedDownload = (async () => {
+          try {
+            await consumeUpdaterDownloadPromise(autoDownloadPromise, recordUpdaterErrorOnce);
+          } finally {
+            if (downloadInFlight === ownedDownload) downloadInFlight = null;
+          }
+          return publicSnapshot();
+        })();
+        downloadInFlight = ownedDownload;
+        void ownedDownload;
+      }
       consecutiveFailures = 0;
       clearScheduledRetry();
     } catch (error) {
       // electron-updater also emits `error`; do not double-count one failed
       // request and accidentally jump two retry-backoff levels.
-      if (snapshot.phase !== 'error') recordUpdaterError(error);
+      recordUpdaterErrorOnce(error);
     } finally {
       checkInFlight = null;
     }
@@ -170,7 +200,7 @@ async function retryDownload(): Promise<UpdaterSnapshot> {
       updateSnapshot({ phase: 'downloading', errorCode: null });
       await autoUpdater.downloadUpdate();
     } catch (error) {
-      if (snapshot.phase !== 'error') recordUpdaterError(error);
+      recordUpdaterErrorOnce(error);
     } finally {
       downloadInFlight = null;
     }
@@ -194,6 +224,19 @@ async function installDownloadedUpdate(): Promise<UpdaterInstallResult> {
     updateSnapshot({ errorCode: 'active_work' });
     return { ok: false, errorCode: 'active_work', blockers };
   }
+  // A second install invoke can have passed the initial downloaded check while
+  // both calls were awaiting activity. Recheck before touching the shared
+  // latch so the strict same-owner rule is not mislabeled as a CLI conflict.
+  if (snapshot.phase !== 'downloaded') {
+    return { ok: false, errorCode: 'internal' };
+  }
+  if (!tryAcquireInstallLifecycle('app-updater')) {
+    if (getInstallLifecycleOwner() !== 'cli-maintenance') {
+      return { ok: false, errorCode: 'internal' };
+    }
+    updateSnapshot({ errorCode: 'cli_update_running' });
+    return { ok: false, errorCode: 'cli_update_running' };
+  }
   updateSnapshot({ phase: 'installing', errorCode: null });
   onInstallLifecycleChange(true);
   if (installHandoffTimer) clearTimeout(installHandoffTimer);
@@ -202,6 +245,7 @@ async function installDownloadedUpdate(): Promise<UpdaterInstallResult> {
     // If Electron is still alive, quitAndInstall did not complete its handoff.
     // Restore the resident lifecycle and keep the downloaded package retryable.
     onInstallLifecycleChange(false);
+    releaseInstallLifecycle('app-updater');
     updateSnapshot({ phase: 'downloaded', errorCode: 'install_failed' });
   }, INSTALL_HANDOFF_TIMEOUT_MS);
   installHandoffTimer.unref?.();
@@ -212,6 +256,7 @@ async function installDownloadedUpdate(): Promise<UpdaterInstallResult> {
     if (installHandoffTimer) clearTimeout(installHandoffTimer);
     installHandoffTimer = null;
     onInstallLifecycleChange(false);
+    releaseInstallLifecycle('app-updater');
     updateSnapshot({ phase: 'downloaded', errorCode: 'install_failed' });
     return { ok: false, errorCode: 'install_failed' };
   }
@@ -273,10 +318,14 @@ function registerUpdaterEvents(): void {
       if (installHandoffTimer) clearTimeout(installHandoffTimer);
       installHandoffTimer = null;
       onInstallLifecycleChange(false);
+      releaseInstallLifecycle('app-updater');
       updateSnapshot({ phase: 'downloaded', errorCode: 'install_failed' });
       return;
     }
-    recordUpdaterError(error);
+    // The nested auto-download Promise and this emitter can surface the same
+    // terminal failure in either order. A real retry leaves the error phase
+    // before it can fail again, so this only deduplicates the current failure.
+    recordUpdaterErrorOnce(error);
   });
 }
 

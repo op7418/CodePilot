@@ -6,6 +6,8 @@ import {
   statusClass,
 } from './contract';
 import { markProviderFailureHandled } from './provider-marker';
+import { telemetryCallScene } from './diagnostics';
+import { telemetryReportBudget } from './report-budget';
 import {
   createSafeTelemetryError,
   inspectTelemetryRootCause,
@@ -80,6 +82,9 @@ export function reportProviderFailure(
       if (!Sentry.isInitialized()) return;
       const protocol = input.resolvedProvider?.protocol || 'unknown';
       const classification = providerClass(input.resolvedProvider);
+      const budget = telemetryReportBudget.take({ failure: description, callScene: input.callScene,
+        providerProtocol: protocol, providerClass: classification, runtimeId: 'codepilot_runtime' });
+      if (!budget.allowed) return;
       Sentry.withScope((scope) => {
         scope.setTag('error.category', description.category);
         scope.setTag('error.outcome', description.outcome);
@@ -88,9 +93,12 @@ export function reportProviderFailure(
         scope.setTag('provider.protocol', protocol);
         scope.setTag('provider.class', classification);
         scope.setTag('status.class', statusClass(description.statusCode));
+        scope.setTag('failure.kind', description.rootCause);
+        scope.setTag('call.scene', telemetryCallScene(input.callScene));
         scope.setExtras({
           callScene: input.callScene,
           retryExhausted: description.retryExhausted,
+          ...(budget.suppressed ? { telemetrySuppressedCount: budget.suppressed } : {}),
         });
         const useDefaultStackGrouping = shouldUseDefaultStackGrouping(
           description.outcome,

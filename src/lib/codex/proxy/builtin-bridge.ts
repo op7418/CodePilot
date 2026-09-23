@@ -46,6 +46,9 @@
 
 import { tool, jsonSchema, type ToolSet } from 'ai';
 import crypto from 'node:crypto';
+import { createMemoryAdapterQueryTools } from '@/lib/memory-rerank';
+import { getSessionMemoryWorkspace } from '@/lib/memory-binding';
+import type { ResolvedProvider } from '@/lib/provider-resolver';
 import type { JSONSchema7 } from '@ai-sdk/provider';
 import type { MediaBlock } from '@/types';
 import { makeToolStarted, makeToolCompleted } from '@/lib/runtime/event-adapter';
@@ -123,6 +126,8 @@ export interface BuiltinBridgeOpts {
    *  adapter — `codex_account` should never reach here, but the
    *  guard below stays as defence in depth. */
   targetProviderId: string;
+  /** The actual foreground Provider snapshot, also used for optional memory ranking. */
+  resolvedProvider?: ResolvedProvider;
   /** Test seam; production resolves this from the current OAuth bundle. */
   grokVideoAvailable?: boolean;
 }
@@ -211,7 +216,7 @@ export function createCodePilotBuiltinTools(
   // the model can be told they're unavailable, but skipping the
   // tool registration keeps the model from calling them and getting
   // a generic "Failed: ENOENT" message.
-  if (opts.workspacePath && opts.workspacePath.length > 0) {
+  if (opts.workspacePath && getSessionMemoryWorkspace(opts.sessionId, opts.workspacePath)) {
     tools.codepilot_memory_recent = buildMemoryRecentTool(opts);
     tools.codepilot_memory_search = buildMemorySearchTool(opts);
     tools.codepilot_memory_get = buildMemoryGetTool(opts);
@@ -992,214 +997,28 @@ function mediaTypeOf(mimeType: string): 'image' | 'video' | 'audio' {
 // Context Compiler.
 // ─────────────────────────────────────────────────────────────────────
 
-interface MemorySearchInput {
-  query: string;
-  tags?: string[];
-  file_type?: 'all' | 'daily' | 'longterm' | 'notes';
-  limit?: number;
-}
-
+// The proxy executes read-only queries through the same service as Native and
+// MCP. Memory writes use Codex's memory_write MCP server and its approval gate;
+// they must never be duplicated here as direct, unapproved SDK executions.
 function buildMemorySearchTool(opts: BuiltinBridgeOpts) {
-  return tool({
-    description:
-      'Search assistant workspace memory files with keyword matching and temporal decay. Supports filtering by tags (Obsidian-style #tags from YAML frontmatter) and file type.',
-    inputSchema: jsonSchema({
-      type: 'object',
-      additionalProperties: false,
-      required: ['query'],
-      properties: {
-        query: { type: 'string' },
-        tags: { type: 'array', items: { type: 'string' } },
-        file_type: { type: 'string', enum: ['all', 'daily', 'longterm', 'notes'] },
-        limit: { type: 'number' },
-      },
-    } satisfies JSONSchema7),
-    execute: async (rawInput: unknown) => {
-      const input = rawInput as MemorySearchInput;
-      return runWithEvents(opts, 'codepilot_memory_search', input, async () => {
-        if (!opts.workspacePath) {
-          throw new Error('Memory search requires an active workspace; this chat does not have one bound.');
-        }
-        const workspace = opts.workspacePath;
-        const limit = input.limit || 5;
-        const { searchWorkspace } = await import('@/lib/workspace-retrieval');
-        let results = searchWorkspace(workspace, input.query, { limit: limit * 3 });
-
-        // P2 fix (smoke round, 2026-05-16) — the schema + description
-        // promise `tags` and `file_type` filtering, but the pre-fix
-        // bridge ignored both. Mirror `memory-search-mcp.ts` lines
-        // 62-88 so the Codex bridge stays in lock-step with the SDK
-        // MCP version. Without this, a user asking "search
-        // file_type=daily" would get long-term notes mixed in.
-
-        if (input.file_type && input.file_type !== 'all') {
-          const isMemoryFile = (p: string) => /^memory\.md$/i.test(p);
-          const ft = input.file_type;
-          results = results.filter((r) => {
-            if (ft === 'daily') return r.path.startsWith('memory/daily/');
-            if (ft === 'longterm') return isMemoryFile(r.path);
-            if (ft === 'notes') return !r.path.startsWith('memory/') && !isMemoryFile(r.path);
-            return true;
-          });
-        }
-
-        if (input.tags && input.tags.length > 0) {
-          const tagsLower = input.tags.map((t) => t.toLowerCase().replace(/^#/, ''));
-          try {
-            const { loadManifest } = await import('@/lib/workspace-indexer');
-            const manifest = loadManifest(workspace) as Array<{ path: string; tags?: string[] }>;
-            results = results.filter((r) => {
-              const entry = manifest.find((e) => e.path === r.path);
-              if (!entry?.tags?.length) return false;
-              const entryTagsLower = entry.tags.map((t: string) => t.toLowerCase());
-              return tagsLower.some((t) => entryTagsLower.includes(t));
-            });
-          } catch {
-            // manifest unavailable (workspace never indexed) → skip
-            // tag filter rather than fail the whole search. Same
-            // soft-failure stance memory-search-mcp.ts takes.
-          }
-        }
-
-        const trimmed = results.slice(0, limit);
-        const text = trimmed.length === 0
-          ? `No memory results for "${input.query}"${input.file_type && input.file_type !== 'all' ? ` (file_type=${input.file_type})` : ''}${input.tags && input.tags.length > 0 ? ` (tags=${input.tags.join(',')})` : ''}.`
-          : trimmed
-              .map((r, i) => `${i + 1}. [${r.path}] (score: ${r.score.toFixed(2)})\n   ${truncate(r.snippet ?? '', 240)}`)
-              .join('\n\n');
-        return { text };
-      });
-    },
-  });
-}
-
-interface MemoryGetInput {
-  file_path: string;
-  line_start?: number;
-  line_end?: number;
+  const definition = createMemoryAdapterQueryTools(opts.workspacePath!, { sourceSessionId: opts.sessionId, providerId: opts.targetProviderId, resolvedProvider: opts.resolvedProvider }).codepilot_memory_search;
+  return tool({ ...definition, execute: async input => runWithEvents(
+    opts, 'codepilot_memory_search', input, async () => ({ text: await definition.execute(input) }),
+  ) });
 }
 
 function buildMemoryGetTool(opts: BuiltinBridgeOpts) {
-  return tool({
-    description:
-      'Read a specific file from the assistant workspace. Paths are relative to the workspace root (e.g. "memory.md", "memory/daily/2026-03-30.md").',
-    inputSchema: jsonSchema({
-      type: 'object',
-      additionalProperties: false,
-      required: ['file_path'],
-      properties: {
-        file_path: { type: 'string' },
-        line_start: { type: 'number' },
-        line_end: { type: 'number' },
-      },
-    } satisfies JSONSchema7),
-    execute: async (rawInput: unknown) => {
-      const input = rawInput as MemoryGetInput;
-      return runWithEvents(opts, 'codepilot_memory_get', input, async () => {
-        if (!opts.workspacePath) {
-          throw new Error('Memory get requires an active workspace; this chat does not have one bound.');
-        }
-        // Inlined safe-read with the same boundary checks
-        // `memory-search-mcp.ts` performs. Kept in lock-step via
-        // the source-grep pin in `codex-builtin-no-anti-patterns.test.ts`
-        // — refactoring either side without touching the other will
-        // surface as a smoke divergence, not a security regression.
-        const path = await import('node:path');
-        const fs = await import('node:fs');
-        const resolvedWorkspace = path.resolve(opts.workspacePath);
-        const resolved = path.resolve(opts.workspacePath, input.file_path);
-        const rel = path.relative(resolvedWorkspace, resolved);
-        if (rel.startsWith('..') || path.isAbsolute(rel)) {
-          throw new Error('Access denied: path is outside the workspace.');
-        }
-        if (!fs.existsSync(resolved)) {
-          return { text: `File not found: ${input.file_path}` };
-        }
-        // Symlink escape guard.
-        const realPath = fs.realpathSync.native(resolved);
-        const realWorkspace = fs.realpathSync.native(resolvedWorkspace);
-        const realRel = path.relative(realWorkspace, realPath);
-        if (realRel.startsWith('..') || path.isAbsolute(realRel)) {
-          throw new Error('Access denied: path resolves outside the workspace (symlink).');
-        }
-        let content = fs.readFileSync(resolved, 'utf-8');
-        if (input.line_start || input.line_end) {
-          const lines = content.split('\n');
-          const start = Math.max(0, (input.line_start ?? 1) - 1);
-          const end = Math.min(lines.length, input.line_end ?? lines.length);
-          content = lines.slice(start, end).join('\n');
-        }
-        if (content.length > 3000) {
-          content = content.slice(0, 3000) + '\n\n[…truncated…]';
-        }
-        return { text: content || '(empty file)' };
-      });
-    },
-  });
-}
-
-interface MemoryRecentInput {
-  days?: number;
+  const definition = createMemoryAdapterQueryTools(opts.workspacePath!, { sourceSessionId: opts.sessionId, providerId: opts.targetProviderId }).codepilot_memory_get;
+  return tool({ ...definition, execute: async input => runWithEvents(
+    opts, 'codepilot_memory_get', input, async () => ({ text: await definition.execute(input) }),
+  ) });
 }
 
 function buildMemoryRecentTool(opts: BuiltinBridgeOpts) {
-  return tool({
-    description:
-      'Read the most recent assistant workspace memory snapshots (long-term memory.md summary + last few daily entries). Call this at the start of every conversation to load context.',
-    inputSchema: jsonSchema({
-      type: 'object',
-      additionalProperties: false,
-      properties: { days: { type: 'number', description: 'How many recent days to read (default 3).' } },
-    } satisfies JSONSchema7),
-    execute: async (rawInput: unknown) => {
-      const input = rawInput as MemoryRecentInput;
-      return runWithEvents(opts, 'codepilot_memory_recent', input, async () => {
-        if (!opts.workspacePath) {
-          throw new Error('Memory recent requires an active workspace; this chat does not have one bound.');
-        }
-        const path = await import('node:path');
-        const fs = await import('node:fs');
-        const days = Math.max(1, input.days ?? 3);
-        const parts: string[] = [];
-        // Long-term memory.md summary (first 500 chars). Try both
-        // case variants for cross-platform safety.
-        for (const variant of ['memory.md', 'Memory.md', 'MEMORY.md']) {
-          const memoryPath = path.join(opts.workspacePath, variant);
-          if (fs.existsSync(memoryPath)) {
-            const content = fs.readFileSync(memoryPath, 'utf-8').trim();
-            const summary = content.length > 500 ? content.slice(0, 500) + '…' : content;
-            if (summary.length > 0) parts.push(`## Long-term Memory\n${summary}`);
-            break;
-          }
-        }
-        // Recent daily entries.
-        const dailyDir = path.join(opts.workspacePath, 'memory', 'daily');
-        if (fs.existsSync(dailyDir)) {
-          const files = fs
-            .readdirSync(dailyDir)
-            .filter((f: string) => /^\d{4}-\d{2}-\d{2}\.md$/.test(f))
-            .sort()
-            .reverse()
-            .slice(0, days);
-          for (const file of files) {
-            const content = fs.readFileSync(path.join(dailyDir, file), 'utf-8').trim();
-            if (content.length === 0) continue;
-            const truncated = content.length > 800 ? content.slice(0, 800) + '…' : content;
-            const date = file.replace('.md', '');
-            parts.push(`## Daily Memory: ${date}\n${truncated}`);
-          }
-        }
-        return {
-          text: parts.length > 0 ? parts.join('\n\n') : 'No recent memory entries found.',
-        };
-      });
-    },
-  });
-}
-
-function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max - 1) + '…';
+  const definition = createMemoryAdapterQueryTools(opts.workspacePath!, { sourceSessionId: opts.sessionId, providerId: opts.targetProviderId }).codepilot_memory_recent;
+  return tool({ ...definition, execute: async input => runWithEvents(
+    opts, 'codepilot_memory_recent', input, async () => ({ text: await definition.execute(input) }),
+  ) });
 }
 
 // ─────────────────────────────────────────────────────────────────────

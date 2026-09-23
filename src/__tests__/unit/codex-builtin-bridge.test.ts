@@ -36,6 +36,9 @@ import {
 import type { RuntimeRunEvent } from '@/lib/runtime/contract';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { createSession, setSetting } from '@/lib/db';
+import { bindAssistantMemory } from '@/lib/memory-binding';
 
 beforeEach(() => {
   __resetBuiltinEventBusForTests();
@@ -185,21 +188,20 @@ describe('createCodePilotBuiltinTools — mount + skip', () => {
     );
   });
 
-  it('mounts memory tools when workspacePath is supplied', () => {
-    const bridge = createCodePilotBuiltinTools({
-      sessionId: 'chat-1',
-      targetProviderId: 'prov-glm',
-      workspacePath: '/Users/me/proj',
-    });
-    assert.ok(bridge.tools.codepilot_memory_recent);
-    assert.ok(bridge.tools.codepilot_memory_search);
-    assert.ok(bridge.tools.codepilot_memory_get);
-    // Phase 5d Phase 2 slice 2e (2026-05-17) — bridge no longer
-    // assembles its own systemPrompt. The presence of the memory
-    // tools in `bridge.tools` is the contract surface here; prompt
-    // text is asserted in `harness-context-compiler.test.ts` against
-    // the compiler output.
-    assert.equal(bridge.systemPrompt, '', 'bridge.systemPrompt must be empty post-slice-2e — compiler owns prompts');
+  it('mounts memory only for explicitly bound assistant sessions, not same-cwd projects', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'memory-scope-'));
+    try {
+      setSetting('assistant_workspace_path', root);
+      const session = createSession('memory scope', undefined, undefined, root);
+      const options = { sessionId: session.id, targetProviderId: 'fixture', workspacePath: root };
+      assert.equal(createCodePilotBuiltinTools(options).tools.codepilot_memory_search, undefined);
+      bindAssistantMemory(session.id);
+      const bridge = createCodePilotBuiltinTools(options);
+      assert.ok(bridge.tools.codepilot_memory_recent);
+      assert.ok(bridge.tools.codepilot_memory_search);
+      assert.ok(bridge.tools.codepilot_memory_get);
+      assert.equal(bridge.systemPrompt, '');
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
   it('bridge mounts the expected tool surface for live capabilities (prompt text is compiler\'s job)', () => {
@@ -241,15 +243,21 @@ describe('CODEPILOT_BUILTIN_TOOL_NAMES — catalog drift guard', () => {
   });
 
   it('lists exactly the tool names the bridge registers (workspace + non-workspace combined)', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'memory-catalog-'));
+    setSetting('assistant_workspace_path', root);
+    const session = createSession('catalog', undefined, undefined, root);
+    bindAssistantMemory(session.id);
+    try {
     const bridge = createCodePilotBuiltinTools({
-      sessionId: 'chat-1',
+      sessionId: session.id,
       targetProviderId: 'prov-glm',
-      workspacePath: '/w',
+      workspacePath: root,
       grokVideoAvailable: true,
     });
     const mounted = new Set(Object.keys(bridge.tools));
     const expected = new Set(CODEPILOT_BUILTIN_TOOL_NAMES);
     assert.deepEqual([...mounted].sort(), [...expected].sort(), 'CODEPILOT_BUILTIN_TOOL_NAMES must list exactly what createCodePilotBuiltinTools mounts when fully unlocked');
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 
   it('toolNames matches Object.keys(tools)', () => {

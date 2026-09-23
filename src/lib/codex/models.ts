@@ -173,11 +173,26 @@ async function fetchModelsFromAppServer(
     nextCursor: string | null;
   };
   try {
-    result = await client.request<typeof result>(
-      'model/list',
-      { includeHidden: false },
-      { signal, timeoutMs },
-    );
+    const data: typeof result.data = [];
+    const cursors = new Set<string>();
+    let cursor: string | undefined;
+    do {
+      const page = await client.request<typeof result>(
+        'model/list',
+        { includeHidden: false, ...(cursor ? { cursor } : {}) },
+        { signal, timeoutMs },
+      );
+      data.push(...(page?.data ?? []));
+      cursor = page?.nextCursor || undefined;
+      if (cursor && (cursors.has(cursor) || cursors.size >= 100)) throw new Error('Invalid model pagination');
+      if (cursor) cursors.add(cursor);
+    } while (cursor);
+    const seen = new Set<string>();
+    result = { data: data.filter(m => {
+      if (seen.has(m.id)) return false;
+      seen.add(m.id);
+      return true;
+    }), nextCursor: null };
   } catch (error) {
     console.warn('[codex.models] request failed', {
       durationMs: Date.now() - startedAt,
@@ -275,6 +290,23 @@ export async function listCodexModels(
   return fetchPromise;
 }
 
+/** Execution-only discovery using the ALREADY running client supplied by the
+ * caller. Passive model feeds must continue using cacheOnly instead. */
+export async function getCodexModelForTurn(
+  modelId: string | undefined,
+  getRunningServer: GetCodexAppServerFn,
+): Promise<CodexModel | undefined> {
+  const find = (models: readonly CodexModel[]) => models.find(m => m.id === modelId || m.model === modelId);
+  const cached = find(await listCodexModels({ cacheOnly: true }));
+  if (cached) return cached;
+  try {
+    return find(await listCodexModels({ timeoutMs: DEFAULT_FETCH_TIMEOUT_MS }, getRunningServer));
+  } catch {
+    // Explicit unknown capability keeps historical image downgrade honest.
+    return undefined;
+  }
+}
+
 /** Drop the in-memory model cache. Call on account change / logout. */
 export function invalidateCodexModelsCache(): void {
   cache = null;
@@ -353,6 +385,7 @@ export async function buildCodexProviderModelGroup(
       upstreamModelId: m.model,
       source: 'api',
       capabilities: {
+        ...(Array.isArray(m.inputModalities) ? { vision: m.inputModalities.includes('image') } : {}),
         reasoning: genericLevels.length > 1,
         supportsEffort: genericLevels.length > 1,
         // Omit entirely (rather than send []) when the app-server declared
@@ -378,4 +411,40 @@ export async function buildCodexProviderModelGroup(
     compat: 'codex_account',
     models: modelOptions,
   };
+}
+
+/** Same calculation as Codex ModelInfo; an estimate, not measured usage. */
+export function codexUsableContextWindow(metadata: {
+  context_window?: unknown; max_context_window?: unknown; effective_context_window_percent?: unknown;
+}, override?: unknown): number | null {
+  const positive = (v: unknown): v is number => typeof v === 'number' && Number.isSafeInteger(v) && v > 0;
+  const maximum = positive(metadata.max_context_window) ? metadata.max_context_window : undefined;
+  const base = positive(override) ? Math.min(override, maximum ?? override)
+    : positive(metadata.context_window) ? metadata.context_window : maximum;
+  const percent = metadata.effective_context_window_percent ?? 95;
+  return base && positive(percent) && percent <= 100 ? Math.floor(base * percent / 100) : null;
+}
+
+/** Called only for an explicit Codex Account send, never by the passive picker.
+ * Read effective project config from the runtime rather than parsing TOML layers.
+ */
+export async function getCodexContextBudget(model: string, cwd?: string, getAppServer: GetCodexAppServerFn = getCodexAppServer): Promise<number | null> {
+  try {
+    return await withTimeout(DEFAULT_FETCH_TIMEOUT_MS, async signal => {
+      const { client } = await getAppServer();
+      const { config } = await client.request<{ config?: { model_context_window?: number | null } }>(
+        'config/read', { includeLayers: false, ...(cwd ? { cwd } : {}) },
+        { signal, timeoutMs: DEFAULT_FETCH_TIMEOUT_MS },
+      );
+      const { readFile } = await import('node:fs/promises');
+      const { join } = await import('node:path');
+      const { resolveCodePilotCodexHome } = await import('./home-isolation');
+      const payload = JSON.parse(await readFile(join(resolveCodePilotCodexHome(), 'models_cache.json'), 'utf8'));
+      const metadata = Array.isArray(payload.models)
+        ? payload.models.find((m: { slug?: string }) => m?.slug === model) : undefined;
+      return metadata ? codexUsableContextWindow(metadata, config?.model_context_window) : null;
+    });
+  } catch {
+    return null; // Caller keeps the conservative channel-specific fallback.
+  }
 }

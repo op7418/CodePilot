@@ -114,6 +114,16 @@ export async function getMessageRoles(page: Page): Promise<string[]> {
   return labels.allInnerTexts();
 }
 
+/** Delete a session created by an E2E case without masking an already-clean row. */
+export async function deleteTestSession(page: Page, sessionId: string | undefined) {
+  if (!sessionId) return;
+  const response = await page.request.delete(
+    `/api/chat/sessions/${encodeURIComponent(sessionId)}`,
+    { timeout: 5_000 },
+  );
+  expect([200, 404]).toContain(response.status());
+}
+
 // ---------------------------------------------------------------------------
 // Common locators
 // ---------------------------------------------------------------------------

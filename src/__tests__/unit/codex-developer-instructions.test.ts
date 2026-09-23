@@ -18,7 +18,7 @@ describe('Codex developer instructions', () => {
     const source = fs.readFileSync(path.resolve(__dirname, '../../lib/codex/runtime.ts'), 'utf8');
     assert.match(
       source,
-      /composeCodexDeveloperInstructions\(\s*options\.systemPrompt,\s*accountDelegationInstructions/,
+      /composeCodexDeveloperInstructions\(\s*\[options\.systemPrompt,\s*codexMcpServers\.codepilot_memory \? MEMORY_SEARCH_SYSTEM_PROMPT : '',\s*codexMcpServers\.codepilot_memory_write \? MEMORY_WRITE_SYSTEM_PROMPT : '',\s*\]\.filter\(Boolean\)\.join\('\\n\\n'\),\s*accountDelegationInstructions/,
     );
     assert.match(source, /developerInstructions\s*\?\s*\{ developerInstructions \}/);
   });

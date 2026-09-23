@@ -5,8 +5,8 @@ import path from 'node:path';
 
 const MAIN = readFileSync(path.resolve(__dirname, '../../../electron/main.ts'), 'utf-8');
 const PRELOAD = readFileSync(path.resolve(__dirname, '../../../electron/preload.ts'), 'utf-8');
-const RENDERER_POLL = readFileSync(
-  path.resolve(__dirname, '../../hooks/useNotificationPoll.ts'),
+const APP_SHELL = readFileSync(
+  path.resolve(__dirname, '../../components/layout/AppShell.tsx'),
   'utf-8',
 );
 
@@ -31,9 +31,9 @@ describe('single native-notification owner contract', () => {
     assert.match(PRELOAD, /notification:renderer-ready/);
   });
 
-  it('renderer only claims renderer-toast deliveries', () => {
-    assert.match(RENDERER_POLL, /channel:\s*['"]renderer-toast['"]/);
-    assert.doesNotMatch(RENDERER_POLL, /electron-native|notification\.show/);
+  it('renderer has no notification-delivery consumer', () => {
+    assert.doesNotMatch(APP_SHELL, /useNotificationPoll|renderer-toast/);
+    assert.doesNotMatch(PRELOAD, /notification:show|\bshow:\s*\(/);
   });
 
   it('the retired electron-bg-native channel remains absent', () => {

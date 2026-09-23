@@ -11,7 +11,16 @@
 
 [English](./README.md) | [日本語](./README_JA.md)
 
-![CodePilot](https://github.com/user-attachments/assets/9750450a-9f6f-49ce-acd4-c623a4e24281)
+![CodePilot](apps/site/public/screenshots/zh/chat-window.webp)
+
+<details>
+<summary>更多当前界面</summary>
+
+| 技能与扩展 | 连接 AI 服务 |
+| --- | --- |
+| ![技能与扩展](apps/site/public/screenshots/zh/plugins-window.webp) | ![连接 AI 服务](apps/site/public/screenshots/zh/providers-window.webp) |
+
+</details>
 
 ---
 

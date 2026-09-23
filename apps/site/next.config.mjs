@@ -7,6 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 /** @type {import('next').NextConfig} */
 const config = {
   reactStrictMode: true,
+  images: { qualities: [75, 90] },
   outputFileTracingRoot: path.resolve(__dirname, '../../'),
 };
 

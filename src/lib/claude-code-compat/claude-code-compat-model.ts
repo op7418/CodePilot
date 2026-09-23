@@ -1,3 +1,5 @@
+import { isTokenDanceBaseUrl } from '../tokendance';
+import { tokenDanceFetch } from '../tokendance-fetch';
 /**
  * claude-code-compat-model.ts — LanguageModelV3 implementation for Claude Code-compatible proxies.
  *
@@ -56,7 +58,7 @@ export class ClaudeCodeCompatModel implements LanguageModelV3 {
     const body = buildBody(options, this.config);
     const url = buildMessagesUrl(this.config.baseUrl);
 
-    const response = await fetch(url, {
+    const response = await (isTokenDanceBaseUrl(this.config.baseUrl) ? tokenDanceFetch : fetch)(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),
@@ -145,7 +147,7 @@ export class ClaudeCodeCompatModel implements LanguageModelV3 {
 
     const url = buildMessagesUrl(this.config.baseUrl);
 
-    const response = await fetch(url, {
+    const response = await (isTokenDanceBaseUrl(this.config.baseUrl) ? tokenDanceFetch : fetch)(url, {
       method: 'POST',
       headers,
       body: JSON.stringify(body),

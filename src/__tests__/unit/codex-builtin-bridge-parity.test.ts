@@ -24,6 +24,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { createCodePilotBuiltinTools } from '@/lib/codex/proxy/builtin-bridge';
 import {
   subscribeBuiltinEvents,
@@ -34,6 +35,8 @@ import {
   getSessionTasks,
   removeSessionTask,
 } from '@/lib/task-scheduler';
+import { createSession, setSetting } from '@/lib/db';
+import { bindAssistantMemory } from '@/lib/memory-binding';
 import type { RuntimeRunEvent } from '@/lib/runtime/contract';
 
 const BRIDGE_SRC = fs.readFileSync(
@@ -290,26 +293,23 @@ describe('codepilot_cancel_task — tries session-only first before falling thro
 // ─────────────────────────────────────────────────────────────────────
 
 describe('codepilot_memory_search — schema-promised filters now apply', () => {
-  it('source-pin: file_type filter branch present (mirrors memory-search-mcp.ts logic)', () => {
-    // The bridge extracts `ft` from `input.file_type` so TypeScript
-    // narrows the union — pin on `=== 'daily'` etc. without
-    // hard-coding the variable name. Three branches in total.
-    assert.match(BRIDGE_SRC, /=== 'daily'/);
-    assert.match(BRIDGE_SRC, /=== 'longterm'/);
-    assert.match(BRIDGE_SRC, /=== 'notes'/);
-    // Plus the assignment from input — guards against accidentally
-    // dropping the schema parameter.
-    assert.match(BRIDGE_SRC, /input\.file_type/);
-  });
-
-  it('source-pin: tags filter branch loads workspace-indexer manifest', () => {
-    // Loose check: the bridge must reach loadManifest when tags are
-    // present. The handler swallows manifest-unavailable errors, so
-    // we can't trivially assert from runtime — the source pin is the
-    // cheapest guard against accidentally regressing back to "ignore
-    // tags silently".
-    assert.match(BRIDGE_SRC, /loadManifest/);
-    assert.match(BRIDGE_SRC, /entryTagsLower/);
+  it('queries the shared memory service with real type and tag filtering', async () => {
+    const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'codex-memory-filter-'));
+    try {
+      fs.mkdirSync(path.join(workspacePath, 'memory/daily'), { recursive: true });
+      fs.writeFileSync(path.join(workspacePath, 'memory/daily/2026-09-21.md'), '---\ntags: [chosen]\n---\n# Meeting\ncerulean');
+      fs.writeFileSync(path.join(workspacePath, 'random.md'), '# cerulean\nwrong scope');
+      setSetting('assistant_workspace_path', workspacePath);
+      const session = createSession('memory-filter', undefined, undefined, workspacePath);
+      bindAssistantMemory(session.id);
+      const bridge = createCodePilotBuiltinTools({ sessionId: session.id, targetProviderId: 'fixture', workspacePath });
+      const execute = bridge.tools.codepilot_memory_search.execute as unknown as (args: unknown, options: unknown) => Promise<string>;
+      const result = await execute({ query: 'cerulean', file_type: 'daily', tags: ['chosen'], limit: 1 }, {});
+      assert.match(result, /2026-09-21/);
+      assert.doesNotMatch(result, /random\.md/);
+    } finally {
+      fs.rmSync(workspacePath, { recursive: true, force: true });
+    }
   });
 });
 

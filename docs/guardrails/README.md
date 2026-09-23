@@ -18,9 +18,11 @@
 - [`PermissionBoundary.md`](./PermissionBoundary.md) — `mutationLevel`、子 Agent 权限 ceiling / run 归属、跨 Runtime reviewer 一致性。改权限或 delegation 前必读
 - [`StreamSession.md`](./StreamSession.md) — 双入口 stream、snapshot 生命周期、子 Agent tool id / requested-effective / 卡片分流契约。改 `claude-client.ts` / tool stream / Chat 消息渲染前必读
 - [`HarnessHome.md`](./HarnessHome.md) — 用户文件事实源、opaque adapter、单写者/journal/manifest-last、SecretRef 与 evidence-only Taste 契约。改 `src/lib/harness-home/**`、接新 Harness 或 canonical projection 前必读
+- [`Memory.md`](./Memory.md) — Runtime 中立记忆、读写权限、来源/CAS/撤销、显式绑定与成功回合抽取；改 memory 服务、工具或管理界面前必读
 - [`AssistantWorkspace.md`](./AssistantWorkspace.md) — 默认助理 no-touch/CAS、`instructions.md` 中立规则、心跳 desired/actual 分离与系统通知纵向闭环。改助理目录、心跳或通知设置前必读
 - [`SentryTelemetry.md`](./SentryTelemetry.md) — official-stable enable、main-only Release Health、default-deny sanitizer、normalized grouping、provider/in-band stream terminal anti-double-capture 与 private source-map 发布契约。改三层 Sentry init、capture、CI map 上传或打包入口前必读
 - [`Updater.md`](./Updater.md) — Main-owned updater、stable feed/channel、签名/metadata 前置、活动任务保护、窄 IPC 与手工 fallback。改 updater、preload bridge、更新 UI 或 release feed 前必读
+- [`CliMaintenance.md`](./CliMaintenance.md) — Claude/Codex selected-target 渠道证明、same-channel latest、Main-owned 一键更新、provider lease、进程树回收与 app updater/quit 双向互斥。改 CLI 检测、更新入口或 Runtime spawn 前必读
 
 ### Stub（尚未被真实改动激活的高风险入口；首次 on-touch 时由实施 Agent 填充）
 

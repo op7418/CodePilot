@@ -18,7 +18,7 @@ export function FeaturesSection({
         {/* Feature cards — no border, larger description, larger icon without bg */}
         <div className="mt-14 grid gap-x-12 gap-y-10 sm:grid-cols-2">
           {content.items.map((item) => (
-            <div key={item.title} className="group">
+            <div key={item.title} className="group min-w-0">
               <CapabilityIcon
                 name={item.icon}
                 className="h-7 w-7 text-foreground"
@@ -31,7 +31,7 @@ export function FeaturesSection({
                   </span>
                 )}
               </h3>
-              <p className="mt-2 text-[17px] font-semibold leading-relaxed text-muted-foreground">
+              <p className="mt-2 max-w-[18rem] break-words text-balance text-[17px] font-semibold leading-relaxed text-muted-foreground">
                 {item.description}
               </p>
             </div>

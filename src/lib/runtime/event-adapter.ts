@@ -108,7 +108,7 @@ export function makeFileChanged(
 
 export function makeUsageUpdated(
   base: BaseInput,
-  args: { inputTokens?: number; outputTokens?: number; contextWindow?: number },
+  args: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number; contextWindow?: number },
 ): Extract<RuntimeRunEvent, { type: 'usage_updated' }> {
   return { type: 'usage_updated', ...base, ...args };
 }

@@ -61,7 +61,7 @@ function assistantMessages(sessionId: string) {
 }
 
 describe('bridge consumeStream session-level write owner gate (Phase 3 E)', () => {
-  it('happy path: the lock owner persists assistant message + sdk_session_id + model + tasks', async () => {
+  it('happy path: the lock owner persists assistant message + sdk_session_id + tasks without rewriting the atomic route model', async () => {
     const sid = createSession('bridge-owner-happy').id;
     const lockA = 'bridgeA-happy';
     assert.equal(acquireSessionLock(sid, lockA, 'bridge-test-owner', 600), true, 'acquire should succeed');
@@ -84,7 +84,7 @@ describe('bridge consumeStream session-level write owner gate (Phase 3 E)', () =
     // Session-level state written by the owner.
     const row = getSession(sid)!;
     assert.equal(row.sdk_session_id, 'sdk-happy', 'owner wrote sdk_session_id');
-    assert.equal(row.model, 'claude-happy', 'owner wrote model');
+    assert.equal(row.model, '', 'Runtime-reported model is observational and cannot rewrite the atomic route');
 
     // SDK tasks synced by the owner.
     const tasks = getTasksBySession(sid);

@@ -1,6 +1,6 @@
 'use client';
 
-import Image from 'next/image';
+import { BrandLogo } from '@/components/BrandLogo';
 import Link from 'next/link';
 import { useRouter, usePathname } from 'next/navigation';
 import { Globe, Github, Search } from 'lucide-react';
@@ -37,13 +37,7 @@ export function DocsTopNav({ locale }: { locale: string }) {
       <div className="flex h-16 items-center justify-between px-6 lg:px-10">
         {/* Left: Logo + Product name */}
         <Link href={`/${locale === 'en' ? '' : locale}`} className="flex items-center gap-3">
-          <Image
-            src="/logo.png"
-            alt="CodePilot"
-            width={30}
-            height={30}
-            className="h-[30px] w-[30px]"
-          />
+          <BrandLogo className="h-[30px] w-[30px]" />
           <span className="text-lg font-bold">CodePilot</span>
         </Link>
 

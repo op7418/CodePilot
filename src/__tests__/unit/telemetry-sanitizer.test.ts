@@ -45,6 +45,7 @@ describe('telemetry default-deny sanitizer', () => {
     assert.doesNotMatch(JSON.stringify(event.user), /installation-id|person@example\.com/);
     assert.equal('server_name' in event, false);
     assert.doesNotMatch(event.message, /secret-token|api\.example|alice/i);
+    assert.match(event.message, /\[local-path\]/);
     assert.deepEqual(event.request, { method: 'POST', url: '/api/chat/sessions/[id]' });
     assert.deepEqual(event.tags, {
       'app.channel': 'stable',
@@ -83,6 +84,7 @@ describe('telemetry default-deny sanitizer', () => {
     }, { layer: 'next_server', channel: 'stable' });
 
     const frame = event.exception.values[0].stacktrace.frames[0];
+    assert.equal(event.exception.values[0].value, 'failed at [local-path]');
     assert.equal(frame.filename, '/Users/<user>/project/.next/server/chunk.js');
     assert.equal(frame.abs_path, 'C:\\Users\\<user>\\app\\.next\\server\\chunk.js');
     assert.equal(frame.module, 'C:\\Users\\<user>\\app\\.next\\server\\chunk.js');
@@ -94,6 +96,19 @@ describe('telemetry default-deny sanitizer', () => {
     assert.equal(event.debug_meta.images[0].debug_file, frame.abs_path);
     assert.equal(event.tags.needs_classification, 'yes');
     assert.deepEqual(event.fingerprint, ['normalized-v1', 'empty_response']);
+  });
+
+  it('removes the entire user-directory suffix, including spaces and multilingual names', () => {
+    const event = sanitizeTelemetryEvent({
+      message: 'File not found: /Users/alice/Desktop/动画 目录/private-project/input.png',
+      exception: { values: [{
+        value: 'Copy failed: C:\\Users\\Alice\\Desktop\\客户 资料\\secret.png',
+      }] },
+    }, { layer: 'next_server', channel: 'stable' });
+
+    assert.equal(event.message, 'File not found: [local-path]');
+    assert.equal(event.exception.values[0].value, 'Copy failed: [local-path]');
+    assert.doesNotMatch(JSON.stringify(event), /动画|private-project|客户|secret\.png|Alice|alice/);
   });
 
   it('serializes the null IP tombstone through a real Node Sentry transport', async () => {

@@ -1,6 +1,8 @@
 "use client";
 
 import ReactMarkdown from "react-markdown";
+import rehypeRaw from "rehype-raw";
+import rehypeSanitize from "rehype-sanitize";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import {
@@ -15,6 +17,10 @@ import { useUpdate } from "@/hooks/useUpdate";
 import { useTranslation } from "@/hooks/useTranslation";
 import type { TranslationKey } from '@/i18n';
 import { releasePlatformLabel } from '@/lib/update-release';
+import {
+  releaseNotesSanitizeSchema,
+  releaseNotesUrlTransform,
+} from '@/lib/release-notes-rendering';
 
 export function UpdateDialog() {
   const { updateInfo, showDialog, dismissUpdate, downloadUpdate, quitAndInstall } = useUpdate();
@@ -50,6 +56,11 @@ export function UpdateDialog() {
           <div className="max-h-60 overflow-auto rounded-md border border-border/50 bg-muted/30 p-3 text-sm">
             <ReactMarkdown
               remarkPlugins={[remarkGfm]}
+              rehypePlugins={[
+                rehypeRaw,
+                [rehypeSanitize, releaseNotesSanitizeSchema],
+              ]}
+              urlTransform={releaseNotesUrlTransform}
               components={{
                 h1: ({ children }) => <h3 className="mb-1 text-sm font-semibold">{children}</h3>,
                 h2: ({ children }) => <h3 className="mb-1 text-sm font-semibold">{children}</h3>,

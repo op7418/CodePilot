@@ -1,5 +1,7 @@
 # Composer 模型路线、能力参数与权限入口收口
 
+> Runtime ownership（2026-09-01）：本计划继续负责 Picker 左右栏、收藏、搜索、能力菜单与 footer 布局；聊天开始后的 Runtime owner、route mutation 服务端规则、legacy empty pin 恢复和跨 Runtime handoff 由 [runtime-thread-ownership-and-handoff.md](runtime-thread-ownership-and-handoff.md) 负责。两份计划不得各自实现一套切换 resolver。
+
 > 创建时间：2026-08-25
 > 最后更新：2026-08-26
 > 状态：🚧 Code/UI/迁移与自动化验证已完成；三 Runtime 真实 effective-wire smoke 尚未执行，Tier 2 未关闭

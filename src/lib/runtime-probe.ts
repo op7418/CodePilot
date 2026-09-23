@@ -5,6 +5,7 @@ import {
   type CodexSandboxReadiness,
 } from '@/lib/codex/sandbox-readiness';
 import { resolvePathIdentity, type PathIdentity } from '@/lib/path-identity';
+import { isCodexDesktopManagedPath } from '@/lib/cli-install-channel';
 
 export type RuntimeProbeState = 'not_run' | 'passed' | 'failed';
 export type RuntimeCandidateSource =
@@ -67,6 +68,7 @@ function defaultCwd(requested?: string, source = 'server_process') {
 export function inferRuntimeCandidateSource(
   binary: string | undefined,
   runtime: RuntimeProbeSnapshot['runtime'],
+  platform: NodeJS.Platform = process.platform,
 ): RuntimeCandidateSource {
   if (runtime === 'native') return 'builtin';
   if (!binary) return 'unknown';
@@ -74,10 +76,10 @@ export function inferRuntimeCandidateSource(
   if (runtime === 'codex' && process.env.CODEX_BIN && path.resolve(process.env.CODEX_BIN) === path.resolve(binary)) {
     return 'override';
   }
-  if (normalized.includes('\\program files\\windowsapps\\')) return 'desktop_bundle';
   if (normalized.includes('\\microsoft\\windowsapps\\')) return 'alias';
+  if (runtime === 'codex' && isCodexDesktopManagedPath(binary, platform)) return 'desktop_bundle';
   if (/\\programs\\openai\\codex\\bin\\|\\\.codex\\bin\\|\\\.local\\bin\\/.test(normalized)) return 'standalone';
-  if (/\.app\\contents\\resources\\(?:codex|claude)$/.test(normalized)) return 'desktop_bundle';
+  if (/\.app\\contents\\resources\\claude$/.test(normalized)) return 'desktop_bundle';
   return 'path';
 }
 
@@ -161,7 +163,9 @@ export function buildCodexRuntimeProbe(
   const snapshot: RuntimeProbeSnapshot = {
     runtime: 'codex',
     platform: process.platform,
-    candidateSource: inferRuntimeCandidateSource(binary, 'codex'),
+    candidateSource: availability.kind === 'desktop_only'
+      ? 'desktop_bundle'
+      : inferRuntimeCandidateSource(binary, 'codex'),
     ...(availability.kind === 'desktop_only' ? { installChannel: 'desktop' } : {}),
     binary: {
       ...(binary ? { displayPath: binary } : {}),

@@ -1,8 +1,9 @@
 import { NextRequest, NextResponse } from 'next/server';
 import path from 'path';
 import * as gitService from '@/lib/git/service';
-import { getSession, createSession } from '@/lib/db';
+import { getSession, createSession, type CreateSessionExecutionBinding } from '@/lib/db';
 import { normalizePermissionProfile, type SessionPermissionProfile } from '@/lib/permission/profile';
+import { isRuntimeId } from '@/lib/runtime/runtime-id';
 
 export async function POST(req: NextRequest) {
   try {
@@ -27,6 +28,7 @@ export async function POST(req: NextRequest) {
     let mode = 'code';
     let providerId = '';
     let permissionProfile: SessionPermissionProfile = 'default';
+    let executionBinding: CreateSessionExecutionBinding | undefined;
 
     if (sourceSessionId) {
       const source = getSession(sourceSessionId);
@@ -36,6 +38,11 @@ export async function POST(req: NextRequest) {
         mode = source.mode || 'code';
         providerId = source.provider_id || '';
         permissionProfile = normalizePermissionProfile(source.permission_profile);
+        if (isRuntimeId(source.runtime_pin)) {
+          executionBinding = source.runtime_binding_state === 'bound' && model && providerId
+            ? { runtimeId: source.runtime_pin, state: 'bound', source: 'inherited_owner' }
+            : { runtimeId: source.runtime_pin, state: 'unbound' };
+        }
       }
     }
 
@@ -51,6 +58,7 @@ export async function POST(req: NextRequest) {
       // The branch name is the point of this session — a fallback from the
       // first message would bury which worktree it belongs to.
       'system',
+      executionBinding,
     );
 
     return NextResponse.json({

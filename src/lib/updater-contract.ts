@@ -30,6 +30,7 @@ export type UpdaterErrorCode =
   | 'install_failed'
   | 'active_work'
   | 'activity_unavailable'
+  | 'cli_update_running'
   | 'internal';
 
 export interface UpdaterSnapshot {
@@ -129,6 +130,34 @@ export function updaterInitialDelay(randomValue: number): number {
 export function updaterRetryDelay(consecutiveFailures: number): number {
   const exponent = Math.max(0, Math.min(4, Math.floor(consecutiveFailures) - 1));
   return Math.min(60 * 60 * 1000, 5 * 60 * 1000 * (2 ** exponent));
+}
+
+/**
+ * Create the one-shot gate shared by updater Promise and emitter error paths.
+ * A real retry first leaves the error phase, so phase=error means only that
+ * this operation's equivalent failure has already been recorded.
+ */
+export function createUpdaterFailureReporter(
+  getPhase: () => UpdaterPhase,
+  recordError: (error: unknown) => void,
+): (error: unknown) => boolean {
+  return (error: unknown): boolean => {
+    if (getPhase() === 'error') return false;
+    recordError(error);
+    return true;
+  };
+}
+
+/** Attach a terminal rejection handler synchronously to an auto-download. */
+export async function consumeUpdaterDownloadPromise(
+  promise: Promise<unknown>,
+  reportError: (error: unknown) => unknown,
+): Promise<void> {
+  try {
+    await promise;
+  } catch (error) {
+    reportError(error);
+  }
 }
 
 export function boundedUpdateText(value: unknown, maxLength = 20_000): string {

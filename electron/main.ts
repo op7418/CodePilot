@@ -5,8 +5,11 @@ import { join } from 'path';
 import { configureElectronMainIntegrations, resolveTelemetryConfig, TELEMETRY_IGNORE_ERRORS } from '../src/lib/telemetry/contract';
 import { sanitizeTelemetryBreadcrumb, sanitizeTelemetryEvent } from '../src/lib/telemetry/sanitize';
 import { createTelemetrySmokeError, telemetrySmokeEnabled } from '../src/lib/telemetry/smoke';
-import { buildUtilityProcessFailureEvent } from '../src/lib/telemetry/utility-process-failure';
+import {
+  buildUtilityProcessFailureEvent,
+} from '../src/lib/telemetry/utility-process-failure';
 import { resolveCodePilotDataDir } from '../src/lib/codepilot-data-dir';
+import { translate, type Locale } from '../src/i18n';
 
 const codePilotDataDir = resolveCodePilotDataDir();
 
@@ -142,6 +145,14 @@ import {
 } from '../src/lib/database-recovery';
 import { disposeAutoUpdaterTimers, initAutoUpdater, setUpdaterWindow } from './updater';
 import {
+  cancelCliMaintenanceAndWait,
+  getCliMaintenanceBootstrapLease,
+  initCliMaintenance,
+  isCliMaintenanceRunning,
+  reconcileCliMaintenanceAfterServerReady,
+  setCliMaintenanceWindow,
+} from './cli-maintenance';
+import {
   BROWSER_WEB_PREFERENCES,
   deriveBrowserPartition,
   isAllowedBrowserGuestUrl,
@@ -226,6 +237,8 @@ let macosKeychainEnvironment: Record<string, string> = {};
 let isQuitting = false;
 let appQuitTeardownStarted = false;
 let updaterInstallLifecycleArmed = false;
+let cliMaintenanceQuitCoordinationInFlight = false;
+let allowQuitDuringCliMaintenance = false;
 let tray: Tray | null = null;
 let nativeDeliveryTimer: ReturnType<typeof setInterval> | null = null;
 let nativeDeliveryPolling = false;
@@ -472,6 +485,14 @@ function isTrustedUpdaterSender(event: Electron.IpcMainInvokeEvent): boolean {
 
 function initializeAutoUpdaterForWindow(): void {
   if (!mainWindow || mainWindow.isDestroyed()) return;
+  initCliMaintenance({
+    win: mainWindow,
+    platform: process.platform,
+    isTrustedSender: isTrustedUpdaterSender,
+    getServerBaseUrl: () => serverPort ? `http://127.0.0.1:${serverPort}` : null,
+    getActiveWork: getActiveUpdateWork,
+    isAppQuitting: () => appQuitTeardownStarted || serverLifecyclePhase === 'quitting',
+  });
   initAutoUpdater({
     win: mainWindow,
     currentVersion: app.getVersion(),
@@ -625,8 +646,57 @@ function showMainWindow(): void {
  * interceptor. Triggered by the tray "Quit CodePilot" menu item.
  */
 function quitApp(): void {
+  if (isCliMaintenanceRunning()) {
+    // Let before-quit keep the app alive and present the bounded choice. Do
+    // not raise isQuitting yet or close-to-hide and recovery code will assume
+    // teardown has already committed.
+    app.quit();
+    return;
+  }
   isQuitting = true;
   app.quit();
+}
+
+async function coordinateQuitDuringCliMaintenance(): Promise<void> {
+  if (cliMaintenanceQuitCoordinationInFlight) return;
+  cliMaintenanceQuitCoordinationInFlight = true;
+  const isZh = (() => {
+    try { return app.getLocale().toLowerCase().startsWith('zh'); } catch { return false; }
+  })();
+  const locale: Locale = isZh ? 'zh' : 'en';
+  try {
+    const result = await dialog.showMessageBox(mainWindow ?? undefined, {
+      type: 'warning',
+      title: translate(locale, 'cliMaintenance.quit.title'),
+      message: translate(locale, 'cliMaintenance.quit.message'),
+      detail: translate(locale, 'cliMaintenance.quit.detail'),
+      buttons: [
+        translate(locale, 'cliMaintenance.quit.keepWaiting'),
+        translate(locale, 'cliMaintenance.quit.cancelAndQuit'),
+        translate(locale, 'cliMaintenance.quit.forceQuit'),
+      ],
+      defaultId: 0,
+      cancelId: 0,
+      noLink: true,
+    });
+    if (result.response === 0) return;
+    const cleaned = await cancelCliMaintenanceAndWait(result.response === 1 ? 10_000 : 2_000);
+    if (result.response === 1 && !cleaned) {
+      await dialog.showMessageBox(mainWindow ?? undefined, {
+        type: 'warning',
+        title: translate(locale, 'cliMaintenance.quit.cleanupTitle'),
+        message: translate(locale, 'cliMaintenance.quit.cleanupMessage'),
+        buttons: [translate(locale, 'cliMaintenance.quit.ok')],
+        noLink: true,
+      });
+      return;
+    }
+    allowQuitDuringCliMaintenance = true;
+    isQuitting = true;
+    app.quit();
+  } finally {
+    cliMaintenanceQuitCoordinationInFlight = false;
+  }
 }
 
 /**
@@ -1360,6 +1430,7 @@ async function runServerRecovery(initialGeneration: number, initialReason: strin
       serverProcess = recoveryChild;
       failedGeneration = activeServerGeneration;
       await waitForServer(serverPort);
+      await reconcileCliMaintenanceAfterServerReady();
       console.log('[server-supervisor] recovery healthy', {
         generation: activeServerGeneration,
         safeMode: true,
@@ -1482,6 +1553,7 @@ function startServer(port: number, recoverySafeMode = false): Electron.UtilityPr
 
   const home = os.homedir();
   const constructedPath = getExpandedShellPath();
+  const cliMaintenanceBootstrap = getCliMaintenanceBootstrapLease();
 
   const env = buildProxySafeEnvironment({
     // Ensure user shell env vars override inherited values (especially API
@@ -1506,6 +1578,10 @@ function startServer(port: number, recoverySafeMode = false): Electron.UtilityPr
       PATH: constructedPath,
       CODEPILOT_SERVER_GENERATION: String(generation),
       CODEPILOT_RECOVERY_SAFE_MODE: recoverySafeMode ? '1' : '0',
+      ...(cliMaintenanceBootstrap ? {
+        CODEPILOT_CLI_MAINTENANCE_PROVIDER: cliMaintenanceBootstrap.provider,
+        CODEPILOT_CLI_MAINTENANCE_LEASE_ID: cliMaintenanceBootstrap.leaseId,
+      } : {}),
     },
     platform: process.platform,
   }) as Record<string, string>;
@@ -1527,11 +1603,11 @@ function startServer(port: number, recoverySafeMode = false): Electron.UtilityPr
       || isQuitting
       || (serverLifecyclePhase !== 'running' && !recoverySafeMode)
     ) return;
-    childFailureReported = true;
     const system = process.getSystemMemoryInfo();
-    Sentry.captureEvent(buildUtilityProcessFailureEvent({
+    const event = buildUtilityProcessFailureEvent({
       reason,
       exitCode,
+      platform: process.platform,
       utilityRssBytes: lastServerRuntimeMetrics?.rssBytes,
       utilityHeapUsedBytes: lastServerRuntimeMetrics?.heapUsedBytes,
       utilityHeapTotalBytes: lastServerRuntimeMetrics?.heapTotalBytes,
@@ -1543,7 +1619,10 @@ function startServer(port: number, recoverySafeMode = false): Electron.UtilityPr
       hostAvailableKb: system.available,
       hostSwapTotalKb: system.swapTotal,
       hostSwapFreeKb: system.swapFree,
-    }));
+    });
+    if (!event) return;
+    childFailureReported = true;
+    Sentry.captureEvent(event);
   };
 
   child.on('message', (rawMessage) => {
@@ -1659,10 +1738,10 @@ function startServer(port: number, recoverySafeMode = false): Electron.UtilityPr
     serverExited = true;
     serverExitCode = code;
     if (serverProcess === child) serverProcess = null;
-    reportUtilityFailureOnce(
-      childFailureReason === 'server_exit' ? 'unexpected_exit' : childFailureReason,
-      code,
-    );
+    const telemetryReason = childFailureReason === 'server_exit'
+      ? 'unexpected_exit'
+      : childFailureReason;
+    reportUtilityFailureOnce(telemetryReason, code);
     if (!isDev && !isQuitting && serverLifecyclePhase === 'running') {
       beginServerRecovery(generation, reason);
     }
@@ -1868,6 +1947,7 @@ function createWindow(url?: string) {
 
   mainWindow = new BrowserWindow(windowOptions);
   setUpdaterWindow(mainWindow);
+  setCliMaintenanceWindow(mainWindow);
   attachRendererEditingContextMenu(mainWindow);
   mainWindow.webContents.on('will-attach-webview', (event, webPreferences, params) => {
     const partition = typeof params.partition === 'string' ? params.partition : '';
@@ -3715,6 +3795,11 @@ nativeAutoUpdater.on('before-quit-for-update', () => {
 });
 
 app.on('before-quit', async (e) => {
+  if (isCliMaintenanceRunning() && !allowQuitDuringCliMaintenance) {
+    e.preventDefault();
+    void coordinateQuitDuringCliMaintenance();
+    return;
+  }
   // First firing: tear down resources, then re-emit quit. Any subsequent
   // firing (after we re-call app.quit() below) just proceeds to exit. The
   // `isQuitting` flag also tells the main window's `close` handler to let

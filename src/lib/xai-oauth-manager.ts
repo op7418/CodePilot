@@ -2,6 +2,7 @@
 import { createServer, type Server } from 'node:http';
 import { getSetting, setSetting } from './db';
 import { envProxyFetch } from './env-proxy-fetch';
+import { ProviderTransportError } from './provider-transport-error';
 import {
   XAI_GROK_BUILD_API_BASE_URL,
   XAI_GROK_BUILD_AUTHENTICATE_RESPONSE,
@@ -257,7 +258,7 @@ export function createXaiOAuthFetch(
       throw new Error('Grok Build OAuth refused to send credentials to a non-Grok Build endpoint.');
     }
     const credentials = await ensureXaiTokenFresh();
-    if (!credentials) throw new Error('xAI OAuth credentials are unavailable. Reconnect in Settings or use xAI API Key.');
+    if (!credentials) throw new ProviderTransportError('PROVIDER_OAUTH_EXPIRED', 'xAI OAuth credentials are unavailable. Reconnect in Settings or use xAI API Key.');
     const headers = new Headers(input instanceof Request ? input.headers : undefined);
     new Headers(init?.headers).forEach((value, key) => headers.set(key, value));
     headers.delete('authorization');
@@ -317,7 +318,7 @@ export function createXaiOAuthMediaFetch(
 
     const credentials = await ensureXaiTokenFresh();
     if (!credentials) {
-      throw new Error('xAI OAuth credentials are unavailable. Reconnect Grok Build in Settings.');
+      throw new ProviderTransportError('PROVIDER_OAUTH_EXPIRED', 'xAI OAuth credentials are unavailable. Reconnect Grok Build in Settings.');
     }
 
     const headers = new Headers(input instanceof Request ? input.headers : undefined);

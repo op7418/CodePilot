@@ -16,75 +16,75 @@
 }
 
 :root {
-  --fd-primary: 217 91% 50%;
-  --fd-background: 225 15% 97%;
+  --fd-primary: 0 0% 9%;
+  --fd-background: 0 0% 100%;
   /* Rainbow button colors */
   --color-1: 0 100% 63%;
   --color-2: 270 100% 63%;
   --color-3: 210 100% 63%;
   --color-4: 195 100% 63%;
   --color-5: 90 100% 63%;
-  /* Match main CodePilot app's stone neutrals, with blue primary for brand */
+  /* Neutral surfaces; download CTAs retain the signature rainbow glow. */
   --background: oklch(1 0 0);
-  --foreground: oklch(0.147 0.004 49.25);
+  --foreground: oklch(0.18 0 0);
   --card: oklch(1 0 0);
-  --card-foreground: oklch(0.147 0.004 49.25);
+  --card-foreground: oklch(0.18 0 0);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.147 0.004 49.25);
-  --primary: hsl(217 91% 50%);
+  --popover-foreground: oklch(0.18 0 0);
+  --primary: hsl(0 0% 9%);
   --primary-foreground: hsl(0 0% 100%);
-  --secondary: oklch(0.97 0.001 106.424);
-  --secondary-foreground: oklch(0.216 0.006 56.043);
-  --muted: oklch(0.97 0.001 106.424);
-  --muted-foreground: oklch(0.553 0.013 58.071);
-  --accent: oklch(0.97 0.001 106.424);
-  --accent-foreground: oklch(0.216 0.006 56.043);
+  --secondary: oklch(0.97 0 0);
+  --secondary-foreground: oklch(0.24 0 0);
+  --muted: oklch(0.97 0 0);
+  --muted-foreground: oklch(0.52 0 0);
+  --accent: oklch(0.97 0 0);
+  --accent-foreground: oklch(0.24 0 0);
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.923 0.003 48.717);
-  --input: oklch(0.923 0.003 48.717);
-  --ring: oklch(0.546 0.245 262.881);
+  --border: oklch(0.91 0 0);
+  --input: oklch(0.91 0 0);
+  --ring: oklch(0.4 0 0);
   --radius: 0.75rem;
-  --sidebar: oklch(0.985 0.001 106.423);
-  --sidebar-foreground: oklch(0.147 0.004 49.25);
-  --sidebar-primary: oklch(0.546 0.245 262.881);
-  --sidebar-primary-foreground: oklch(0.985 0.001 106.423);
-  --sidebar-accent: oklch(0.97 0.001 106.424);
-  --sidebar-accent-foreground: oklch(0.216 0.006 56.043);
-  --sidebar-border: oklch(0.923 0.003 48.717);
-  --sidebar-ring: oklch(0.546 0.245 262.881);
+  --sidebar: oklch(0.985 0 0);
+  --sidebar-foreground: oklch(0.18 0 0);
+  --sidebar-primary: oklch(0.4 0 0);
+  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-accent: oklch(0.97 0 0);
+  --sidebar-accent-foreground: oklch(0.24 0 0);
+  --sidebar-border: oklch(0.91 0 0);
+  --sidebar-ring: oklch(0.4 0 0);
 }
 
 .dark {
-  --fd-primary: 217 80% 62%;
-  --fd-background: 222 15% 6%;
+  --fd-primary: 0 0% 96%;
+  --fd-background: 0 0% 9%;
 
-  /* Match main CodePilot app's dark stone palette */
-  --background: oklch(0.147 0.004 49.25);
-  --foreground: oklch(0.985 0.001 106.423);
-  --card: oklch(0.147 0.004 49.25);
-  --card-foreground: oklch(0.985 0.001 106.423);
-  --popover: oklch(0.147 0.004 49.25);
-  --popover-foreground: oklch(0.985 0.001 106.423);
-  --primary: oklch(0.623 0.214 259.815);
-  --primary-foreground: oklch(0.985 0.001 106.423);
-  --secondary: oklch(0.268 0.007 34.298);
-  --secondary-foreground: oklch(0.985 0.001 106.423);
-  --muted: oklch(0.268 0.007 34.298);
-  --muted-foreground: oklch(0.553 0.013 58.071);
-  --accent: oklch(0.268 0.007 34.298);
-  --accent-foreground: oklch(0.985 0.001 106.423);
+  /* Dark mode uses the same neutral palette. */
+  --background: oklch(0.18 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.18 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.18 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.9 0 0);
+  --primary-foreground: oklch(0.18 0 0);
+  --secondary: oklch(0.26 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.26 0 0);
+  --muted-foreground: oklch(0.72 0 0);
+  --accent: oklch(0.26 0 0);
+  --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.623 0.214 259.815);
-  --sidebar: oklch(0.216 0.006 56.043);
-  --sidebar-foreground: oklch(0.985 0.001 106.423);
-  --sidebar-primary: oklch(0.623 0.214 259.815);
-  --sidebar-primary-foreground: oklch(0.985 0.001 106.423);
-  --sidebar-accent: oklch(0.268 0.007 34.298);
-  --sidebar-accent-foreground: oklch(0.985 0.001 106.423);
+  --ring: oklch(0.9 0 0);
+  --sidebar: oklch(0.24 0 0);
+  --sidebar-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.9 0 0);
+  --sidebar-primary-foreground: oklch(0.18 0 0);
+  --sidebar-accent: oklch(0.26 0 0);
+  --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.623 0.214 259.815);
+  --sidebar-ring: oklch(0.9 0 0);
 }
 
 /* Tight letter-spacing on headings (Inter style) */
@@ -194,3 +194,82 @@ h1, h2, h3 {
   font-weight: 500;
 }
 
+
+/* GitHub release content keeps its hierarchy inside the scrollable dialog. */
+.release-prose { font-size: 1rem; line-height: 1.75; overflow-wrap: anywhere; }
+.release-prose > :first-child { margin-top: 0; }
+.release-prose :is(h1, h2, h3, h4, h5, h6) { margin: 1.75em 0 0.65em; font-weight: 650; line-height: 1.35; color: var(--foreground); }
+.release-prose h1 { font-size: 1.5rem; }
+.release-prose h2 { font-size: 1.25rem; }
+.release-prose h3 { font-size: 1.125rem; }
+.release-prose :is(p, ul, ol, pre, blockquote, table) { margin: 0.85em 0; }
+.release-prose :is(ul, ol) { padding-left: 1.5em; }
+.release-prose ul { list-style-type: disc; }
+.release-prose ol { list-style-type: decimal; }
+.release-prose li { margin: 0.35em 0; }
+.release-prose li > :is(ul, ol) { margin: 0.25em 0; }
+.release-prose a { text-decoration: underline; text-underline-offset: 3px; }
+.release-prose a:hover { opacity: 0.7; }
+.release-prose code { border-radius: 0.3rem; background: var(--muted); padding: 0.12em 0.3em; font-size: 0.875em; }
+.release-prose pre { overflow-x: auto; border: 1px solid var(--border); border-radius: 0.75rem; background: var(--muted); padding: 1rem; }
+.release-prose pre code { padding: 0; background: none; }
+.release-prose blockquote { border-left: 3px solid var(--border); padding-left: 1em; color: var(--muted-foreground); }
+.release-prose table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+.release-prose :is(th, td) { border: 1px solid var(--border); padding: 0.6em 0.8em; text-align: left; }
+.release-prose th { background: var(--muted); font-weight: 600; }
+.release-prose hr { margin: 1.75em 0; border-color: var(--border); }
+.release-prose img { max-width: 100%; height: auto; border-radius: 0.75rem; }
+.release-prose .contains-task-list { list-style: none; padding-left: 0; }
+.release-prose input[type='checkbox'] { margin-right: 0.5em; }
+
+/* A soft silver/charcoal backdrop, separate from the unaltered product capture. */
+.rainbow-glow {
+  position: relative;
+  isolation: isolate;
+  overflow: visible;
+}
+
+.rainbow-glow::before {
+  content: '';
+  position: absolute;
+  bottom: -7px;
+  left: 50%;
+  z-index: -1;
+  width: 70%;
+  height: 15px;
+  border-radius: inherit;
+  transform: translateX(-50%);
+  background: linear-gradient(90deg, hsl(var(--color-1)), hsl(var(--color-5)), hsl(var(--color-3)), hsl(var(--color-4)), hsl(var(--color-2)));
+  background-size: 200%;
+  filter: blur(12px);
+  animation: rainbow 3s linear infinite;
+  pointer-events: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rainbow-glow::before { animation: none; }
+}
+
+.screenshot-stage {
+  --corner-extent: 48px;
+  border-radius: 24px;
+  background:
+    radial-gradient(ellipse at 90% 5%, #292929 0%, transparent 55%),
+    radial-gradient(ellipse at 5% 30%, #f0f0f0 0%, transparent 55%),
+    radial-gradient(ellipse at 60% 110%, #ededed 0%, transparent 50%),
+    linear-gradient(135deg, #b7b7b7, #737373 48%, #cfcfcf);
+}
+
+.screenshot-window {
+  --corner-extent: 24px;
+  border-radius: 12px;
+}
+
+.continuous-corners[data-corners-ready='true'] { border-radius: 0; }
+.screenshot-stage-shadow { filter: drop-shadow(0 20px 28px rgb(0 0 0 / 12%)); }
+.screenshot-window-shadow { filter: drop-shadow(0 12px 18px rgb(0 0 0 / 20%)); }
+
+@media (min-width: 640px) {
+  .screenshot-stage { --corner-extent: 64px; border-radius: 32px; }
+  .screenshot-window { --corner-extent: 32px; border-radius: 16px; }
+}

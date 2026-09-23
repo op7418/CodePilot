@@ -48,7 +48,7 @@ describe('native provider telemetry capture boundaries', () => {
     assert.match(streamBoundary, /markProviderFailureHandled\(error\)/);
     assert.match(
       instrumentation,
-      /if \(isProviderFailureHandled\(hint\.originalException\)\) return null/,
+      /if \(isTelemetryFailureHandled\(hint\.originalException\)\) return null/,
     );
   });
 });

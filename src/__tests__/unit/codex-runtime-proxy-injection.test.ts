@@ -318,14 +318,14 @@ describe('CodexRuntime — thread/resume payload mirrors thread/start (Phase 5b 
     );
     assert.match(
       payload,
-      /threadId\s*:\s*existingRef\.token/,
-      'thread/resume must reference the persisted thread id from the session ref',
+      /threadId\s*,/,
+      'thread/resume must use the persisted id supplied by prepareCodexThread',
     );
   });
 
   it('runtime calls thread/start with one shared extension of threadParams', () => {
-    // `dynamicTools` is a thread/start-only app-server field. Both start
-    // invocations must use the same extension, and that extension must
+    // `dynamicTools` is a thread/start-only app-server field. The shared start
+    // callback handles fresh threads and resume failure; its extension must
     // preserve the proxy/permission-bearing `threadParams` base also used
     // by resume.
     assert.match(
@@ -339,8 +339,8 @@ describe('CodexRuntime — thread/resume payload mirrors thread/start (Phase 5b 
       ),
     ];
     assert.ok(
-      matches.length >= 2,
-      `expected at least 2 client.request<...>("thread/start", ...) call sites in runtime.ts (fresh + resume-failed fallback); got ${matches.length}`,
+      matches.length >= 1,
+      'expected a shared thread/start callback for fresh threads and resume failure',
     );
     for (const m of matches) {
       assert.match(

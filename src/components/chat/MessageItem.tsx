@@ -1,5 +1,6 @@
 'use client';
 
+import { localizeModelSelectionError } from '@/lib/model-selection-error-i18n';
 import { useState, useCallback, useRef, useEffect, useMemo, memo } from 'react';
 import { motion } from 'motion/react';
 import { cn } from '@/lib/utils';
@@ -41,6 +42,7 @@ import {
   collapseLogicalSubagentRuns,
   isSubagentToolCall,
 } from '@/lib/subagent-view';
+import { parseDisplayTokenUsage } from '@/lib/token-usage-display';
 
 interface ImageGenRequest {
   prompt: string;
@@ -620,17 +622,41 @@ function CopyButton({ text }: { text: string }) {
 }
 
 function TokenUsageDisplay({ usage }: { usage: TokenUsage }) {
+  const { t } = useTranslation();
   const totalTokens = usage.input_tokens + usage.output_tokens;
-  const costStr = usage.cost_usd !== undefined && usage.cost_usd !== null
-    ? ` · $${usage.cost_usd.toFixed(4)}`
+  const verifiedCost = usage.normalized?.costSource ? usage.normalized.costUsd : undefined;
+  const legacyCost = usage.normalized ? undefined : usage.cost_usd;
+  const displayCost = verifiedCost ?? legacyCost;
+  const costStr = displayCost !== undefined && displayCost !== null
+    ? ` · $${displayCost.toFixed(4)}`
     : '';
+  const normalized = usage.normalized;
 
   return (
     <span className="group/tokens relative cursor-default text-xs text-muted-foreground/50">
-      <span>{totalTokens.toLocaleString()} tokens{costStr}</span>
+      <span>
+        {totalTokens.toLocaleString()} tokens{costStr}
+        {!normalized ? ` · ${t('usage.legacy')}` : ''}
+      </span>
       <span className="pointer-events-none absolute bottom-full left-0 mb-1.5 whitespace-nowrap rounded-md bg-popover px-2.5 py-1.5 text-[11px] text-popover-foreground shadow-md border border-border/50 opacity-0 group-hover/tokens:opacity-100 transition-opacity duration-150 z-50">
-        In: {usage.input_tokens.toLocaleString()} · Out: {usage.output_tokens.toLocaleString()}
-        {usage.cache_read_input_tokens ? ` · Cache: ${usage.cache_read_input_tokens.toLocaleString()}` : ''}
+        {normalized ? (
+          <>
+            {normalized.uncachedInputTokens !== undefined
+              ? `${t('usage.uncachedInput')} ${normalized.uncachedInputTokens.toLocaleString()}`
+              : t('usage.uncachedInputUnknown')}
+            {normalized.cacheReadInputTokens !== undefined
+              ? ` · ${t('usage.cacheRead')} ${normalized.cacheReadInputTokens.toLocaleString()}`
+              : ''}
+            {normalized.cacheWriteInputTokens !== undefined
+              ? ` · ${t('usage.cacheWrite')} ${normalized.cacheWriteInputTokens.toLocaleString()}`
+              : ''}
+            {normalized.outputTokens !== undefined
+              ? ` · ${t('usage.output')} ${normalized.outputTokens.toLocaleString()}`
+              : ''}
+          </>
+        ) : (
+          <>{t('usage.input')} {usage.input_tokens.toLocaleString()} · {t('usage.output')} {usage.output_tokens.toLocaleString()}</>
+        )}
         {costStr}
       </span>
     </span>
@@ -659,8 +685,8 @@ export const MessageItem = memo(function MessageItem({ message, sessionId, isAss
   const { text, pairedTools, thinking } = useMemo(() => {
     const { text, tools, thinking } = parseToolBlocks(message.content);
     const pairedTools = pairTools(tools);
-    return { text, pairedTools, thinking };
-  }, [message.content]);
+    return { text: isUser ? text : localizeModelSelectionError(text, t), pairedTools, thinking };
+  }, [message.content, isUser, t]);
   const subagentTools = pairedTools.filter(tool => (
     isSubagentToolCall(tool.name, tool.input, tool.result)
   ));
@@ -690,15 +716,12 @@ export const MessageItem = memo(function MessageItem({ message, sessionId, isAss
     }
   }, [isUser, displayText]);
 
-  // Memoize token usage JSON parsing
-  const tokenUsage = useMemo<TokenUsage | null>(() => {
-    if (!message.token_usage) return null;
-    try {
-      return JSON.parse(message.token_usage);
-    } catch {
-      return null;
-    }
-  }, [message.token_usage]);
+  // token_usage is persisted by multiple runtimes and historical releases.
+  // Treat it as untrusted DB input instead of relying on a TypeScript cast.
+  const tokenUsage = useMemo(
+    () => parseDisplayTokenUsage(message.token_usage),
+    [message.token_usage],
+  );
 
   // Hide image-gen system notices — they exist in DB for Claude's context but shouldn't render
   if (isUser && message.content.startsWith('[__IMAGE_GEN_NOTICE__')) {

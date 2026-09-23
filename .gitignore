@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-e2e-*/
 /out/
 
 # production
@@ -78,3 +79,6 @@ skills-lock.json
 # Codex Runtime reference material — clone locally per Phase 5 plan
 # (git clone --depth 1 https://github.com/openai/codex.git 资料/codex)
 资料/codex/
+
+# T3 Code reference checkout used by the CLI maintenance research plan.
+资料/t3code/

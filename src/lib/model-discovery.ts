@@ -1,3 +1,5 @@
+import { isTokenDanceBaseUrl, parseTokenDanceModels } from './tokendance';
+import { tokenDanceFetch } from './tokendance-fetch';
 /**
  * Model-discovery probe layer.
  *
@@ -335,12 +337,15 @@ export async function discoverModels(input: DiscoveryInput): Promise<DiscoveryRe
 
   try {
     let probe: Partial<DiscoveryResult>;
-    switch (effectiveProtocol) {
+    if (isTokenDanceBaseUrl(baseUrl)) {
+      probe = await fetchAndParse('https://tokendance.space/gateway/v1/models', {}, timeoutMs,
+        (json) => parseTokenDanceModels(json, input.protocol), tokenDanceFetch);
+    } else switch (effectiveProtocol) {
       case 'ollama':
         probe = await probeOllama(baseUrl, timeoutMs);
         break;
       case 'gemini':
-        probe = await probeGemini(input.apiKey, timeoutMs);
+        probe = await probeGemini(baseUrl, input.apiKey, timeoutMs);
         break;
       case 'anthropic':
         probe = await probeAnthropic(baseUrl, input.apiKey, input.authStyle, timeoutMs);
@@ -422,28 +427,44 @@ async function probeOllama(
 }
 
 async function probeGemini(
+  baseUrl: string,
   apiKey: string | undefined,
   timeoutMs: number,
 ): Promise<Partial<DiscoveryResult>> {
-  if (!apiKey) {
-    return {
-      ok: false,
-      error: { code: 'missing-credentials', message: 'No API key on file — cannot probe.' },
-    };
+  const endpoint = `${(baseUrl || 'https://generativelanguage.googleapis.com/v1beta').replace(/\/+$/, '')}/models`;
+  if (!apiKey) return { endpoint, ok: false, error: { code: 'missing-credentials', message: 'No API key on file — cannot probe.' } };
+  const signal = AbortSignal.timeout(timeoutMs);
+  const ids = new Set<string>();
+  const seenPages = new Set<string>();
+  let pageToken = '';
+  try {
+    for (let page = 0; page < 100; page++) {
+      const url = new URL(endpoint);
+      url.searchParams.set('pageSize', '1000');
+      if (pageToken) url.searchParams.set('pageToken', pageToken);
+      const response = await fetch(url, { headers: { 'x-goog-api-key': apiKey }, signal, redirect: 'error' });
+      if (!response.ok) return { endpoint, ok: false, error: { code: `http-${response.status}`, message: `Gemini models API returned HTTP ${response.status}.` } };
+      const data = await response.json();
+      if (!Array.isArray(data.models)) return { endpoint, ok: false, error: { code: 'bad-response', message: 'Gemini models API returned no model list.' } };
+      for (const model of data.models) {
+        if (typeof model?.name !== 'string' || !Array.isArray(model.supportedGenerationMethods)
+          || !model.supportedGenerationMethods.includes('generateContent')) continue;
+        const id = model.name.replace(/^models\//, '');
+        if (id) ids.add(id);
+      }
+      if (!data.nextPageToken) {
+        const fullModelIds = [...ids];
+        return { endpoint, ok: true, modelCount: ids.size, fullModelIds, sampleModels: fullModelIds.slice(0, SAMPLE_CAP) };
+      }
+      if (typeof data.nextPageToken !== 'string' || seenPages.has(data.nextPageToken)) break;
+      pageToken = data.nextPageToken;
+      seenPages.add(pageToken);
+    }
+    // Never apply an incomplete listing: it would make real models look orphaned.
+    return { endpoint, ok: false, error: { code: 'bad-response', message: 'Gemini model pagination did not complete.' } };
+  } catch {
+    return { endpoint, ok: false, error: { code: signal.aborted ? 'timeout' : 'network', message: 'Could not load the Gemini model list.' } };
   }
-  const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(apiKey)}`;
-  // Don't echo the key back through the endpoint field.
-  const redactedEndpoint = 'https://generativelanguage.googleapis.com/v1beta/models?key=***';
-  const result = await fetchAndParse(url, {}, timeoutMs, (json) => {
-    const items = Array.isArray((json as { models?: unknown }).models)
-      ? ((json as { models: unknown[] }).models)
-      : [];
-    const ids = items
-      .map((m) => (typeof m === 'object' && m && 'name' in m ? String((m as { name: unknown }).name) : ''))
-      .filter(Boolean);
-    return { ids };
-  });
-  return { ...result, endpoint: redactedEndpoint };
 }
 
 async function probeAnthropic(
@@ -489,9 +510,10 @@ async function fetchAndParse(
   init: RequestInit,
   timeoutMs: number,
   parser: (json: unknown) => { ids: string[] },
+  fetchImpl: typeof fetch = fetch,
 ): Promise<Partial<DiscoveryResult>> {
   try {
-    const res = await fetch(url, {
+    const res = await fetchImpl(url, {
       ...init,
       signal: AbortSignal.timeout(timeoutMs),
     });

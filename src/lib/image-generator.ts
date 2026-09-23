@@ -16,6 +16,7 @@ import {
   requestGrokImagineImage,
   XAI_IMAGINE_IMAGE_MODEL,
 } from '@/lib/xai-imagine';
+import { MediaUserActionError } from '@/lib/media-error';
 
 const dataDir = resolveCodePilotDataDir();
 const MEDIA_DIR = path.join(dataDir, '.codepilot-media');
@@ -258,7 +259,10 @@ function pickImageProvider(
   ) as ProviderRow[];
 
   if (rows.length === 0) {
-    throw new Error('No image provider configured. Please add a Gemini Image or OpenAI Image provider in Settings.');
+    throw new MediaUserActionError(
+      'MEDIA_PROVIDER_NOT_CONFIGURED',
+      'No image provider configured. Please add a Gemini Image or OpenAI Image provider in Settings.',
+    );
   }
 
   const toFamily = (pt: string): ImageFamily => (pt === 'openai-image' ? 'openai' : 'gemini');
@@ -268,7 +272,10 @@ function pickImageProvider(
   if (providerId) {
     const match = rows.find(r => r.id === providerId);
     if (!match) {
-      throw new Error(`Image provider '${providerId}' is not configured or has no API key. Check Settings → Media Providers.`);
+      throw new MediaUserActionError(
+        'MEDIA_PROVIDER_UNAVAILABLE',
+        `Image provider '${providerId}' is not configured or has no API key. Check Settings → Media Providers.`,
+      );
     }
     return { row: match, family: toFamily(match.provider_type) };
   }
@@ -277,7 +284,10 @@ function pickImageProvider(
   if (family) {
     const match = byFamily(family);
     if (match) return { row: match, family };
-    throw new Error(`No ${family === 'openai' ? 'OpenAI Image' : 'Gemini Image'} provider configured. Please add one in Settings.`);
+    throw new MediaUserActionError(
+      'MEDIA_PROVIDER_UNAVAILABLE',
+      `No ${family === 'openai' ? 'OpenAI Image' : 'Gemini Image'} provider configured. Please add one in Settings.`,
+    );
   }
 
   // 3) User-chosen active provider from settings.
@@ -313,7 +323,10 @@ export async function generateSingleImage(params: GenerateSingleImageParams): Pr
     activeProviderId,
   });
   if (useXaiOAuth && !isXaiOAuthUsable()) {
-    throw new Error('Grok Imagine requires an active Grok Build OAuth login. Reconnect in Settings.');
+    throw new MediaUserActionError(
+      'MEDIA_AUTH_REQUIRED',
+      'Grok Imagine requires an active Grok Build OAuth login. Reconnect in Settings.',
+    );
   }
   const selected = useXaiOAuth
     ? undefined
@@ -339,7 +352,10 @@ export async function generateSingleImage(params: GenerateSingleImageParams): Pr
   const aspectRatio = (params.aspectRatio || '1:1') as `${number}:${number}`;
   const imageSize = params.imageSize || '1K';
   if (family === 'xai' && imageSize !== '1K' && imageSize !== '2K') {
-    throw new Error('Grok Imagine Image 2.0 supports 1K or 2K resolution.');
+    throw new MediaUserActionError(
+      'MEDIA_INPUT_UNSUPPORTED',
+      'Grok Imagine Image 2.0 supports 1K or 2K resolution.',
+    );
   }
 
   // Collect reference images (base64 strings). Both referenceImagePaths and

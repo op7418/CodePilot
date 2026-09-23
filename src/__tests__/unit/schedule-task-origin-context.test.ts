@@ -280,8 +280,13 @@ describe('runner ensureTaskBoundSession inherits origin chat context', () => {
       'anthropic-direct',
       'full_access',
       'user',
+      undefined,
+      {
+        runtimeId: 'codepilot_runtime',
+        state: 'bound',
+        source: 'first_execution',
+      },
     );
-    db.updateSessionRuntime(originSession.id, 'codepilot_runtime');
 
     // Schedule a task from that chat (mimics what the route would do
     // after the AI tool POST lands).
@@ -355,11 +360,16 @@ describe('runner ensureTaskBoundSession inherits origin chat context', () => {
       /inheritedModel/,
       'runner must compute an inheritedModel.',
     );
-    // runtime_pin is set via updateSessionRuntime after createSession.
+    // Runtime ownership is copied in the same createSession transaction.
     assert.match(
       runnerSrc,
-      /originSession\?\.runtime_pin[\s\S]{0,200}updateSessionRuntime/,
-      'runner must lift originSession.runtime_pin into the new task-bound session via updateSessionRuntime.',
+      /runtimeId:\s*originSession\.runtime_pin[\s\S]{0,120}source:\s*'inherited_owner'/,
+      'runner must atomically inherit originSession.runtime_pin as the task session owner.',
+    );
+    assert.doesNotMatch(
+      runnerSrc,
+      /updateSessionRuntime\(/,
+      'runner must not create a session and then mutate its Runtime in a second write.',
     );
   });
 
@@ -410,6 +420,12 @@ describe('ensureTaskBoundSession refuses to reuse a user-visible session (Codex 
       'anthropic-direct',
       'default',
       'user',
+      undefined,
+      {
+        runtimeId: 'codepilot_runtime',
+        state: 'bound',
+        source: 'first_execution',
+      },
     );
     const past = new Date(Date.now() - 1000).toISOString();
     const task = db.createScheduledTask({
@@ -470,9 +486,15 @@ describe('ensureTaskBoundSession refuses to reuse a user-visible session (Codex 
     // create a brand-new session every time.
     const taskSession = db.createSession(
       '[Task] Existing',
-      undefined, undefined, '/tmp/project-b',
-      'code', undefined, 'default',
+      'sonnet-4', undefined, '/tmp/project-b',
+      'code', 'anthropic-direct', 'default',
       'task',
+      undefined,
+      {
+        runtimeId: 'codepilot_runtime',
+        state: 'bound',
+        source: 'inherited_owner',
+      },
     );
     const past = new Date(Date.now() - 1000).toISOString();
     const task = db.createScheduledTask({
@@ -491,7 +513,7 @@ describe('ensureTaskBoundSession refuses to reuse a user-visible session (Codex 
     );
   });
 
-  it('missing session_id (the new-task path) creates a fresh source="task" session', async () => {
+  it('missing origin owner fails closed instead of binding a background task from global defaults', async () => {
     const db = await import('../../lib/db');
     const { ensureTaskBoundSession } = await import('../../lib/agent-task-runner');
     const past = new Date(Date.now() - 1000).toISOString();
@@ -503,13 +525,13 @@ describe('ensureTaskBoundSession refuses to reuse a user-visible session (Codex 
       // No session_id, no origin — bare-bones task (e.g. Settings →
       // Tasks "Add" path).
     });
-    const resolvedId = await ensureTaskBoundSession(task);
-    const resolved = db.getSession(resolvedId);
-    assert.ok(resolved);
-    assert.equal(resolved!.source, 'task');
+    await assert.rejects(
+      () => ensureTaskBoundSession(task),
+      /bound origin session with a complete route/,
+    );
   });
 
-  it('task.session_id pointing at a deleted (no longer existing) session creates a fresh task-bound session', async () => {
+  it('deleted session pointer without an origin owner fails closed', async () => {
     const db = await import('../../lib/db');
     const { ensureTaskBoundSession } = await import('../../lib/agent-task-runner');
     const past = new Date(Date.now() - 1000).toISOString();
@@ -520,10 +542,10 @@ describe('ensureTaskBoundSession refuses to reuse a user-visible session (Codex 
       notify_on_complete: 1, permanent: 0,
       session_id: 'does-not-exist-anymore',
     });
-    const resolvedId = await ensureTaskBoundSession(task);
-    assert.notEqual(resolvedId, 'does-not-exist-anymore');
-    const resolved = db.getSession(resolvedId);
-    assert.equal(resolved!.source, 'task');
+    await assert.rejects(
+      () => ensureTaskBoundSession(task),
+      /bound origin session with a complete route/,
+    );
   });
 });
 

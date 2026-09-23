@@ -2,7 +2,8 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { after, before, describe, it } from 'node:test';
+import { after, before, beforeEach, describe, it } from 'node:test';
+import { telemetryReportBudget } from '../../lib/telemetry/report-budget';
 import { runAgentLoop, type AgentLoopOptions } from '@/lib/agent-loop';
 import { runToolLoopAgentPoc } from '@/lib/experimental/agent-loop-toolloop-poc';
 import { addMessage, createSession } from '@/lib/db';
@@ -126,6 +127,8 @@ async function waitForCapturedEvents(
 }
 
 describe('native loops capture provider stream failures', () => {
+  // Each fixture proves one terminal lifecycle, independent of cross-request budgeting.
+  beforeEach(() => telemetryReportBudget.reset());
   let workingDirectory: string;
   let originalNodeEnv: string | undefined;
   let originalChannel: string | undefined;

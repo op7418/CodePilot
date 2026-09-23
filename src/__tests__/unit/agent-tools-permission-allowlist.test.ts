@@ -171,6 +171,9 @@ describe('PERMISSION_SAFE_TOOLS — mutating / side-effect tools that MUST NOT b
   // Each entry pinned with the specific danger. Adding any of these to
   // the allowlist re-opens the P0 silent-side-effect hole.
   const mustRequirePermission = [
+    { name: 'codepilot_memory_remember', danger: 'persists a workspace memory record' },
+    { name: 'codepilot_memory_update', danger: 'replaces an active memory version' },
+    { name: 'codepilot_memory_forget', danger: 'revokes and erases memory content' },
     // CLI install/uninstall — shell exec of npm / brew / pip etc.
     {
       name: 'codepilot_cli_tools_install',
@@ -368,6 +371,9 @@ describe('PERMISSION_SAFE_TOOLS — completeness vs capability catalog', () => {
     // Tools classified as mutating in section (3) above. Keep in sync
     // with that list.
     const classifiedMutating = new Set<string>([
+      'codepilot_memory_remember',
+      'codepilot_memory_update',
+      'codepilot_memory_forget',
       'codepilot_cli_tools_install',
       'codepilot_cli_tools_add',
       'codepilot_cli_tools_remove',

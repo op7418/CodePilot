@@ -3,6 +3,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info' | 'loading';
+export type ToastPlacement = 'bottom-left' | 'bottom-right';
+export type ToastBrand = 'claude' | 'codex' | 'multi';
 
 export interface ToastAction {
   label: string;
@@ -12,9 +14,16 @@ export interface ToastAction {
 export interface Toast {
   id: string;
   type: ToastType;
+  title?: string;
   message: string;
   action?: ToastAction;
   duration?: number;
+  placement?: ToastPlacement;
+  variant?: 'toast' | 'card';
+  brand?: ToastBrand;
+  persistent?: boolean;
+  dismissible?: boolean;
+  onDismiss?: () => void;
 }
 
 const MAX_TOASTS = 3;
@@ -64,9 +73,12 @@ export function useToastState() {
 
     setToasts(prev => {
       const next = [...prev, { ...toast, id }];
-      // FIFO eviction
+      // FIFO eviction for ordinary toasts. Persistent cards are removed only
+      // by their explicit close action or their own terminal transition.
       while (next.length > MAX_TOASTS) {
-        const evicted = next.shift()!;
+        const evictedIndex = next.findIndex(item => !item.persistent);
+        if (evictedIndex < 0) break;
+        const [evicted] = next.splice(evictedIndex, 1);
         const timer = timersRef.current.get(evicted.id);
         if (timer) {
           clearTimeout(timer);
@@ -85,13 +97,18 @@ export function useToastState() {
 
   const updateExistingToast = useCallback((id: string, updates: Partial<Omit<Toast, 'id'>>) => {
     setToasts(prev => prev.map(t => t.id === id ? { ...t, ...updates } : t));
-    // If updating to a non-loading type, auto-dismiss after default duration
-    if (updates.type && updates.type !== 'loading') {
+    if (updates.type || updates.duration !== undefined) {
       const oldTimer = timersRef.current.get(id);
-      if (oldTimer) clearTimeout(oldTimer);
-      const duration = updates.type === 'error' ? ERROR_DURATION : DEFAULT_DURATION;
-      const timer = setTimeout(() => removeToast(id), duration);
-      timersRef.current.set(id, timer);
+      if (oldTimer) {
+        clearTimeout(oldTimer);
+        timersRef.current.delete(id);
+      }
+      const duration = updates.duration
+        ?? (updates.type === 'error' ? ERROR_DURATION : updates.type === 'loading' ? 0 : DEFAULT_DURATION);
+      if (duration > 0) {
+        const timer = setTimeout(() => removeToast(id), duration);
+        timersRef.current.set(id, timer);
+      }
     }
   }, [removeToast]);
 

@@ -275,6 +275,11 @@ function walkDir(
     const fullPath = path.join(dir, entry.name);
     const relPath = path.relative(baseDir, fullPath).replace(/\\/g, '/');
 
+    // Managed record history contains revoked/superseded versions and private
+    // metadata. Only MemoryService's active projections are query content.
+    const lowerPath = relPath.toLowerCase();
+    if (lowerPath === 'memory/records.md' || lowerPath.startsWith('memory/.records-')
+      || lowerPath === '.assistant' || lowerPath.startsWith('.assistant/')) continue;
     if (shouldIgnore(relPath, config)) continue;
 
     if (entry.isDirectory()) {

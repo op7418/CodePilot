@@ -71,4 +71,40 @@ describe('test system notification route', () => {
     }));
     assert.equal(response.status, 403);
   });
+
+  it('rejects retired renderer-toast claims and acknowledgements', async () => {
+    const claimRoute = await import('../../app/api/tasks/notify/claim/route');
+    const ackRoute = await import('../../app/api/tasks/notify/ack/route');
+    const headers = {
+      'Content-Type': 'application/json',
+      Origin: 'http://127.0.0.1:3000',
+      Host: '127.0.0.1:3000',
+      'Sec-Fetch-Site': 'same-origin',
+    };
+
+    const claim = await claimRoute.POST(new NextRequest(
+      'http://127.0.0.1:3000/api/tasks/notify/claim',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ channel: 'renderer-toast', owner: 'retired-renderer' }),
+      },
+    ));
+    assert.equal(claim.status, 400);
+
+    const ack = await ackRoute.POST(new NextRequest(
+      'http://127.0.0.1:3000/api/tasks/notify/ack',
+      {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          delivery_id: 'legacy-delivery',
+          owner: 'retired-renderer',
+          channel: 'renderer-toast',
+          outcome: 'delivered',
+        }),
+      },
+    ));
+    assert.equal(ack.status, 400);
+  });
 });

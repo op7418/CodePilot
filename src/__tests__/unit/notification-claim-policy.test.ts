@@ -1,6 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
-import { validateNotificationConsumerRequest } from '../../lib/notification-claim-policy';
+import {
+  validateNotificationConsumerRequest,
+  validateRendererNotificationTestRequest,
+} from '../../lib/notification-claim-policy';
 
 function request(headers: Record<string, string> = {}): Request {
   return new Request('http://127.0.0.1:3000/api/tasks/notify/claim', {
@@ -30,22 +33,30 @@ describe('notification consumer boundary', () => {
     }
   });
 
-  it('allows only same-origin renderer-toast claims', () => {
-    assert.equal(
+  it('retires renderer-toast from the claim/ack HTTP consumer surface', () => {
+    assert.deepEqual(
       validateNotificationConsumerRequest(
         request({ Origin: 'http://127.0.0.1:3000', 'Sec-Fetch-Site': 'same-origin' }),
         'renderer-toast',
+      ),
+      { ok: false, status: 400, error: 'Unsupported notification channel.' },
+    );
+  });
+
+  it('allows only same-origin Renderer requests for the test-notification action', () => {
+    assert.equal(
+      validateRendererNotificationTestRequest(
+        request({ Origin: 'http://127.0.0.1:3000', 'Sec-Fetch-Site': 'same-origin' }),
       ).ok,
       true,
     );
     assert.equal(
-      validateNotificationConsumerRequest(request({ Origin: 'http://evil.example' }), 'renderer-toast').ok,
+      validateRendererNotificationTestRequest(request({ Origin: 'http://evil.example' })).ok,
       false,
     );
     assert.equal(
-      validateNotificationConsumerRequest(
+      validateRendererNotificationTestRequest(
         request({ Origin: 'http://127.0.0.1:3000', 'X-CodePilot-Consumer': 'electron-main' }),
-        'renderer-toast',
       ).ok,
       false,
     );

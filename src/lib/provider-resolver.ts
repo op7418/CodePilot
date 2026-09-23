@@ -1,3 +1,4 @@
+import { isTokenDanceBaseUrl, TOKENDANCE_APP_URL } from './tokendance';
 /**
  * Provider Resolver — unified provider/model resolution for all consumers.
  *
@@ -7,6 +8,8 @@
  */
 
 import type { ApiProvider } from '@/types';
+import { ModelSelectionError } from './model-selection-error';
+import { ProviderTransportError } from './provider-transport-error';
 import {
   type Protocol,
   type AuthStyle,
@@ -418,7 +421,7 @@ export function toClaudeCodeEnv(
   // send the request to a different vendor. Session routes normally catch
   // this earlier; this guard protects auxiliary/direct SDK callers too.
   if (resolved.provider && !resolved.hasCredentials) {
-    throw new Error('provider_credentials_unavailable');
+    throw new ProviderTransportError('PROVIDER_CREDENTIALS_UNAVAILABLE', 'provider_credentials_unavailable');
   }
   const env = { ...baseEnv };
   const roleModelForEnv = (modelId: string | undefined): string | undefined => {
@@ -486,9 +489,17 @@ export function toClaudeCodeEnv(
       }
     }
 
+    if (isTokenDanceBaseUrl(resolved.provider.base_url)) {
+      env.ANTHROPIC_AUTH_TOKEN = apiKey;
+      env.ANTHROPIC_API_KEY = '';
+      env.CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC = '1';
+    }
+
     // Inject base URL
     if (resolved.provider.base_url) {
-      env.ANTHROPIC_BASE_URL = resolved.provider.base_url;
+      env.ANTHROPIC_BASE_URL = isTokenDanceBaseUrl(resolved.provider.base_url)
+        ? `http://127.0.0.1:${process.env.PORT || '3000'}/api/tokendance/gateway`
+        : resolved.provider.base_url;
     }
 
     // Inject role models as env vars
@@ -515,6 +526,16 @@ export function toClaudeCodeEnv(
     }
     if (opusModel) {
       env.ANTHROPIC_DEFAULT_OPUS_MODEL = opusModel;
+    }
+
+    // TokenDance's Claude Code guide requires aliases to resolve to gateway
+    // model IDs. Unmapped helper/role calls must not use built-in Claude IDs.
+    // Keep explicit role mappings; otherwise use the selected model.
+    if (isTokenDanceBaseUrl(resolved.provider.base_url) && defaultModel) {
+      env.ANTHROPIC_DEFAULT_HAIKU_MODEL ||= defaultModel;
+      env.ANTHROPIC_DEFAULT_SONNET_MODEL ||= defaultModel;
+      env.ANTHROPIC_DEFAULT_OPUS_MODEL ||= defaultModel;
+      env.ANTHROPIC_SMALL_FAST_MODEL ||= defaultModel;
     }
 
     // Inject extra headers
@@ -1063,7 +1084,8 @@ function buildCodexAccountResolution(opts: ResolveOptions): ResolvedProvider {
 
 function buildOpenAIOAuthResolution(opts: ResolveOptions): ResolvedProvider {
   const definition = getManagedVirtualProviderDefinition('openai-oauth');
-  const model = opts.model || opts.sessionModel || definition.models[0].modelId;
+  const model = opts.model || opts.sessionModel || definition.models[0]?.modelId || '';
+  if (!model) throw new ModelSelectionError('OPENAI_OAUTH_CATALOG_EMPTY');
 
   const catalogEntry = definition.models.find(m => m.modelId === model);
 
@@ -1111,9 +1133,9 @@ function buildResolution(
   if (!provider) {
     // Environment-based provider (no DB record) — credentials come from shell env,
     // legacy DB settings, or ~/.claude/settings.json (managed by cc-switch etc.).
-    // When only settings.json has creds, we must still flag hasCredentials=true so
-    // ai-provider.ts's guard doesn't preemptively abort before the SDK runtime has
-    // a chance to load the file via settingSources.
+    // settings.json credentials keep Claude SDK available via settingSources.
+    // Native transport must separately check that its own config has credentials;
+    // this shared flag must not be treated as proof of Native authentication.
     const envHasCredentials = !!(
       process.env.ANTHROPIC_API_KEY ||
       process.env.ANTHROPIC_AUTH_TOKEN ||
@@ -1126,7 +1148,8 @@ function buildResolution(
     // Only apply global default when it belongs to the env provider (or no provider is specified)
     const applicableGlobalDefault = (globalDefaultModel && (!globalDefaultProvider || globalDefaultProvider === 'env'))
       ? globalDefaultModel : undefined;
-    const model = opts.model || opts.sessionModel || applicableGlobalDefault || getSetting('default_model') || undefined;
+    const model = opts.model || opts.sessionModel
+      || applicableGlobalDefault || getSetting('default_model') || undefined;
 
     // Env mode uses short aliases (sonnet/opus/haiku/...) in the UI.
     // Map them to full Anthropic model IDs so toAiSdkConfig can resolve
@@ -1160,6 +1183,10 @@ function buildResolution(
 
   // Parse JSON fields
   const headers = safeParseJson(provider.headers_json);
+  if (isTokenDanceBaseUrl(provider.base_url)) {
+    for (const key of Object.keys(headers)) if (key.toLowerCase() === 'x-app-url') delete headers[key];
+    headers['X-App-URL'] = TOKENDANCE_APP_URL;
+  }
   const preset = findPresetForLegacy(
     provider.base_url,
     provider.provider_type,
@@ -1292,6 +1319,7 @@ function buildResolution(
     if (!id) return false;
     const entry = modelIndex.get(id);
     const cap = getModelCompat({
+      providerBaseUrl: provider.base_url,
       modelId: id,
       upstreamModelId: entry?.upstreamModelId,
       providerCompat,

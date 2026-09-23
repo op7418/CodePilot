@@ -110,8 +110,8 @@ describe('Codex runtime consumes the permission mapping at every sticky boundary
     );
     const starts = [...source.matchAll(/['"]thread\/start['"],\s*\n?\s*threadStartParams/g)];
     assert.ok(
-      starts.length >= 2,
-      'fresh and resume-fallback thread/start must both receive the shared start params',
+      starts.length >= 1,
+      'the shared fresh/resume-fallback start callback must receive the permission-bearing params',
     );
   });
 
@@ -119,7 +119,7 @@ describe('Codex runtime consumes the permission mapping at every sticky boundary
     assert.match(source, /const applyPermissionEcho =/);
     assert.match(source, /thread\/resume[\s\S]{0,300}applyPermissionEcho\(result\)/);
     const starts = [...source.matchAll(/thread\/start[\s\S]{0,180}applyPermissionEcho\(result\)/g)];
-    assert.ok(starts.length >= 2, 'fresh and resume-fallback starts must both validate the reviewer echo');
+    assert.ok(starts.length >= 1, 'the shared start callback must validate the reviewer echo');
   });
 
   it('turn/start explicitly refreshes reviewer, approval and sandbox settings', () => {

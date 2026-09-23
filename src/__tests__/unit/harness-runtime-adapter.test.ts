@@ -456,8 +456,8 @@ describe('Codex proxy — single source for stop / step / builtin tool names', (
     const src = adapterSrc();
     assert.match(
       src,
-      /availableToolNames:\s*bridge\.toolNames/,
-      'compiler hints must be filtered by the exact auth-gated bridge surface',
+      /availableToolNames:\s*compilerToolNames/,
+      'compiler hints must be filtered by the actual bridge and routed MCP surface',
     );
     assert.match(
       src,

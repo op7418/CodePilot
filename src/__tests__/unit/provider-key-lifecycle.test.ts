@@ -146,7 +146,7 @@ describe('Provider key lifecycle — Codex follow-ups', () => {
 
     it('test button disabled prop references canTest', () => {
       assert.ok(
-        source.match(/disabled=\{saving \|\| testing \|\| !canTest\}/),
+        source.match(/disabled=\{saving \|\| testing \|\| (?:authorizing \|\| )?!canTest\}/),
         'test button disabled prop must include !canTest',
       );
       // Guard against the regression of the old disable rule that

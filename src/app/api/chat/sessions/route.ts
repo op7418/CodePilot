@@ -6,6 +6,8 @@ import type { CreateSessionRequest, SessionsResponse, SessionResponse } from '@/
 import { serverErrorResponse } from '@/lib/api-error';
 import { isPermissionProfile, PERMISSION_PROFILES } from '@/lib/permission/profile';
 import { isExistingDirectory } from '@/lib/working-directory';
+import { isRuntimeId } from '@/lib/runtime/runtime-id';
+import { validateRuntimeRoute } from '@/lib/runtime/route-validation';
 
 export async function GET(request: NextRequest) {
   try {
@@ -68,6 +70,31 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    const hasAnyRouteField = body.runtime_id !== undefined
+      || body.provider_id !== undefined
+      || body.model !== undefined;
+    if (hasAnyRouteField) {
+      if (!isRuntimeId(body.runtime_id)
+        || typeof body.provider_id !== 'string' || body.provider_id.trim().length === 0
+        || typeof body.model !== 'string' || body.model.trim().length === 0) {
+        return Response.json(
+          { error: 'runtime_id, provider_id, and model are required together', code: 'INCOMPLETE_SESSION_ROUTE' },
+          { status: 400 },
+        );
+      }
+      const validated = await validateRuntimeRoute({
+        runtimeId: body.runtime_id,
+        providerId: body.provider_id.trim(),
+        modelId: body.model.trim(),
+      });
+      if (!validated.ok) {
+        return Response.json(
+          { error: validated.code, code: validated.code },
+          { status: 409 },
+        );
+      }
+    }
+
     // Title is optional and, since the composer stopped sending one, normally
     // absent — the session is created as a placeholder and POST /api/chat
     // derives the fallback from the first real message. A caller that DOES
@@ -94,6 +121,9 @@ export async function POST(request: NextRequest) {
       body.permission_profile,
       undefined, // source
       titleOrigin,
+      isRuntimeId(body.runtime_id)
+        ? { runtimeId: body.runtime_id, state: 'unbound' }
+        : undefined,
     );
     const response: SessionResponse = { session };
     return Response.json(response, { status: 201 });

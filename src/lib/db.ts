@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3';
+import { migrateLegacyAssistantMemoryBindings } from './assistant-memory-migration';
 import path from 'path';
 import crypto from 'crypto';
 import fs from 'fs';
@@ -26,6 +27,8 @@ import type {
   CheckpointSubagentRunInput,
   RecordSubagentRunEventInput,
   SettleSubagentRunInput,
+  RuntimeBindingSource,
+  RuntimeBindingState,
 } from '@/types';
 import type { ChannelType, ChannelBinding } from './bridge/types';
 import { getLocalDateString, localDayStartAsUTC } from './utils';
@@ -52,6 +55,11 @@ import {
   formatDatabaseStartupDiagnostic,
 } from './database-recovery';
 import { resolveCodePilotDataDir } from './codepilot-data-dir';
+import {
+  classifyLegacyRuntimeBinding,
+  isInternalRuntimeSwitchMarker,
+} from './runtime/thread-execution-binding';
+import { isRuntimeId, type RuntimeId } from './runtime/runtime-id';
 
 const dataDir = resolveCodePilotDataDir();
 const DB_PATH = path.join(dataDir, 'codepilot.db');
@@ -77,7 +85,7 @@ const RUNTIME_OWNER_LOCK_PATH = `${DB_PATH}.runtime-owner.lock`;
 // replacing this module. Keep a code-owned revision beside that handle so a
 // newly loaded migration still runs without requiring the user to restart the
 // desktop client. Bump this value whenever initDb/migrateDb gains a migration.
-const DATABASE_SCHEMA_REVISION = '2026-08-06-provider-secret-envelope-v1';
+const DATABASE_SCHEMA_REVISION = '2026-09-21-assistant-memory-bindings-v1';
 const LEGACY_NOTIFICATION_BACKLOG_MARKER = 'notification_delivery_legacy_backlog_v1';
 const LEGACY_NOTIFICATION_BACKLOG_MAX_AGE_MS = 60 * 60 * 1000;
 
@@ -269,7 +277,12 @@ function initDb(db: Database.Database): void {
       model TEXT NOT NULL DEFAULT '',
       system_prompt TEXT NOT NULL DEFAULT '',
       working_directory TEXT NOT NULL DEFAULT '',
-      sdk_session_id TEXT NOT NULL DEFAULT ''
+      sdk_session_id TEXT NOT NULL DEFAULT '',
+      runtime_pin TEXT NOT NULL DEFAULT '',
+      runtime_binding_state TEXT NOT NULL DEFAULT 'unbound',
+      runtime_bound_at TEXT,
+      runtime_binding_source TEXT,
+      route_revision INTEGER NOT NULL DEFAULT 0
     );
 
     CREATE TABLE IF NOT EXISTS messages (
@@ -335,6 +348,38 @@ function initDb(db: Database.Database): void {
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now')),
       FOREIGN KEY (run_id) REFERENCES subagent_runs(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_session_handoffs (
+      id TEXT PRIMARY KEY,
+      source_session_id TEXT,
+      target_session_id TEXT NOT NULL UNIQUE,
+      source_boundary_rowid INTEGER NOT NULL CHECK(source_boundary_rowid >= 0),
+      source_runtime_id TEXT NOT NULL,
+      target_runtime_id TEXT NOT NULL,
+      payload_version INTEGER NOT NULL DEFAULT 1,
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      payload_source TEXT NOT NULL DEFAULT 'recent_transcript'
+        CHECK(payload_source IN ('recent_transcript', 'generated_summary', 'user_edited')),
+      idempotency_key TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (source_session_id) REFERENCES chat_sessions(id) ON DELETE SET NULL,
+      FOREIGN KEY (target_session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS chat_session_compaction_events (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      trigger TEXT NOT NULL CHECK(trigger IN ('manual', 'automatic', 'reactive')),
+      source_boundary_rowid INTEGER NOT NULL CHECK(source_boundary_rowid >= 0),
+      messages_compressed INTEGER NOT NULL CHECK(messages_compressed >= 0),
+      estimated_tokens_saved INTEGER NOT NULL CHECK(estimated_tokens_saved >= 0),
+      auxiliary_provider_id TEXT,
+      auxiliary_model_id TEXT,
+      auxiliary_route_source TEXT,
+      recreated_underlying_session INTEGER NOT NULL DEFAULT 0 CHECK(recreated_underlying_session IN (0, 1)),
+      created_at TEXT NOT NULL DEFAULT (datetime('now')),
+      FOREIGN KEY (session_id) REFERENCES chat_sessions(id) ON DELETE CASCADE
     );
 
     CREATE TABLE IF NOT EXISTS settings (
@@ -459,6 +504,11 @@ function initDb(db: Database.Database): void {
       ON subagent_runs(parent_session_id, terminal, updated_at DESC);
     CREATE INDEX IF NOT EXISTS idx_subagent_run_events_run_sequence
       ON subagent_run_events(run_id, sequence);
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_chat_session_handoffs_source_idempotency
+      ON chat_session_handoffs(source_session_id, idempotency_key)
+      WHERE idempotency_key != '';
+    CREATE INDEX IF NOT EXISTS idx_chat_session_compaction_events_session_created
+      ON chat_session_compaction_events(session_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS idx_tasks_session_id ON tasks(session_id);
     CREATE INDEX IF NOT EXISTS idx_media_created_at ON media_generations(created_at);
     CREATE INDEX IF NOT EXISTS idx_media_session_id ON media_generations(session_id);
@@ -549,6 +599,7 @@ function initDb(db: Database.Database): void {
 
   // Run migrations for existing databases
   migrateDb(db);
+  migrateLegacyAssistantMemoryBindings(db);
 }
 
 /** Safely add a column — ignores "duplicate column name" errors from concurrent workers. */
@@ -559,6 +610,67 @@ function safeAddColumn(db: Database.Database, sql: string): void {
     if (err instanceof Error && err.message.includes('duplicate column name')) return;
     throw err;
   }
+}
+
+function migrateRuntimeBindingRows(db: Database.Database): void {
+  const rows = db.prepare(`
+    SELECT id, runtime_pin, sdk_session_id, codex_thread_id,
+           runtime_binding_state, runtime_binding_source
+    FROM chat_sessions
+    WHERE runtime_binding_state = 'unbound'
+      AND runtime_binding_source IS NULL
+  `).all() as Array<{
+    id: string;
+    runtime_pin: string;
+    sdk_session_id: string;
+    codex_thread_id: string;
+    runtime_binding_state: RuntimeBindingState;
+    runtime_binding_source: RuntimeBindingSource | null;
+  }>;
+  if (rows.length === 0) return;
+
+  const messageStmt = db.prepare(`
+    SELECT content
+    FROM messages
+    WHERE session_id = ?
+      AND role IN ('user', 'assistant')
+    ORDER BY rowid ASC
+  `);
+  const updateStmt = db.prepare(`
+    UPDATE chat_sessions
+    SET runtime_binding_state = ?,
+        runtime_pin = ?,
+        runtime_binding_source = ?,
+        runtime_bound_at = NULL,
+        route_revision = 0
+    WHERE id = ?
+      AND runtime_binding_state = 'unbound'
+      AND runtime_binding_source IS NULL
+  `);
+
+  const migrate = db.transaction(() => {
+    for (const row of rows) {
+      const messages = messageStmt.all(row.id) as Array<{ content: string }>;
+      const hasRealExecutionMessage = messages.some(message => {
+        const content = typeof message.content === 'string' ? message.content.trim() : '';
+        return content.length > 0 && !isInternalRuntimeSwitchMarker(content);
+      });
+      const decision = classifyLegacyRuntimeBinding({
+        runtimePin: row.runtime_pin,
+        sdkSessionId: row.sdk_session_id,
+        codexThreadId: row.codex_thread_id,
+        hasRealExecutionMessage,
+      });
+      if (decision.state === 'unbound') continue;
+      updateStmt.run(
+        decision.state,
+        decision.runtimeId ?? '',
+        decision.source ?? null,
+        row.id,
+      );
+    }
+  });
+  migrate();
 }
 
 function migrateDb(db: Database.Database): void {
@@ -610,6 +722,18 @@ function migrateDb(db: Database.Database): void {
   if (!colNames.includes('runtime_pin')) {
     safeAddColumn(db, "ALTER TABLE chat_sessions ADD COLUMN runtime_pin TEXT NOT NULL DEFAULT ''");
   }
+  if (!colNames.includes('runtime_binding_state')) {
+    safeAddColumn(db, "ALTER TABLE chat_sessions ADD COLUMN runtime_binding_state TEXT NOT NULL DEFAULT 'unbound'");
+  }
+  if (!colNames.includes('runtime_bound_at')) {
+    safeAddColumn(db, 'ALTER TABLE chat_sessions ADD COLUMN runtime_bound_at TEXT');
+  }
+  if (!colNames.includes('runtime_binding_source')) {
+    safeAddColumn(db, 'ALTER TABLE chat_sessions ADD COLUMN runtime_binding_source TEXT');
+  }
+  if (!colNames.includes('route_revision')) {
+    safeAddColumn(db, 'ALTER TABLE chat_sessions ADD COLUMN route_revision INTEGER NOT NULL DEFAULT 0');
+  }
   // Phase 5 Phase 3 (2026-05-13) — Codex Runtime thread/turn ids.
   // Codex's `thread/resume` requires the original `threadId`; we
   // persist it per chat session so reload / cross-session resume
@@ -636,6 +760,10 @@ function migrateDb(db: Database.Database): void {
   if (!colNames.includes('codex_thread_mcp_fingerprint')) {
     safeAddColumn(db, "ALTER TABLE chat_sessions ADD COLUMN codex_thread_mcp_fingerprint TEXT NOT NULL DEFAULT ''");
   }
+  // Runtime ownership migration must run only after both native Runtime refs
+  // and every binding column exist. It is conservative and idempotent: rows
+  // without proof remain unbound; ambiguous started rows fail closed.
+  migrateRuntimeBindingRows(db);
   if (!colNames.includes('sdk_cwd')) {
     safeAddColumn(db, "ALTER TABLE chat_sessions ADD COLUMN sdk_cwd TEXT NOT NULL DEFAULT ''");
     // Backfill sdk_cwd from working_directory for existing sessions
@@ -1414,7 +1542,63 @@ function migrateDb(db: Database.Database): void {
   `);
 
   suppressLegacyQueuedNotificationBacklog(db);
+  migrateQueuedRendererNotificationsToNative(db);
   consolidateHeartbeatTasksAndEnsureUniqueIndex(db);
+}
+
+/**
+ * Renderer toast is no longer a product notification channel. Preserve all
+ * historical terminal rows, but move still-actionable queued work to the
+ * Electron Main-owned native channel. If an event already has a native row,
+ * close only the redundant renderer row as skipped to respect the UNIQUE
+ * `(event_id, channel)` constraint without deleting audit evidence.
+ */
+export function migrateQueuedRendererNotificationsToNative(
+  db: Database.Database,
+  now = new Date(),
+): { migrated: number; skippedDuplicates: number } {
+  const migrate = db.transaction(() => {
+    const ackedAt = now.toISOString();
+    const duplicateResult = db.prepare(`
+      UPDATE notification_deliveries AS renderer
+      SET status = 'skipped',
+          error = 'renderer_channel_retired_native_exists',
+          acked_at = ?,
+          claim_owner = NULL,
+          claimed_at = NULL,
+          next_attempt_at = NULL
+      WHERE renderer.channel = 'renderer-toast'
+        AND renderer.status = 'queued'
+        AND EXISTS (
+          SELECT 1
+          FROM notification_deliveries AS native
+          WHERE native.event_id = renderer.event_id
+            AND native.channel = 'electron-native'
+        )
+    `).run(ackedAt);
+
+    const migratedResult = db.prepare(`
+      UPDATE notification_deliveries AS renderer
+      SET channel = 'electron-native',
+          claim_owner = NULL,
+          claimed_at = NULL,
+          next_attempt_at = NULL
+      WHERE renderer.channel = 'renderer-toast'
+        AND renderer.status = 'queued'
+        AND NOT EXISTS (
+          SELECT 1
+          FROM notification_deliveries AS native
+          WHERE native.event_id = renderer.event_id
+            AND native.channel = 'electron-native'
+        )
+    `).run();
+
+    return {
+      migrated: migratedResult.changes,
+      skippedDuplicates: duplicateResult.changes,
+    };
+  });
+  return migrate();
 }
 
 /**
@@ -1929,6 +2113,12 @@ export function backfillProviderPresetKeys(dbInstance: Database.Database): void 
 // Session Operations
 // ==========================================
 
+export interface CreateSessionExecutionBinding {
+  runtimeId?: RuntimeId;
+  state?: 'unbound' | 'bound';
+  source?: RuntimeBindingSource;
+}
+
 /**
  * Phase 3 Step 4: when `opts.includeSources` is supplied, only sessions
  * whose `source` is in that list are returned. The standard caller
@@ -2028,6 +2218,77 @@ export function updateSessionSummary(sessionId: string, summary: string, boundar
   ).run(summary, now, boundaryRowid, sessionId);
 }
 
+export type SessionCompactionTrigger = 'manual' | 'automatic' | 'reactive';
+
+export interface SessionCompactionEvent {
+  id: string;
+  session_id: string;
+  trigger: SessionCompactionTrigger;
+  source_boundary_rowid: number;
+  messages_compressed: number;
+  estimated_tokens_saved: number;
+  auxiliary_provider_id: string | null;
+  auxiliary_model_id: string | null;
+  auxiliary_route_source: string | null;
+  recreated_underlying_session: 0 | 1;
+  created_at: string;
+}
+
+/** Atomically advance summary coverage and persist the user-visible fact. */
+export function commitSessionCompaction(input: {
+  sessionId: string;
+  summary: string;
+  boundaryRowid: number;
+  trigger: SessionCompactionTrigger;
+  messagesCompressed: number;
+  estimatedTokensSaved: number;
+  auxiliaryProviderId?: string;
+  auxiliaryModelId?: string;
+  auxiliaryRouteSource?: string;
+  recreatedUnderlyingSession: boolean;
+}): SessionCompactionEvent {
+  const db = getDb();
+  const now = new Date().toISOString().replace('T', ' ').split('.')[0];
+  const id = crypto.randomBytes(16).toString('hex');
+  return db.transaction(() => {
+    const updated = db.prepare(`
+      UPDATE chat_sessions
+      SET context_summary = ?, context_summary_updated_at = ?, context_summary_boundary_rowid = ?
+      WHERE id = ?
+    `).run(input.summary, now, input.boundaryRowid, input.sessionId);
+    if (updated.changes !== 1) throw new Error('SESSION_NOT_FOUND');
+    db.prepare(`
+      INSERT INTO chat_session_compaction_events (
+        id, session_id, trigger, source_boundary_rowid, messages_compressed,
+        estimated_tokens_saved, auxiliary_provider_id, auxiliary_model_id,
+        auxiliary_route_source, recreated_underlying_session, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      id,
+      input.sessionId,
+      input.trigger,
+      input.boundaryRowid,
+      input.messagesCompressed,
+      input.estimatedTokensSaved,
+      input.auxiliaryProviderId || null,
+      input.auxiliaryModelId || null,
+      input.auxiliaryRouteSource || null,
+      input.recreatedUnderlyingSession ? 1 : 0,
+      now,
+    );
+    return getLatestSessionCompactionEvent(input.sessionId)!;
+  })();
+}
+
+export function getLatestSessionCompactionEvent(sessionId: string): SessionCompactionEvent | undefined {
+  return getDb().prepare(`
+    SELECT * FROM chat_session_compaction_events
+    WHERE session_id = ?
+    ORDER BY created_at DESC, rowid DESC
+    LIMIT 1
+  `).get(sessionId) as SessionCompactionEvent | undefined;
+}
+
 /**
  * Phase 3 Step 4: `source` parameter (optional, defaults to `'user'`)
  * tags task-bound sessions so ChatListPanel can hide them from the
@@ -2052,6 +2313,7 @@ export function createSession(
    * the importer pass 'system' / 'import' explicitly.
    */
   titleOrigin?: TitleOrigin,
+  executionBinding?: CreateSessionExecutionBinding,
 ): ChatSession {
   const db = getDb();
   const id = crypto.randomBytes(16).toString('hex');
@@ -2060,12 +2322,183 @@ export function createSession(
   const projectName = path.basename(wd);
   const sourceValue = source === 'task' ? 'task' : 'user';
   const originValue: TitleOrigin = titleOrigin ?? (title ? 'manual' : 'placeholder');
+  const bindingState: RuntimeBindingState = executionBinding?.state === 'bound' ? 'bound' : 'unbound';
+  const runtimePin = executionBinding?.runtimeId ?? '';
+  if (bindingState === 'bound' && (!runtimePin || !executionBinding?.source)) {
+    throw new Error('A bound session requires an explicit runtime and binding source.');
+  }
+  const boundAt = bindingState === 'bound' ? now : null;
+  const bindingSource = bindingState === 'bound' ? executionBinding?.source ?? null : null;
 
   db.prepare(
-    'INSERT INTO chat_sessions (id, title, created_at, updated_at, model, system_prompt, working_directory, sdk_session_id, project_name, status, mode, sdk_cwd, provider_id, permission_profile, source, title_origin) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, title || 'New Chat', now, now, model || '', systemPrompt || '', wd, '', projectName, 'active', mode || 'code', wd, providerId || '', normalizePermissionProfile(permissionProfile), sourceValue, originValue);
+    `INSERT INTO chat_sessions (
+      id, title, created_at, updated_at, model, system_prompt,
+      working_directory, sdk_session_id, project_name, status, mode, sdk_cwd,
+      provider_id, permission_profile, source, title_origin,
+      runtime_pin, runtime_binding_state, runtime_bound_at,
+      runtime_binding_source, route_revision
+    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  ).run(
+    id,
+    title || 'New Chat',
+    now,
+    now,
+    model || '',
+    systemPrompt || '',
+    wd,
+    '',
+    projectName,
+    'active',
+    mode || 'code',
+    wd,
+    providerId || '',
+    normalizePermissionProfile(permissionProfile),
+    sourceValue,
+    originValue,
+    runtimePin,
+    bindingState,
+    boundAt,
+    bindingSource,
+    0,
+  );
 
   return getSession(id)!;
+}
+
+export interface ChatSessionHandoffRecord {
+  id: string;
+  source_session_id: string | null;
+  target_session_id: string;
+  source_boundary_rowid: number;
+  source_runtime_id: RuntimeId;
+  target_runtime_id: RuntimeId;
+  payload_version: number;
+  payload_json: string;
+  payload_source: 'recent_transcript' | 'generated_summary' | 'user_edited';
+  idempotency_key: string;
+  created_at: string;
+}
+
+function latestEligibleMessageBoundary(db: Database.Database, sessionId: string): number {
+  const rows = db.prepare(`
+    SELECT rowid AS _rowid, content, is_heartbeat_ack
+    FROM messages
+    WHERE session_id = ?
+    ORDER BY rowid DESC
+  `).all(sessionId) as Array<{ _rowid: number; content: string; is_heartbeat_ack?: number }>;
+  const eligible = rows.find(row => row.is_heartbeat_ack !== 1
+    && !isInternalRuntimeSwitchMarker(row.content));
+  return eligible?._rowid ?? 0;
+}
+
+export function getSessionHandoffPreview(sessionId: string): {
+  sourceSession: ChatSession;
+  sourceBoundaryRowid: number;
+} | undefined {
+  const db = getDb();
+  const sourceSession = getSession(sessionId);
+  if (!sourceSession) return undefined;
+  return {
+    sourceSession,
+    sourceBoundaryRowid: latestEligibleMessageBoundary(db, sessionId),
+  };
+}
+
+export function getHandoffForTargetSession(
+  targetSessionId: string,
+): ChatSessionHandoffRecord | undefined {
+  return getDb().prepare('SELECT * FROM chat_session_handoffs WHERE target_session_id = ?')
+    .get(targetSessionId) as ChatSessionHandoffRecord | undefined;
+}
+
+export type CreateSessionHandoffResult =
+  | { ok: true; targetSession: ChatSession; handoff: ChatSessionHandoffRecord; idempotent: boolean }
+  | { ok: false; reason: 'source_not_found' | 'source_unbound' | 'source_busy' | 'source_route_advanced' | 'source_transcript_advanced' };
+
+/** Create the bound target chat and relationship in one transaction. */
+export function createSessionHandoff(input: {
+  sourceSessionId: string;
+  expectedSourceRouteRevision: number;
+  expectedSourceBoundaryRowid: number;
+  targetRoute: SessionRouteIdentity;
+  payloadVersion: number;
+  payloadJson: string;
+  payloadSource: ChatSessionHandoffRecord['payload_source'];
+  idempotencyKey?: string;
+}): CreateSessionHandoffResult {
+  const db = getDb();
+  const create = db.transaction((): CreateSessionHandoffResult => {
+    const idempotencyKey = input.idempotencyKey?.trim().slice(0, 200) || '';
+    if (idempotencyKey) {
+      const existing = db.prepare(`
+        SELECT * FROM chat_session_handoffs
+        WHERE source_session_id = ? AND idempotency_key = ?
+      `).get(input.sourceSessionId, idempotencyKey) as ChatSessionHandoffRecord | undefined;
+      if (existing) {
+        const targetSession = getSession(existing.target_session_id);
+        if (targetSession) return { ok: true, targetSession, handoff: existing, idempotent: true };
+      }
+    }
+
+    const source = getSession(input.sourceSessionId);
+    if (!source) return { ok: false, reason: 'source_not_found' };
+    if (source.runtime_binding_state !== 'bound' || !isRuntimeId(source.runtime_pin)) {
+      return { ok: false, reason: 'source_unbound' };
+    }
+    const now = new Date().toISOString().replace('T', ' ').split('.')[0];
+    db.prepare('DELETE FROM session_runtime_locks WHERE expires_at < ?').run(now);
+    const locked = db.prepare('SELECT 1 FROM session_runtime_locks WHERE session_id = ?')
+      .get(input.sourceSessionId);
+    if (locked || ['running', 'streaming', 'waiting_permission'].includes(source.runtime_status || '')) {
+      return { ok: false, reason: 'source_busy' };
+    }
+    if ((source.route_revision ?? 0) !== input.expectedSourceRouteRevision) {
+      return { ok: false, reason: 'source_route_advanced' };
+    }
+    if (latestEligibleMessageBoundary(db, input.sourceSessionId) !== input.expectedSourceBoundaryRowid) {
+      return { ok: false, reason: 'source_transcript_advanced' };
+    }
+
+    const targetSession = createSession(
+      `Continued: ${source.title}`.slice(0, 200),
+      input.targetRoute.modelId,
+      undefined,
+      source.working_directory,
+      source.mode,
+      input.targetRoute.providerId,
+      normalizePermissionProfile(source.permission_profile),
+      'user',
+      'system',
+      {
+        runtimeId: input.targetRoute.runtimeId,
+        state: 'bound',
+        source: 'handoff_create',
+      },
+    );
+    const handoffId = crypto.randomBytes(16).toString('hex');
+    db.prepare(`
+      INSERT INTO chat_session_handoffs (
+        id, source_session_id, target_session_id, source_boundary_rowid,
+        source_runtime_id, target_runtime_id, payload_version, payload_json,
+        payload_source, idempotency_key, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      handoffId,
+      source.id,
+      targetSession.id,
+      input.expectedSourceBoundaryRowid,
+      source.runtime_pin,
+      input.targetRoute.runtimeId,
+      input.payloadVersion,
+      input.payloadJson,
+      input.payloadSource,
+      idempotencyKey,
+      now,
+    );
+    const handoff = getHandoffForTargetSession(targetSession.id)!;
+    return { ok: true, targetSession, handoff, idempotent: false };
+  });
+  return create();
 }
 
 /**
@@ -2108,6 +2541,7 @@ export function deleteSession(id: string): boolean {
   // causing FK errors when foreign_keys=ON (#Sentry 40x SqliteError).
   const txn = db.transaction(() => {
     db.prepare('DELETE FROM channel_outbound_refs WHERE codepilot_session_id = ?').run(id);
+    db.prepare('DELETE FROM settings WHERE key = ?').run(`memory.assistant-binding.${id}`);
     return db.prepare('DELETE FROM chat_sessions WHERE id = ?').run(id).changes > 0;
   });
   return txn();
@@ -2200,6 +2634,133 @@ export function updateSessionProviderId(id: string, providerId: string): void {
   db.prepare('UPDATE chat_sessions SET provider_id = ? WHERE id = ?').run(providerId, id);
 }
 
+export interface SessionRouteIdentity {
+  runtimeId: RuntimeId;
+  providerId: string;
+  modelId: string;
+}
+
+export type SessionRouteMutationResult =
+  | { ok: true; changed: boolean; session: ChatSession }
+  | { ok: false; reason: 'not_found' | 'revision_conflict'; session?: ChatSession };
+
+/**
+ * Storage primitive for the single route-mutation API. Policy and live catalog
+ * validation happen before this call; the expected revision closes the race
+ * between validation and persistence. Route and binding changes increment the
+ * dedicated revision exactly once, while no-ops do not touch it.
+ */
+export function updateSessionRouteCas(input: {
+  sessionId: string;
+  expectedRouteRevision: number;
+  route: SessionRouteIdentity;
+  binding?: { state: 'bound'; source: RuntimeBindingSource };
+  clearRuntimeRefFor?: RuntimeId;
+}): SessionRouteMutationResult {
+  const db = getDb();
+  const mutate = db.transaction((): SessionRouteMutationResult => {
+    const current = getSession(input.sessionId);
+    if (!current) return { ok: false, reason: 'not_found' };
+    const currentRevision = current.route_revision ?? 0;
+    if (currentRevision !== input.expectedRouteRevision) {
+      return { ok: false, reason: 'revision_conflict', session: current };
+    }
+
+    const bindingChanged = input.binding != null && (
+      current.runtime_binding_state !== 'bound'
+      || current.runtime_binding_source !== input.binding.source
+    );
+    const routeChanged = current.runtime_pin !== input.route.runtimeId
+      || current.provider_id !== input.route.providerId
+      || current.model !== input.route.modelId;
+    // A continuation reference belongs to an already-selected route. Clearing
+    // one on its own is not a route mutation and must not create a revision.
+    if (!bindingChanged && !routeChanged) {
+      return { ok: true, changed: false, session: current };
+    }
+
+    const now = new Date().toISOString().replace('T', ' ').split('.')[0];
+    const nextState = input.binding ? 'bound' : (current.runtime_binding_state ?? 'unbound');
+    const nextSource = input.binding ? input.binding.source : current.runtime_binding_source ?? null;
+    const nextBoundAt = input.binding
+      ? (current.runtime_bound_at || now)
+      : current.runtime_bound_at ?? null;
+    const clearClaude = input.clearRuntimeRefFor === 'claude_code';
+    const clearCodex = input.clearRuntimeRefFor === 'codex_runtime';
+    const result = db.prepare(`
+      UPDATE chat_sessions
+      SET runtime_pin = ?, provider_id = ?, model = ?,
+          runtime_binding_state = ?, runtime_binding_source = ?, runtime_bound_at = ?,
+          route_revision = route_revision + 1,
+          sdk_session_id = CASE WHEN ? THEN '' ELSE sdk_session_id END,
+          codex_thread_id = CASE WHEN ? THEN '' ELSE codex_thread_id END,
+          codex_thread_provider_id = CASE WHEN ? THEN '' ELSE codex_thread_provider_id END,
+          codex_thread_mcp_fingerprint = CASE WHEN ? THEN '' ELSE codex_thread_mcp_fingerprint END
+      WHERE id = ? AND route_revision = ?
+    `).run(
+      input.route.runtimeId,
+      input.route.providerId,
+      input.route.modelId,
+      nextState,
+      nextSource,
+      nextBoundAt,
+      clearClaude ? 1 : 0,
+      clearCodex ? 1 : 0,
+      clearCodex ? 1 : 0,
+      clearCodex ? 1 : 0,
+      input.sessionId,
+      input.expectedRouteRevision,
+    );
+    if (result.changes !== 1) {
+      const latest = getSession(input.sessionId);
+      return latest
+        ? { ok: false, reason: 'revision_conflict', session: latest }
+        : { ok: false, reason: 'not_found' };
+    }
+    return { ok: true, changed: true, session: getSession(input.sessionId)! };
+  });
+  return mutate();
+}
+
+export type BindSessionForExecutionResult =
+  | { ok: true; changed: boolean; session: ChatSession }
+  | { ok: false; reason: 'not_found' | 'revision_conflict' | 'recovery_required' | 'route_mismatch'; session?: ChatSession };
+
+/** Bind an ordinary unbound chat before any Runtime/provider side effect. */
+export function bindSessionForExecution(input: {
+  sessionId: string;
+  expectedRouteRevision: number;
+  runtimeId: RuntimeId;
+  source?: 'first_execution';
+}): BindSessionForExecutionResult {
+  const current = getSession(input.sessionId);
+  if (!current) return { ok: false, reason: 'not_found' };
+  if ((current.route_revision ?? 0) !== input.expectedRouteRevision) {
+    return { ok: false, reason: 'revision_conflict', session: current };
+  }
+  if (current.runtime_binding_state === 'legacy_unbound') {
+    return { ok: false, reason: 'recovery_required', session: current };
+  }
+  if (current.runtime_binding_state === 'bound') {
+    return current.runtime_pin === input.runtimeId
+      ? { ok: true, changed: false, session: current }
+      : { ok: false, reason: 'route_mismatch', session: current };
+  }
+  if (current.runtime_pin !== input.runtimeId) {
+    return { ok: false, reason: 'route_mismatch', session: current };
+  }
+  return updateSessionRouteCas({
+    sessionId: input.sessionId,
+    expectedRouteRevision: input.expectedRouteRevision,
+    route: {
+      runtimeId: input.runtimeId,
+      providerId: current.provider_id || '',
+      modelId: current.model || '',
+    },
+    binding: { state: 'bound', source: input.source ?? 'first_execution' },
+  });
+}
+
 /**
  * Phase 2 Step 2: write the per-session execution-engine pin. The
  * caller is responsible for keeping this empty when the user wants
@@ -2212,7 +2773,12 @@ export function updateSessionProviderId(id: string, providerId: string): void {
  */
 export function updateSessionRuntime(id: string, runtimePin: string): void {
   const db = getDb();
-  db.prepare('UPDATE chat_sessions SET runtime_pin = ? WHERE id = ?').run(runtimePin, id);
+  db.prepare(`
+    UPDATE chat_sessions
+    SET runtime_pin = ?,
+        route_revision = route_revision + CASE WHEN runtime_pin != ? THEN 1 ELSE 0 END
+    WHERE id = ?
+  `).run(runtimePin, runtimePin, id);
 }
 
 export function getDefaultProviderId(): string | undefined {
@@ -2606,6 +3172,24 @@ function buildDelegatedAgentResult(
  */
 export function startSubagentRun(input: StartSubagentRunInput): SubagentRunRecord {
   const db = getDb();
+  const parent = db.prepare(`
+    SELECT runtime_pin, runtime_binding_state, provider_id, model
+    FROM chat_sessions
+    WHERE id = ?
+  `).get(input.parentSessionId) as Pick<
+    ChatSession,
+    'runtime_pin' | 'runtime_binding_state' | 'provider_id' | 'model'
+  > | undefined;
+  if (!parent
+    || parent.runtime_binding_state !== 'bound'
+    || !isRuntimeId(parent.runtime_pin)
+    || !parent.provider_id
+    || !parent.model) {
+    throw new Error('SUBAGENT_PARENT_RUNTIME_UNBOUND: bind or recover the parent chat before starting a managed child.');
+  }
+  if (parent.runtime_pin !== input.runtime) {
+    throw new Error(`SUBAGENT_RUNTIME_OWNERSHIP_CONFLICT: parent owner is ${parent.runtime_pin}, child requested ${input.runtime}.`);
+  }
   const logicalRunId = normalizeLogicalRunId(input.logicalRunId, input.id);
   const workflowId = normalizeSubagentWorkflowKey(input.workflowId, 'workflow_id');
   const taskKey = normalizeSubagentWorkflowKey(input.taskKey, 'task_key');
@@ -3212,14 +3796,23 @@ export function addMessage(
   const now = new Date().toISOString().replace('T', ' ').split('.')[0];
   const taskRunId = metadata?.task_run_id ?? null;
   const streamStatus = metadata?.stream_status ?? 'completed';
-
-  db.prepare(
+  const insertMessage = db.prepare(
     'INSERT INTO messages (id, session_id, role, content, created_at, token_usage, task_run_id, stream_status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(id, sessionId, role, content, now, tokenUsage || null, taskRunId, streamStatus);
+  );
+  const updateSession = db.prepare(
+    'UPDATE chat_sessions SET updated_at = ? WHERE id = ?',
+  );
+  const readMessage = db.prepare(
+    'SELECT *, rowid as _rowid FROM messages WHERE id = ?',
+  );
 
-  updateSessionTimestamp(sessionId);
-
-  return db.prepare('SELECT *, rowid as _rowid FROM messages WHERE id = ?').get(id) as Message;
+  return db.transaction((): Message => {
+    insertMessage.run(id, sessionId, role, content, now, tokenUsage || null, taskRunId, streamStatus);
+    updateSession.run(now, sessionId);
+    const saved = readMessage.get(id) as Message | undefined;
+    if (!saved) throw new Error('CODEPILOT_MESSAGE_PERSISTENCE_FAILED');
+    return saved;
+  })();
 }
 
 export function updateMessageContent(messageId: string, content: string): number {
@@ -4948,17 +5541,25 @@ export function getTokenUsageStats(days: number = 30, now?: Date): {
   summary: {
     total_input_tokens: number;
     total_output_tokens: number;
-    total_cost: number;
+    total_cost: number | null;
     total_sessions: number;
-    cache_read_tokens: number;
-    cache_creation_tokens: number;
+    usage_turns: number;
+    cost_known_turns: number;
+    cost_legacy_turns: number;
+    cache_read_tokens: number | null;
+    cache_creation_tokens: number | null;
+    uncached_input_tokens: number | null;
+    cache_eligible_turns: number;
+    cache_rate_complete: boolean;
   };
   daily: Array<{
     date: string;
     model: string;
     input_tokens: number;
     output_tokens: number;
-    cost: number;
+    cost: number | null;
+    cost_legacy: boolean;
+    cohort: 'stable_owner' | 'handoff';
   }>;
 } {
   const db = getDb();
@@ -4967,25 +5568,81 @@ export function getTokenUsageStats(days: number = 30, now?: Date): {
   // "local midnight N days ago" using Date methods, which are DST-aware.
   const windowStartUTC = localDayStartAsUTC(days - 1, now);
 
-  const summary = db.prepare(`
+  const rawSummary = db.prepare(`
     SELECT
-      COALESCE(SUM(json_extract(m.token_usage, '$.input_tokens')), 0) AS total_input_tokens,
-      COALESCE(SUM(json_extract(m.token_usage, '$.output_tokens')), 0) AS total_output_tokens,
-      COALESCE(SUM(json_extract(m.token_usage, '$.cost_usd')), 0) AS total_cost,
+      SUM(json_extract(m.token_usage, '$.input_tokens')) AS total_input_tokens,
+      SUM(json_extract(m.token_usage, '$.output_tokens')) AS total_output_tokens,
       COUNT(DISTINCT m.session_id) AS total_sessions,
-      COALESCE(SUM(json_extract(m.token_usage, '$.cache_read_input_tokens')), 0) AS cache_read_tokens,
-      COALESCE(SUM(json_extract(m.token_usage, '$.cache_creation_input_tokens')), 0) AS cache_creation_tokens
+      COUNT(*) AS usage_turns,
+      SUM(CASE
+        WHEN json_extract(m.token_usage, '$.normalized.schemaVersion') = 2
+          AND json_extract(m.token_usage, '$.normalized.costSource') IN ('provider_reported', 'versioned_price_snapshot')
+          AND json_type(m.token_usage, '$.normalized.costUsd') IN ('integer', 'real')
+        THEN json_extract(m.token_usage, '$.normalized.costUsd')
+        WHEN json_type(m.token_usage, '$.normalized') IS NULL
+          AND json_type(m.token_usage, '$.cost_usd') IN ('integer', 'real')
+        THEN json_extract(m.token_usage, '$.cost_usd')
+      END) AS known_cost,
+      COUNT(CASE
+        WHEN json_extract(m.token_usage, '$.normalized.schemaVersion') = 2
+          AND json_extract(m.token_usage, '$.normalized.costSource') IN ('provider_reported', 'versioned_price_snapshot')
+          AND json_type(m.token_usage, '$.normalized.costUsd') IN ('integer', 'real')
+        THEN 1
+        WHEN json_type(m.token_usage, '$.normalized') IS NULL
+          AND json_type(m.token_usage, '$.cost_usd') IN ('integer', 'real')
+        THEN 1
+      END) AS cost_known_turns,
+      COUNT(CASE
+        WHEN json_type(m.token_usage, '$.normalized') IS NULL
+          AND json_type(m.token_usage, '$.cost_usd') IN ('integer', 'real')
+        THEN 1
+      END) AS cost_legacy_turns,
+      SUM(CASE WHEN json_extract(m.token_usage, '$.normalized.schemaVersion') = 2
+        THEN json_extract(m.token_usage, '$.normalized.cacheReadInputTokens') END) AS cache_read_tokens,
+      SUM(CASE WHEN json_extract(m.token_usage, '$.normalized.schemaVersion') = 2
+        THEN json_extract(m.token_usage, '$.normalized.cacheWriteInputTokens') END) AS cache_creation_tokens,
+      SUM(CASE WHEN json_extract(m.token_usage, '$.normalized.schemaVersion') = 2
+        THEN json_extract(m.token_usage, '$.normalized.uncachedInputTokens') END) AS uncached_input_tokens,
+      COUNT(CASE WHEN json_extract(m.token_usage, '$.normalized.schemaVersion') = 2
+        AND json_type(m.token_usage, '$.normalized.uncachedInputTokens') IN ('integer', 'real')
+        AND json_type(m.token_usage, '$.normalized.cacheReadInputTokens') IN ('integer', 'real')
+        THEN 1 END) AS cache_eligible_turns
     FROM messages m
     WHERE m.token_usage IS NOT NULL
       AND json_valid(m.token_usage) = 1
+      AND json_type(m.token_usage, '$.input_tokens') IN ('integer', 'real')
+      AND json_type(m.token_usage, '$.output_tokens') IN ('integer', 'real')
       AND m.created_at >= ?
   `).get(windowStartUTC) as {
-    total_input_tokens: number;
-    total_output_tokens: number;
-    total_cost: number;
+    total_input_tokens: number | null;
+    total_output_tokens: number | null;
     total_sessions: number;
-    cache_read_tokens: number;
-    cache_creation_tokens: number;
+    usage_turns: number;
+    known_cost: number | null;
+    cost_known_turns: number;
+    cost_legacy_turns: number;
+    cache_read_tokens: number | null;
+    cache_creation_tokens: number | null;
+    uncached_input_tokens: number | null;
+    cache_eligible_turns: number;
+  };
+  const summary = {
+    total_input_tokens: rawSummary.total_input_tokens ?? 0,
+    total_output_tokens: rawSummary.total_output_tokens ?? 0,
+    total_cost: rawSummary.usage_turns > 0
+      && rawSummary.cost_known_turns === rawSummary.usage_turns
+      ? rawSummary.known_cost
+      : null,
+    total_sessions: rawSummary.total_sessions,
+    usage_turns: rawSummary.usage_turns,
+    cost_known_turns: rawSummary.cost_known_turns,
+    cost_legacy_turns: rawSummary.cost_legacy_turns,
+    cache_read_tokens: rawSummary.cache_read_tokens,
+    cache_creation_tokens: rawSummary.cache_creation_tokens,
+    uncached_input_tokens: rawSummary.uncached_input_tokens,
+    cache_eligible_turns: rawSummary.cache_eligible_turns,
+    cache_rate_complete: rawSummary.usage_turns > 0
+      && rawSummary.cache_eligible_turns === rawSummary.usage_turns,
   };
 
   // Daily bucketing: fetch raw rows and aggregate by local date in JS.
@@ -5000,47 +5657,98 @@ export function getTokenUsageStats(days: number = 30, now?: Date): {
         THEN s.provider_name
         ELSE COALESCE(NULLIF(s.model, ''), 'unknown')
       END AS model,
-      COALESCE(json_extract(m.token_usage, '$.input_tokens'), 0) AS input_tokens,
-      COALESCE(json_extract(m.token_usage, '$.output_tokens'), 0) AS output_tokens,
-      COALESCE(json_extract(m.token_usage, '$.cost_usd'), 0) AS cost
+      json_extract(m.token_usage, '$.input_tokens') AS input_tokens,
+      json_extract(m.token_usage, '$.output_tokens') AS output_tokens,
+      CASE
+        WHEN json_extract(m.token_usage, '$.normalized.schemaVersion') = 2
+          AND json_extract(m.token_usage, '$.normalized.costSource') IN ('provider_reported', 'versioned_price_snapshot')
+          AND json_type(m.token_usage, '$.normalized.costUsd') IN ('integer', 'real')
+        THEN json_extract(m.token_usage, '$.normalized.costUsd')
+        WHEN json_type(m.token_usage, '$.normalized') IS NULL
+          AND json_type(m.token_usage, '$.cost_usd') IN ('integer', 'real')
+        THEN json_extract(m.token_usage, '$.cost_usd')
+      END AS cost,
+      CASE WHEN json_type(m.token_usage, '$.normalized') IS NULL
+        AND json_type(m.token_usage, '$.cost_usd') IN ('integer', 'real')
+        THEN 1 ELSE 0 END AS cost_legacy,
+      CASE WHEN EXISTS (
+        SELECT 1 FROM chat_session_handoffs h WHERE h.target_session_id = m.session_id
+      ) THEN 'handoff' ELSE 'stable_owner' END AS cohort
     FROM messages m
     LEFT JOIN chat_sessions s ON m.session_id = s.id
     WHERE m.token_usage IS NOT NULL
       AND json_valid(m.token_usage) = 1
+      AND json_type(m.token_usage, '$.input_tokens') IN ('integer', 'real')
+      AND json_type(m.token_usage, '$.output_tokens') IN ('integer', 'real')
       AND m.created_at >= ?
   `).all(windowStartUTC) as Array<{
     created_at: string;
     model: string;
     input_tokens: number;
     output_tokens: number;
-    cost: number;
+    cost: number | null;
+    cost_legacy: number;
+    cohort: 'stable_owner' | 'handoff';
   }>;
 
   // Aggregate by (local_date, model)
-  const buckets = new Map<string, { input_tokens: number; output_tokens: number; cost: number }>();
+  const buckets = new Map<string, {
+    input_tokens: number;
+    output_tokens: number;
+    known_cost: number;
+    usage_turns: number;
+    cost_known_turns: number;
+    cost_legacy: boolean;
+    cohort: 'stable_owner' | 'handoff';
+  }>();
   for (const row of rawRows) {
     // Parse UTC timestamp → local date via Date methods (DST-aware per row)
     const utcTs = new Date(row.created_at.replace(' ', 'T') + 'Z');
     const localDate = getLocalDateString(utcTs);
-    const key = `${localDate}\0${row.model}`;
+    const key = `${localDate}\0${row.model}\0${row.cohort}`;
     const existing = buckets.get(key);
     if (existing) {
       existing.input_tokens += row.input_tokens;
       existing.output_tokens += row.output_tokens;
-      existing.cost += row.cost;
+      existing.usage_turns += 1;
+      if (row.cost !== null) {
+        existing.known_cost += row.cost;
+        existing.cost_known_turns += 1;
+      }
+      existing.cost_legacy ||= row.cost_legacy === 1;
     } else {
       buckets.set(key, {
         input_tokens: row.input_tokens,
         output_tokens: row.output_tokens,
-        cost: row.cost,
+        known_cost: row.cost ?? 0,
+        usage_turns: 1,
+        cost_known_turns: row.cost === null ? 0 : 1,
+        cost_legacy: row.cost_legacy === 1,
+        cohort: row.cohort,
       });
     }
   }
 
-  const daily: Array<{ date: string; model: string; input_tokens: number; output_tokens: number; cost: number }> = [];
+  const daily: Array<{
+    date: string;
+    model: string;
+    input_tokens: number;
+    output_tokens: number;
+    cost: number | null;
+    cost_legacy: boolean;
+    cohort: 'stable_owner' | 'handoff';
+  }> = [];
   for (const [key, val] of buckets) {
     const [date, model] = key.split('\0');
-    daily.push({ date, model, ...val });
+    daily.push({
+      date,
+      model,
+      input_tokens: val.input_tokens,
+      output_tokens: val.output_tokens,
+      cost: val.cost_known_turns === val.usage_turns ? val.known_cost : null,
+      cost_legacy: val.cost_legacy,
+      cohort: val.cohort,
+    });
   }
   daily.sort((a, b) => a.date.localeCompare(b.date));
 

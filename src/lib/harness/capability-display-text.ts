@@ -61,10 +61,17 @@ const CAPABILITY_DISPLAY: Readonly<Record<string, CapabilityDisplay>> = {
     },
   },
   memory: {
-    label: { zh: '读取助理 Memory', en: 'Read assistant memory' },
+    label: { zh: '读取工作区记忆', en: 'Read workspace memory' },
     description: {
-      zh: '搜索 / 读取助理工作区的备忘录与历史笔记。',
-      en: 'Search and read assistant workspace memo files.',
+      zh: '搜索与读取当前工作区的记忆，并查看来源。',
+      en: 'Search and read current workspace memories with sources.',
+    },
+  },
+  memory_write: {
+    label: { zh: '保存与修改记忆', en: 'Save and change memory' },
+    description: {
+      zh: '按当前权限保存、更正或遗忘工作区记忆；只读规划时不可写入。',
+      en: 'Save, correct or forget workspace memories under the current permissions; unavailable in read-only planning.',
     },
   },
   tasks_and_notify: {
@@ -293,6 +300,9 @@ export const TOOL_NAME_TO_CAPABILITY_ID: Readonly<Record<string, string>> = {
   codepilot_memory_recent: 'memory',
   codepilot_memory_search: 'memory',
   codepilot_memory_get: 'memory',
+  codepilot_memory_remember: 'memory_write',
+  codepilot_memory_update: 'memory_write',
+  codepilot_memory_forget: 'memory_write',
   // tasks_and_notify
   codepilot_notify: 'tasks_and_notify',
   codepilot_schedule_task: 'tasks_and_notify',
@@ -327,6 +337,7 @@ export const TOOL_NAME_TO_CAPABILITY_ID: Readonly<Record<string, string>> = {
 export const CAPABILITY_EXECUTABLE_RUNTIMES: Readonly<Record<string, readonly RuntimeId[]>> = {
   widget: ['claude_code', 'codepilot_runtime', 'codex_runtime'],
   memory: ['claude_code', 'codepilot_runtime', 'codex_runtime'],
+  memory_write: ['claude_code', 'codepilot_runtime', 'codex_runtime'],
   tasks_and_notify: ['claude_code', 'codepilot_runtime', 'codex_runtime'],
   image_generation: ['claude_code', 'codepilot_runtime', 'codex_runtime'],
   media_import: ['claude_code', 'codepilot_runtime', 'codex_runtime'],

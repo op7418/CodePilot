@@ -13,6 +13,7 @@
 import type { ChatSession } from '@/types';
 import { getSetting } from '@/lib/db';
 import { EGG_IMAGE_URL } from '@/lib/buddy';
+import { getAssistantMemoryWorkspace } from './memory-binding';
 
 // ── Types ────────────────────────────────────────────────────────────
 
@@ -64,10 +65,11 @@ export async function assembleContext(config: ContextAssemblyConfig): Promise<As
 
   // ── Layer 1: Workspace prompt (if assistant project session) ──────
   try {
-    const workspacePath = getSetting('assistant_workspace_path');
+    const workspacePath = getAssistantMemoryWorkspace(session);
     if (workspacePath) {
-      const sessionWd = session.working_directory || '';
-      isAssistantProject = sessionWd === workspacePath;
+      isAssistantProject = true;
+      // Recover pending work after restart only for explicitly bound assistant sessions.
+      void import('./memory-lifecycle').then(({ resumeMemoryJobs }) => resumeMemoryJobs(workspacePath)).catch(() => {});
 
       if (isAssistantProject) {
         const {
@@ -80,7 +82,7 @@ export async function assembleContext(config: ContextAssemblyConfig): Promise<As
           await import('@/lib/assistant-workspace');
 
         // Incremental reindex BEFORE MCP search so tool calls see latest content.
-        // Timeout after 5s to prevent blocking on large workspaces (e.g. Obsidian vaults).
+        // The synchronous legacy indexer is best effort; it has no timeout.
         try {
           const { indexWorkspace } = await import('@/lib/workspace-indexer');
           const indexStart = Date.now();
@@ -90,7 +92,7 @@ export async function assembleContext(config: ContextAssemblyConfig): Promise<As
             console.warn(`[context-assembler] Workspace indexing took ${indexMs}ms — consider reducing workspace size`);
           }
         } catch {
-          // indexer not available or timed out, skip — MCP search will use stale index
+          // Shared memory queries can scan current files if this optional index fails.
         }
 
         const mirrorResult = reconcileInstructionMirrors(workspacePath);
@@ -357,9 +359,11 @@ function buildProgressiveUpdateInstructions(): string {
 - user.md：用户画像变化时更新
 - claude.md：执行规则变化时更新
 
-### 记忆文件（可以静默更新）
-- memory.md：追加稳定的事实和偏好（只追加，不覆写）
-- memory/daily/{日期}.md：记录今天的工作和决策
+### 记忆记录
+- 使用 codepilot_memory_remember 保存事实，等待工具成功才说明已记住。
+- 使用 codepilot_memory_update 更正已有记录，codepilot_memory_forget 撤销记录。
+- 工具返回的来源和版本是事实依据；不要直接修改受管 memory/records.md。
+- 旧 memory.md / memory/daily 文件仍可读取，不自动迁移或覆盖。
 
 ### 更新判断标准
 - 用户明确要求记住/修改某规则 → 立即更新

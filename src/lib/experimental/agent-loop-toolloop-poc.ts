@@ -68,6 +68,7 @@ import { buildToolErrorResultData } from '../agent-loop-tool-error';
 import { repairIncompleteToolHistory } from '../tool-history-integrity';
 import type { AgentLoopOptions } from '../agent-loop';
 import type { ToolInvocationRecord } from '../harness/auto-invoke-accounting';
+import { getExplicitNativeCacheDetails } from '../runtime/turn-usage';
 
 const DEFAULT_MAX_STEPS = 50;
 const KEEPALIVE_INTERVAL_MS = 15_000;
@@ -130,6 +131,10 @@ export function runToolLoopAgentPoc(options: AgentLoopOptions): ReadableStream<s
       // Mirrors agent-loop step-scoped state; step counted via start-step.
       let step = 0;
       const totalUsage: TokenUsage = { input_tokens: 0, output_tokens: 0 };
+      let cacheDetailsComplete = true;
+      let sawUsageStep = false;
+      let totalCacheRead = 0;
+      let totalCacheWrite = 0;
       const distinctTools = new Set<string>();
       let telemetryProvider: ProviderTelemetryIdentity | undefined;
       const providerStreamTelemetry = new NativeStreamTelemetryState();
@@ -384,8 +389,23 @@ export function runToolLoopAgentPoc(options: AgentLoopOptions): ReadableStream<s
           abortSignal: abortController.signal,
           onStepFinish: ({ usage: stepUsage, finishReason, toolCalls }) => {
             if (stepUsage) {
+              sawUsageStep = true;
               totalUsage.input_tokens += stepUsage.inputTokens || 0;
               totalUsage.output_tokens += stepUsage.outputTokens || 0;
+              const cacheDetails = getExplicitNativeCacheDetails(stepUsage);
+              if (cacheDetails) {
+                totalCacheRead += cacheDetails.cacheRead;
+                totalCacheWrite += cacheDetails.cacheWrite;
+              } else {
+                cacheDetailsComplete = false;
+              }
+              if (sawUsageStep && cacheDetailsComplete) {
+                totalUsage.cache_read_input_tokens = totalCacheRead;
+                totalUsage.cache_creation_input_tokens = totalCacheWrite;
+              } else {
+                delete totalUsage.cache_read_input_tokens;
+                delete totalUsage.cache_creation_input_tokens;
+              }
             }
             controller.enqueue(formatSSE({
               type: 'status',

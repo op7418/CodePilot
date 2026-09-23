@@ -33,6 +33,7 @@ import { classifyError, type ClassifiedError } from '@/lib/error-classifier';
 import { getOAuthStatus } from '@/lib/openai-oauth-manager';
 import { getXaiOAuthStatus } from '@/lib/xai-oauth-manager';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { assertCliProviderLaunchAllowed } from '@/lib/cli-maintenance-lease';
 import type { Options, SDKResultSuccess } from '@anthropic-ai/claude-agent-sdk';
 import os from 'os';
 import path from 'path';
@@ -976,6 +977,7 @@ async function runLiveProbe(): Promise<ProbeResult> {
 
   // 6. Run the probe
   try {
+    assertCliProviderLaunchAllowed('claude');
     const conversation = query({
       prompt: 'Say OK',
       options: queryOptions,

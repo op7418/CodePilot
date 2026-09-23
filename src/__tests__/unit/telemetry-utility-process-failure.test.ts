@@ -1,7 +1,10 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import { sanitizeTelemetryEvent } from '../../lib/telemetry/sanitize';
-import { buildUtilityProcessFailureEvent } from '../../lib/telemetry/utility-process-failure';
+import {
+  buildUtilityProcessFailureEvent,
+  isExpectedUtilityProcessExit,
+} from '../../lib/telemetry/utility-process-failure';
 
 describe('utility process failure telemetry', () => {
   it('builds a stable fatal product-fault bucket with numeric observations only', () => {
@@ -13,6 +16,7 @@ describe('utility process failure telemetry', () => {
       hostAvailableKb: 1_000_000,
     });
 
+    assert.ok(event);
     assert.equal(event.message, 'server.utility_process_failed');
     assert.equal(event.level, 'fatal');
     assert.deepEqual(event.tags, {
@@ -48,7 +52,8 @@ describe('utility process failure telemetry', () => {
       hostFreeKb: 0,
     });
 
-    assert.equal(event.tags['error.category'], 'UTILITY_PROCESS_UNEXPECTED_EXIT');
+    assert.ok(event);
+    assert.equal(event.tags['error.category'], 'UTILITY_PROCESS_NONZERO_EXIT');
     assert.deepEqual(event.extra, {
       lifecycleReason: 'unexpected_exit',
       exitCode: -1,
@@ -59,6 +64,7 @@ describe('utility process failure telemetry', () => {
   it('accepts only bounded integer POSIX/Windows exit-code representations', () => {
     for (const exitCode of [-0x8000_0000, -1, 0, 0x7fff_ffff, 0xffff_ffff]) {
       const event = buildUtilityProcessFailureEvent({ reason: 'utility_error', exitCode });
+      assert.ok(event);
       assert.equal(event.extra.exitCode, exitCode);
     }
 
@@ -70,6 +76,7 @@ describe('utility process failure telemetry', () => {
       Number.POSITIVE_INFINITY,
     ]) {
       const event = buildUtilityProcessFailureEvent({ reason: 'utility_error', exitCode });
+      assert.ok(event);
       assert.equal('exitCode' in event.extra, false);
     }
   });
@@ -81,6 +88,7 @@ describe('utility process failure telemetry', () => {
       utilityHeapLimitBytes: 500_000_000,
       hostSwapFreeKb: 42,
     });
+    assert.ok(built);
     const sanitized = sanitizeTelemetryEvent({
       ...built,
       extra: {
@@ -103,5 +111,30 @@ describe('utility process failure telemetry', () => {
     assert.deepEqual(sanitized.fingerprint, built.fingerprint);
     assert.equal(JSON.stringify(sanitized).includes('diagnosticReport'), false);
     assert.equal(JSON.stringify(sanitized).includes('/Users/private'), false);
+  });
+
+  it('drops known Windows shutdown exits and keeps real failures separated by exit class', () => {
+    for (const exitCode of [0x4001_0004, 0xc000_026b]) {
+      const input = { reason: 'unexpected_exit', exitCode, platform: 'win32' } as const;
+      assert.equal(isExpectedUtilityProcessExit(input), true);
+      assert.equal(buildUtilityProcessFailureEvent(input), null);
+    }
+
+    const ordinary = buildUtilityProcessFailureEvent({
+      reason: 'unexpected_exit',
+      exitCode: 1,
+      platform: 'win32',
+    });
+    assert.ok(ordinary);
+    assert.equal(ordinary.tags['error.category'], 'UTILITY_PROCESS_NONZERO_EXIT');
+
+    const platformStatus = buildUtilityProcessFailureEvent({
+      reason: 'unexpected_exit',
+      exitCode: 0xffff_7003,
+      platform: 'win32',
+    });
+    assert.ok(platformStatus);
+    assert.equal(platformStatus.tags['error.category'], 'UTILITY_PROCESS_PLATFORM_TERMINATION');
+    assert.notDeepEqual(ordinary.fingerprint, platformStatus.fingerprint);
   });
 });

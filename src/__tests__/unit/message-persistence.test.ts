@@ -11,11 +11,13 @@
  * 5. Mixed content (text + tool_use + tool_result) serializes correctly
  */
 
+import '../db-isolation.setup';
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { parseMessageContent } from '../../types';
 import type { MessageContentBlock } from '../../types';
+import { addMessage, createSession, getDb } from '../../lib/db';
 
 describe('parseMessageContent', () => {
   it('should parse plain text as a single text block', () => {
@@ -147,5 +149,51 @@ describe('Structured message serialization', () => {
       'text', 'tool_use', 'tool_result',
       'text',
     ]);
+  });
+});
+
+describe('message persistence transaction', () => {
+  it('returns the actual inserted row on the normal path', () => {
+    const session = createSession('message-persistence-happy');
+    const saved = addMessage(session.id, 'assistant', 'persisted reply', '{"input_tokens":1,"output_tokens":2}');
+
+    assert.equal(saved.session_id, session.id);
+    assert.equal(saved.role, 'assistant');
+    assert.equal(saved.content, 'persisted reply');
+    assert.equal(saved.stream_status, 'completed');
+    assert.equal(typeof saved._rowid, 'number');
+  });
+
+  it('throws a stable product error and rolls back when the inserted row cannot be read', () => {
+    const session = createSession('message-persistence-missing-row');
+    const db = getDb();
+    const originalUpdatedAt = '2000-01-01 00:00:00';
+    db.prepare('UPDATE chat_sessions SET updated_at = ? WHERE id = ?')
+      .run(originalUpdatedAt, session.id);
+    db.exec(`
+      CREATE TRIGGER message_persistence_missing_row_probe
+      AFTER INSERT ON messages
+      WHEN NEW.content = 'force-missing-row'
+      BEGIN
+        DELETE FROM messages WHERE id = NEW.id;
+      END;
+    `);
+
+    try {
+      assert.throws(
+        () => addMessage(session.id, 'assistant', 'force-missing-row'),
+        /CODEPILOT_MESSAGE_PERSISTENCE_FAILED/,
+      );
+      const messageCount = db.prepare(
+        'SELECT COUNT(*) AS count FROM messages WHERE session_id = ?',
+      ).get(session.id) as { count: number };
+      assert.equal(messageCount.count, 0, 'failed persistence must not leave a partial row');
+      const updated = db.prepare(
+        'SELECT updated_at FROM chat_sessions WHERE id = ?',
+      ).get(session.id) as { updated_at: string };
+      assert.equal(updated.updated_at, originalUpdatedAt, 'session timestamp update must roll back too');
+    } finally {
+      db.exec('DROP TRIGGER IF EXISTS message_persistence_missing_row_probe');
+    }
   });
 });

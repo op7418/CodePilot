@@ -191,7 +191,7 @@ export function translateCodexNotification(
     case 'thread/tokenUsage/updated': {
       const p = params as {
         tokenUsage?: {
-          last?: { inputTokens?: number; outputTokens?: number };
+          last?: { inputTokens?: number; cachedInputTokens?: number; outputTokens?: number };
           modelContextWindow?: number | null;
         };
       };
@@ -199,6 +199,7 @@ export function translateCodexNotification(
       if (!usage) return null;
       return makeUsageUpdated(base, {
         inputTokens: usage.last?.inputTokens,
+        cachedInputTokens: usage.last?.cachedInputTokens,
         outputTokens: usage.last?.outputTokens,
         contextWindow: usage.modelContextWindow ?? undefined,
       });

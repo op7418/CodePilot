@@ -89,7 +89,7 @@
  */
 
 import { WIDGET_SYSTEM_PROMPT, CANONICAL_SHOW_WIDGET_JSON } from '@/lib/widget-guidelines';
-import { MEMORY_SEARCH_SYSTEM_PROMPT } from '@/lib/memory-search-mcp';
+import { MEMORY_SEARCH_SYSTEM_PROMPT, MEMORY_WRITE_SYSTEM_PROMPT } from '@/lib/memory-service';
 import { NOTIFICATION_MCP_SYSTEM_PROMPT } from '@/lib/notification-mcp';
 import { MEDIA_CAPABILITY_SYSTEM_PROMPT } from '@/lib/media-capability-prompt';
 import { DASHBOARD_MCP_SYSTEM_PROMPT } from '@/lib/dashboard-mcp';
@@ -257,7 +257,7 @@ const widget: CapabilityContract = {
 
 const memory: CapabilityContract = {
   id: 'memory',
-  displayName: 'Assistant workspace memory',
+  displayName: 'Workspace memory',
   status: 'live',
   toolNames: ['codepilot_memory_recent', 'codepilot_memory_search', 'codepilot_memory_get'],
   exposure: {
@@ -265,25 +265,43 @@ const memory: CapabilityContract = {
       kind: 'mcp_server',
       module: 'src/lib/memory-search-mcp.ts',
       factory: 'createMemorySearchMcpServer',
-      notes: 'Authoritative implementation. Owns MEMORY_SEARCH_SYSTEM_PROMPT with the "first-turn must call memory_recent" rule.',
+      notes: 'Thin protocol adapter over the Runtime-neutral memory service.',
     },
     native: {
       kind: 'ai_sdk_tool',
       module: 'src/lib/builtin-tools/memory-search.ts',
       factory: 'createMemorySearchTools',
-      notes: 'Currently has its own MEMORY_SEARCH_SYSTEM_PROMPT (5-line abridged) that drifts from MCP. Tech-debt: align with canonical in follow-up slice.',
+      notes: 'Uses the same schema, handlers and prompt as MCP.',
     },
     codex_proxy: {
       kind: 'bridge_executable',
       module: 'src/lib/codex/proxy/builtin-bridge.ts',
       factory: 'buildMemorySearchTool',
-      notes: 'Workspace-gated. Bridge MEMORY_PROMPT paraphrases canonical; tech-debt as Native.',
+      notes: 'Shared read handlers; mutations use the permission-gated Codex Memory MCP.',
     },
   },
   systemPromptFragment: MEMORY_SEARCH_SYSTEM_PROMPT,
   toolResultShape: 'text',
   canonicalEventTypes: ['tool_started', 'tool_completed'],
   uiRenderPath: 'Inline text in assistant message (no special artifact); MessageItem.tsx tool_use/tool_result blocks',
+};
+
+const memoryWrite: CapabilityContract = {
+  ...memory,
+  id: 'memory_write',
+  displayName: 'Workspace memory changes',
+  toolNames: ['codepilot_memory_remember', 'codepilot_memory_update', 'codepilot_memory_forget'],
+  exposure: {
+    claudecode_sdk: memory.exposure.claudecode_sdk,
+    native: memory.exposure.native,
+    codex_proxy: {
+      kind: 'mcp_server',
+      module: 'src/lib/codex/builtin-mcp-servers.ts',
+      factory: 'getBuiltinMcpServer',
+      notes: 'codepilot_memory_write uses user_approval; omitted in Plan mode. Never executed by the proxy read bridge.',
+    },
+  },
+  systemPromptFragment: MEMORY_WRITE_SYSTEM_PROMPT,
 };
 
 const tasksAndNotify: CapabilityContract = {
@@ -323,7 +341,7 @@ const tasksAndNotify: CapabilityContract = {
   systemPromptFragment: NOTIFICATION_MCP_SYSTEM_PROMPT,
   toolResultShape: 'text',
   canonicalEventTypes: ['tool_started', 'tool_completed'],
-  uiRenderPath: 'Inline text; system notifications via NotificationManager.sendNotification (renderer toast + Electron + Telegram per priority)',
+  uiRenderPath: 'Inline text; system notifications via NotificationManager.sendNotification (Electron native for every priority; Telegram additionally for urgent)',
 };
 
 const assistantBuddy: CapabilityContract = {
@@ -530,6 +548,7 @@ const cliTools: CapabilityContract = {
 export const HARNESS_CAPABILITIES: readonly CapabilityContract[] = [
   widget,
   memory,
+  memoryWrite,
   tasksAndNotify,
   assistantBuddy,
   imageGeneration,

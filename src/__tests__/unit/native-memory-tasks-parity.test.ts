@@ -282,33 +282,20 @@ describe('Native list_tasks — runtime behaviour against session task fixtures'
 });
 
 describe('Native memory_search — tags + file_type real filtering', () => {
-  it('memory_search applies file_type filter (source-pin)', async () => {
-    const fsMod = await import('node:fs');
-    const pathMod = await import('node:path');
-    const src = fsMod.readFileSync(
-      pathMod.resolve(__dirname, '../../lib/builtin-tools/memory-search.ts'),
-      'utf-8',
-    );
-    // Must reference the same filter logic shape as the MCP side.
-    assert.match(
-      src,
-      /codepilot_memory_search[\s\S]*?file_type[\s\S]*?'daily'[\s\S]*?'longterm'[\s\S]*?'notes'/,
-      'memory_search must implement type-filter (mirror memory-search-mcp.ts)',
-    );
-  });
-
-  it('memory_search applies tags filter via loadManifest (source-pin)', async () => {
-    const fsMod = await import('node:fs');
-    const pathMod = await import('node:path');
-    const src = fsMod.readFileSync(
-      pathMod.resolve(__dirname, '../../lib/builtin-tools/memory-search.ts'),
-      'utf-8',
-    );
-    assert.match(
-      src,
-      /codepilot_memory_search[\s\S]*?loadManifest[\s\S]*?entry\.tags/,
-      'memory_search must apply tag-filter via workspace-indexer.loadManifest (mirror MCP authority)',
-    );
+  it('memory_search filters a fresh workspace by tags and type before selecting hits', async () => {
+    const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'native-mem-tags-'));
+    try {
+      fs.mkdirSync(path.join(workspacePath, 'memory/daily'), { recursive: true });
+      fs.writeFileSync(path.join(workspacePath, 'memory/daily/2026-09-21.md'), '---\ntags: [chosen]\n---\n# Daily\napple');
+      fs.writeFileSync(path.join(workspacePath, 'random.md'), '# apple\nwrong type and tag');
+      const { createMemorySearchTools } = await import('@/lib/builtin-tools/memory-search');
+      const execute = createMemorySearchTools(workspacePath).codepilot_memory_search!.execute!;
+      const result = String(await execute({ query: 'apple', tags: ['chosen'], file_type: 'daily', limit: 1 }, { toolCallId: 'test', messages: [], context: {} }));
+      assert.match(result, /2026-09-21/);
+      assert.doesNotMatch(result, /random\.md/);
+    } finally {
+      fs.rmSync(workspacePath, { recursive: true, force: true });
+    }
   });
 
   it('memory_search file_type behaviour: filters daily-only when file_type=daily (runtime)', async () => {

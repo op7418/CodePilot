@@ -34,6 +34,14 @@ const sessionsRouteSrc = fs.readFileSync(
   path.resolve(__dirname, '../../app/api/chat/sessions/[id]/route.ts'),
   'utf8',
 );
+const atomicRouteSrc = fs.readFileSync(
+  path.resolve(__dirname, '../../app/api/chat/sessions/[id]/route/route.ts'),
+  'utf8',
+);
+const dbSrc = fs.readFileSync(
+  path.resolve(__dirname, '../../lib/db.ts'),
+  'utf8',
+);
 
 describe('Runtime session store abstraction', () => {
   it('session-store.ts exports the three lifecycle helpers', () => {
@@ -67,12 +75,15 @@ describe('Runtime session store abstraction', () => {
     assert.match(storeSrc, /case\s+'codepilot_runtime'/);
   });
 
-  it('/api/chat/sessions/[id] clears via the abstraction, not the raw column setter', () => {
-    // The PATCH handler must call clearRuntimeSessionRef('claude_code')
-    // when provider / model / runtime_pin changes invalidate the
-    // resume context. Direct updateSdkSessionId(id, '') in the
-    // clearing branch is the regression we want to block.
-    assert.match(sessionsRouteSrc, /clearRuntimeSessionRef\(id,\s*'claude_code'\)/);
-    assert.match(sessionsRouteSrc, /import\s+\{[^}]*clearRuntimeSessionRef[^}]*\}\s+from\s+['"]@\/lib\/runtime\/session-store['"]/);
+  it('atomic route CAS clears the affected Runtime ref in the same DB transaction', () => {
+    assert.match(sessionsRouteSrc, /ATOMIC_ROUTE_REQUIRED/,
+      'legacy PATCH must reject split route writes.');
+    assert.match(atomicRouteSrc, /clearRuntimeRefFor:\s*runtimeRefToClearForRouteChange/,
+      'continuation policy must select the Runtime ref that becomes invalid.');
+    assert.match(dbSrc, /clearRuntimeRefFor\?:\s*RuntimeId/);
+    assert.match(dbSrc, /clearClaude[\s\S]{0,500}sdk_session_id\s*=\s*CASE/,
+      'the CAS UPDATE must clear Claude resume state atomically with the route.');
+    assert.match(dbSrc, /clearCodex[\s\S]{0,500}codex_thread_id\s*=\s*CASE/,
+      'the CAS UPDATE must clear Codex resume state atomically with the route.');
   });
 });

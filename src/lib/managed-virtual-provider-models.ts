@@ -3,20 +3,8 @@ import type { CatalogModel, Protocol } from './provider-catalog';
 import { getOAuthStatus } from './openai-oauth-manager';
 import { getXaiOAuthStatus } from './xai-oauth-manager';
 
-/**
- * Static models reachable through the legacy ChatGPT Plus/Pro OAuth login.
- *
- * This list necessarily lags upstream. Do not add a model merely because it
- * exists in Codex Account: an entry here is a claim that CodePilot's separate
- * `openai-oauth` transport can serve it.
- */
-export const OPENAI_OAUTH_CATALOG_MODELS: CatalogModel[] = [
-  { modelId: 'gpt-5.5', displayName: 'GPT-5.5' },
-  { modelId: 'gpt-5.4', displayName: 'GPT-5.4' },
-  { modelId: 'gpt-5.4-mini', displayName: 'GPT-5.4-Mini' },
-  { modelId: 'gpt-5.3-codex', displayName: 'GPT-5.3-Codex' },
-  { modelId: 'gpt-5.3-codex-spark', displayName: 'GPT-5.3-Codex-Spark' },
-];
+import { OPENAI_OAUTH_CATALOG_MODELS, getOpenAIOAuthModels } from './openai-oauth-models';
+export { OPENAI_OAUTH_CATALOG_MODELS } from './openai-oauth-models';
 
 export const XAI_OAUTH_CATALOG_MODELS: CatalogModel[] = [
   {
@@ -78,13 +66,14 @@ const MANAGED_VIRTUAL_PROVIDER_DEFINITIONS: Record<
  * `listManagedVirtualProviderModelGroups()`.
  */
 export function listManagedVirtualProviderDefinitions(): ManagedVirtualProviderDefinition[] {
-  return Object.values(MANAGED_VIRTUAL_PROVIDER_DEFINITIONS);
+  return Object.values(MANAGED_VIRTUAL_PROVIDER_DEFINITIONS).map(d => getManagedVirtualProviderDefinition(d.providerId));
 }
 
 export function getManagedVirtualProviderDefinition(
   providerId: ManagedVirtualProviderDefinition['providerId'],
 ): ManagedVirtualProviderDefinition {
-  return MANAGED_VIRTUAL_PROVIDER_DEFINITIONS[providerId];
+  const definition = MANAGED_VIRTUAL_PROVIDER_DEFINITIONS[providerId];
+  return providerId === 'openai-oauth' ? { ...definition, models: getOpenAIOAuthModels() } : definition;
 }
 
 /**
@@ -105,7 +94,7 @@ export function listManagedVirtualProviderModelGroups(): ManagedVirtualProviderM
   try {
     const status = getOAuthStatus();
     if (status.authenticated) {
-      const definition = MANAGED_VIRTUAL_PROVIDER_DEFINITIONS['openai-oauth'];
+      const definition = getManagedVirtualProviderDefinition('openai-oauth');
       groups.push({
         ...definition,
         providerName: `OpenAI${status.plan ? ` (${status.plan})` : ''}`,

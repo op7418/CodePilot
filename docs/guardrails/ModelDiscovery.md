@@ -1,5 +1,7 @@
 # Model Discovery — 护栏
 
+> 2026-09-18 Google：使用配置的 base URL，key 仅放 `x-goog-api-key` header；禁跟随重定向，不回显原始错误体。读取全部分页、去重、去掉 `models/` 前缀，只纳入支持 `generateContent` 的条目。分页失败/重复游标必须整体失败，不把部分结果用于 diff；不能破坏既有用户启用/隐藏守卫。回归：`gemini-native.test.ts`。
+
 模型发现 (`/api/providers/[id]/discover-models`) 是 Provider Management 和 Composer 之间的桥梁：从上游拉模型列表，让用户决定哪些进 picker。
 
 **当前 (Phase B) 写入模型**：probe 路由 read-only，apply 路由保守自动写入并由 `enable_source` 守卫保护用户选择：
@@ -257,3 +259,10 @@ availableModels = [
 - **2026-08-23 GLM legacy identity** — 存量迁移从 stable/source 猜测改为 catalog 明示的全字段旧指纹；搜索协议升级为五态。安全匹配可原子升级，upstream 被占用或任一字段歧义时只报告冲突，不替用户改写。
 - **2026-08-24 implementation review remediation** — git 历史核实旧目录不止单个 sonnet 版本：补入 sonnet→`sonnet` 的 gen-0 `GLM-4.7`、`GLM-5-Turbo`/`GLM-5.2` 与 haiku→`haiku` 的 `GLM-4.5-Air`，删除从未作为 sonnet 槽位 upstream 发布的 `glm-5-turbo` 猜测。current canonical 行存在时不因额外旧 duplicate 整体降级；真正 CAS conflict 由服务端重读返回 model ids，Dialog 展示解释与 Models 恢复动作，并由行为测试锁住 fail-closed 分支。
 - **2026-08-26 GLM-5.3-Flash** — catalog-only 搜索只展示当前 5.3 / Flash 两项，haiku 的已发布 4.5-Air 与 4.7 全字段快照作为 legacy fingerprint 原位升级；已经独立持久化的 Turbo 等退役行不因 GET 被 prune。目录更新与历史数据清理保持分离，避免读取页面制造不可逆变化。
+
+
+## TokenDance 实测回归（2026-09-05）
+
+- TokenDance 以实时 `supported_protocols` 筛选聊天模型，只默认启用六个精选精确 ID（`TOKENDANCE_FEATURED_MODEL_IDS`）；其余隐藏。不能因 defaultModels 为空而全部隐藏，也不能默认全部启用。
+- 修复存量只通过保守刷新恢复系统管理行，manual_hidden/manual_enabled/user_edited 保持保护。同一 TokenDance 连接按模型协议快照计算 Runtime 能力；Kimi K3 当前不可用于 Claude Code，其他五个精选模型支持三个 Runtime。
+- 语义验收必须覆盖 probe → apply → model feed → picker，不能以“授权成功 / 创建 provider / 空目录 mock”代替。回归见 tokendance.test.ts 与 tokendance-integration.spec.ts。

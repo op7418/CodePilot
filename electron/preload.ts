@@ -1,4 +1,9 @@
 import type { UpdaterInstallResult, UpdaterSnapshot } from '../src/lib/updater-contract';
+import type {
+  CliMaintenanceSnapshot,
+  CliMaintenanceSnapshots,
+  CliProvider,
+} from '../src/lib/cli-maintenance-contract';
 
 // eslint-disable-next-line @typescript-eslint/no-require-imports
 const { contextBridge, ipcRenderer, webUtils } = require('electron');
@@ -99,6 +104,17 @@ contextBridge.exposeInMainWorld('electronAPI', {
       const listener = (_event: unknown, data: UpdaterSnapshot) => callback(data);
       ipcRenderer.on('updater:status', listener);
       return () => { ipcRenderer.removeListener('updater:status', listener); };
+    },
+  },
+  cliMaintenance: {
+    getStatus: () => ipcRenderer.invoke('cli-maintenance:get-status') as Promise<CliMaintenanceSnapshots | null>,
+    check: (provider?: CliProvider) => ipcRenderer.invoke('cli-maintenance:check', provider) as Promise<CliMaintenanceSnapshots>,
+    update: (provider: CliProvider) => ipcRenderer.invoke('cli-maintenance:update', provider) as Promise<CliMaintenanceSnapshot | null>,
+    cancel: (provider: CliProvider) => ipcRenderer.invoke('cli-maintenance:cancel', provider) as Promise<boolean>,
+    onStatus: (callback: (data: CliMaintenanceSnapshots) => void) => {
+      const listener = (_event: unknown, data: CliMaintenanceSnapshots) => callback(data);
+      ipcRenderer.on('cli-maintenance:status', listener);
+      return () => { ipcRenderer.removeListener('cli-maintenance:status', listener); };
     },
   },
   bridge: {

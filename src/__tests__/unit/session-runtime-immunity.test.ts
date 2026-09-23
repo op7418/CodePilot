@@ -919,48 +919,25 @@ describe('RED — known global-runtime hazard sites Phase 2 Step 2 must replace'
     );
   });
 
-  it('chat route lazy-seeds session.runtime_pin on first user send (Step 4a)', () => {
-    // Phase 2 Step 4a: existing sessions created before the column
-    // shipped carry `runtime_pin = ''` and would silently follow the
-    // global `agent_runtime` setting on every send. That defeats the
-    // immunity contract — a global flip would re-route the session.
-    //
-    // Lock it in: the first time the **user** sends a message, the
-    // route writes the currently-resolved runtime to the session row,
-    // so subsequent sends go through the pin (immune to global flips).
-    //
-    // **autoTrigger guard (Step 4a review)**: invisible system turns
-    // (heartbeat / assistant hooks / /skill expansion) MUST NOT
-    // capture the runtime — they fire at moments the user didn't
-    // initiate, and pinning then would freeze the wrong global value.
-    // The lazy-seed condition is therefore guarded with `!autoTrigger`,
-    // mirroring the same gate that already wraps `addMessage` /
-    // `updateSessionTitle` for the same reason.
-    //
-    // This is a static check — running the route end-to-end requires
-    // the full Next.js handler stack which is out of unit-test scope.
-    // We assert: (a) the route imports `updateSessionRuntime`,
-    // (b) it calls it inside an `if (!session.runtime_pin && !autoTrigger)`
-    // branch (or equivalent shape), (c) it mutates `session.runtime_pin`
-    // locally so the same turn's streamClaude call picks up the seeded
-    // value (not the empty string from the original DB read).
+  it('chat route binds the Runtime owner before first manual execution and fails closed for background turns', () => {
     const src = fs.readFileSync(
       path.join(repoRoot, 'app/api/chat/route.ts'),
       'utf8',
     );
-    assert.match(src, /import\s*\{[^}]*\bupdateSessionRuntime\b[^}]*\}\s*from\s*['"]@\/lib\/db['"]/,
-      'chat route must import updateSessionRuntime');
-    // The condition must include both `!session.runtime_pin` AND
-    // `!autoTrigger`. Order-agnostic: either side can be on the left.
     assert.match(
       src,
-      /if\s*\(\s*(?:!session\.runtime_pin\s*&&\s*!autoTrigger|!autoTrigger\s*&&\s*!session\.runtime_pin)\s*\)\s*\{[\s\S]{0,500}updateSessionRuntime\(\s*session_id\s*,\s*[^)]+\)/,
-      'chat route must lazy-seed session.runtime_pin only on real user sends — autoTrigger turns must not pin',
+      /decideExecutionBinding\([\s\S]{0,300}autoTrigger\s*\?\s*'auto'\s*:\s*'manual'[\s\S]{0,500}!bindingDecision\.ok/,
+      'chat route must run the owner decision and reject a disallowed automatic execution.',
     );
     assert.match(
       src,
-      /session\.runtime_pin\s*=\s*\w+/,
-      'chat route must mutate the in-memory session.runtime_pin so the same turn\'s streamClaude reads the seeded value',
+      /bindSessionForExecution\([\s\S]{0,500}expectedRouteRevision/,
+      'first manual execution must bind through the route-revision CAS before provider execution.',
+    );
+    assert.doesNotMatch(
+      src,
+      /updateSessionRuntime\(/,
+      'execution must not use the legacy split runtime_pin write.',
     );
   });
 
@@ -1058,71 +1035,26 @@ describe('RED — known global-runtime hazard sites Phase 2 Step 2 must replace'
     }
   });
 
-  it('PATCH /api/chat/sessions/[id] accepts runtime_pin and validates the enum (Step 4c)', () => {
-    // Phase 2 Step 4c — RuntimeSelector PATCHes `{ runtime_pin: pin }`
-    // to this route. Without server-side enum validation the column
-    // could land arbitrary strings (typos, future new-runtime ids,
-    // attacker payloads) which `resolveRuntimeForSession` then can't
-    // route — causing the resolver to silently fall through to global
-    // and re-introduce drift. Lock three things in:
-    //   1. The route imports `updateSessionRuntime` (write side).
-    //   2. It validates the enum against the three legal values.
-    //   3. It threads `runtime_pin` change into the same sdk_session_id
-    //      cleanup logic that already handles model/provider changes
-    //      (an SDK session can't survive a runtime swap any more than a
-    //      provider/model swap).
-    const src = fs.readFileSync(
+  it('route identity changes use the atomic CAS endpoint; legacy PATCH rejects split writes', () => {
+    const legacySrc = fs.readFileSync(
       path.join(repoRoot, 'app/api/chat/sessions/[id]/route.ts'),
       'utf8',
     );
     assert.match(
-      src,
-      /import\s*\{[^}]*\bupdateSessionRuntime\b[^}]*\}\s*from\s*['"]@\/lib\/db['"]/,
-      'PATCH route must import updateSessionRuntime to write runtime_pin',
+      legacySrc,
+      /body\.runtime_pin[\s\S]{0,500}ATOMIC_ROUTE_REQUIRED/,
+      'legacy session PATCH must reject runtime/provider/model writes before applying anything.',
     );
-    // Enum check: must reject any value that isn't the empty string OR
-    // a known `RuntimeId`. Phase 5 review round 4 (2026-05-13)
-    // collapsed the hand-rolled allowlist `'claude_code' |
-    // 'codepilot_runtime'` into the canonical `isRuntimeId` guard
-    // (auto-grows when RUNTIME_IDS gains 'codex_runtime' / etc).
-    // Pin that the validation block (a) checks against the empty
-    // string explicitly, (b) routes through isRuntimeId, (c) returns
-    // 400 on the failure path, and (d) the error message references
-    // RUNTIME_IDS so the API caller sees the up-to-date set.
-    const validationBlock = src.match(/body\.runtime_pin[\s\S]{0,600}status:\s*400/);
-    assert.ok(
-      validationBlock,
-      'PATCH route must validate runtime_pin and 400 on bad input',
+    const atomicSrc = fs.readFileSync(
+      path.join(repoRoot, 'app/api/chat/sessions/[id]/route/route.ts'),
+      'utf8',
     );
-    assert.match(
-      validationBlock![0],
-      /isRuntimeId\(/,
-      'enum check must delegate to the canonical isRuntimeId guard',
-    );
-    assert.match(
-      validationBlock![0],
-      /RUNTIME_IDS/,
-      'error message must reference RUNTIME_IDS so callers see the up-to-date set',
-    );
-    assert.match(
-      validationBlock![0],
-      /''/,
-      'empty string must remain valid (follow-global semantics)',
-    );
-    // sdk_session_id cleanup must also fire on runtime_pin change. The
-    // existing cleanup uses an `if (… || providerChanged …)` shape; the
-    // refactor must expand that condition with `runtimePinChanged` (or
-    // equivalent symbol).
-    assert.match(
-      src,
-      /runtimePinChanged/,
-      'PATCH route must track runtime_pin changes so sdk_session_id can be cleared on runtime swap',
-    );
-    assert.match(
-      src,
-      /\(modelChanged\s*\|\|\s*providerChanged\s*\|\|\s*runtimePinChanged\)/,
-      'sdk_session_id cleanup condition must include runtimePinChanged alongside the existing model/provider triggers',
-    );
+    assert.match(atomicSrc, /expected_route_revision/,
+      'atomic route endpoint must require the caller\'s expected route revision.');
+    assert.match(atomicSrc, /updateSessionRouteCas\(/,
+      'atomic route endpoint must apply the three-part route through one CAS mutation.');
+    assert.match(atomicSrc, /RUNTIME_OWNERSHIP_CONFLICT/,
+      'a bound cross-Runtime mutation must be rejected and redirected to handoff.');
   });
 
   it('new-chat default-resolver is runtime-reactive, not pinned to mount-time auto (Step 4c round 1)', () => {
@@ -1307,9 +1239,17 @@ describe('RED — known global-runtime hazard sites Phase 2 Step 2 must replace'
     }
   });
 
-  it('ChatView wires the integrated Runtime/model picker to the PATCH-on-change handler (Step 4c)', () => {
+  it('ChatView locks the Runtime lane after execution starts without a redundant status banner', () => {
     const src = fs.readFileSync(
       path.join(repoRoot, 'components/chat/ChatView.tsx'),
+      'utf8',
+    );
+    const messageInputSrc = fs.readFileSync(
+      path.join(repoRoot, 'components/chat/MessageInput.tsx'),
+      'utf8',
+    );
+    const pickerSrc = fs.readFileSync(
+      path.join(repoRoot, 'components/chat/ModelSelectorDropdown.tsx'),
       'utf8',
     );
     assert.doesNotMatch(
@@ -1324,13 +1264,43 @@ describe('RED — known global-runtime hazard sites Phase 2 Step 2 must replace'
     );
     assert.match(
       src,
-      /handleRuntimePinChange\s*=\s*useCallback[\s\S]{0,500}runtime_pin/,
-      'handleRuntimePinChange must PATCH the session row with runtime_pin',
+      /runtimeChangeDisabled=\{runtimeSelectionLocked\}/,
+      'ChatView must make the Runtime lane read-only after the owner is established.',
     );
     assert.match(
       src,
-      /\[runtimePin,\s*setRuntimePin\]\s*=\s*useState/,
-      'runtimePin must be local state in ChatView so RuntimeSelector writes are instant — prop-only would force a parent reload',
+      /runtimeSelectionLocked\s*=\s*runtimeBindingState\s*===\s*'bound'[\s\S]{0,160}hasAcceptedExecutionMessage/,
+      'the UI lock must also cover the accepted-first-message window before a server-prop reload.',
+    );
+    assert.doesNotMatch(
+      src,
+      /chat\.runtime\.ownerFixed/,
+      'the disabled Runtime lane is sufficient feedback; ChatView must not add a persistent ownership banner.',
+    );
+    assert.match(
+      messageInputSrc,
+      /runtimeChangeDisabled=\{isStreaming \|\| runtimeChangeDisabled\}/,
+      'MessageInput must preserve the streaming lock and the owner lock.',
+    );
+    assert.match(
+      pickerSrc,
+      /disabled=\{runtimeChangeDisabled\}[\s\S]{0,180}composer\.runtimeLocked/,
+      'the Runtime buttons must be visibly disabled with an explanation.',
+    );
+    assert.match(
+      src,
+      /commitRoute\s*=\s*useCallback[\s\S]{0,900}expected_route_revision/,
+      'same-Runtime route changes must include expected_route_revision.',
+    );
+    assert.doesNotMatch(
+      src,
+      /continueInNewRuntimeChat|router\.push\(`\/chat\/\$\{result\.target_session_id\}`\)/,
+      'the ordinary picker must never create a handoff and surprise-navigate to another chat.',
+    );
+    assert.match(
+      src,
+      /handleRuntimePinChange\s*=\s*useCallback[\s\S]{0,180}if \(runtimeSelectionLocked\) return;/,
+      'the callback must fail closed even if a stale UI event attempts a Runtime change.',
     );
   });
 });

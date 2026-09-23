@@ -14,23 +14,30 @@ const MAX_SAFE_STACK = 32_768;
 
 const CHILD_FIELDS = ['cause', 'error', 'lastError', 'reason'] as const;
 const DNS_CODES = new Set(['ENOTFOUND', 'EAI_AGAIN']);
+const TRANSPORT_CODES = new Set(['ECONNRESET', 'ECONNREFUSED', 'EPIPE', 'UND_ERR_SOCKET', 'ENETUNREACH', 'EHOSTUNREACH']);
 const TIMEOUT_CODES = new Set([
   'ETIMEDOUT',
   'ESOCKETTIMEDOUT',
   'UND_ERR_CONNECT_TIMEOUT',
   'UND_ERR_HEADERS_TIMEOUT',
   'UND_ERR_BODY_TIMEOUT',
+  'PROVIDER_REQUEST_TIMEOUT',
 ]);
 const CREDENTIAL_CODES = new Set([
   'AUTHENTICATION_ERROR',
   'INVALID_API_KEY',
   'MISSING_API_KEY',
   'PERMISSION_DENIED',
+  'NATIVE_CREDENTIALS_REQUIRED',
+  'CLAUDE_SETTINGS_ONLY',
+  'PROVIDER_CREDENTIALS_UNAVAILABLE',
+  'PROVIDER_OAUTH_EXPIRED',
 ]);
 const MODEL_CODES = new Set([
   'MODEL_NOT_FOUND',
   'MODEL_NOT_SUPPORTED',
   'UNSUPPORTED_MODEL',
+  'PROVIDER_TRANSPORT_UNSUPPORTED',
 ]);
 const PROVIDER_ERROR_TYPE_STATUS = new Map<string, number>([
   ['INVALID_REQUEST_ERROR', 400],
@@ -65,6 +72,7 @@ export type TelemetryRootCauseKind =
   | 'http_4xx'
   | 'http_5xx'
   | 'dns'
+  | 'transport'
   | 'timeout'
   | 'credentials'
   | 'model_unsupported'
@@ -248,7 +256,7 @@ export function normalizeTelemetryFailure(
     return {
       category: 'PROVIDER_HTTP_4XX',
       outcome: 'user_action_required',
-      rootCause: 'http_4xx',
+      rootCause: statusCode === 401 || statusCode === 403 ? 'credentials' : 'http_4xx',
       statusCode,
       retryExhausted,
       shouldReport: false,
@@ -268,6 +276,7 @@ export function normalizeTelemetryFailure(
 
   const credentials = CREDENTIAL_CATEGORIES.has(category)
     || hasCode(inspected, CREDENTIAL_CODES)
+    || inspected.names.some((name) => name === 'AI_LoadAPIKeyError')
     || (genericProviderFailure
       && /\b(?:missing|invalid|no)\s+(?:api[ _-]?key|credentials?)\b|\b(?:unauthorized|forbidden|authentication failed)\b/i.test(text));
   if (credentials) {
@@ -329,6 +338,14 @@ export function normalizeTelemetryFailure(
       statusCode,
       retryExhausted,
       shouldReport: reportable(outcome, retryExhausted),
+    };
+  }
+
+  if (hasCode(inspected, TRANSPORT_CODES)) {
+    const outcome: TelemetryOutcomeKind = 'transient_upstream';
+    return {
+      category: 'PROVIDER_TRANSPORT_FAILURE', outcome, rootCause: 'transport',
+      statusCode, retryExhausted, shouldReport: reportable(outcome, retryExhausted),
     };
   }
 

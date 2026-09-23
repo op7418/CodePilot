@@ -12,11 +12,13 @@ describe('Preset Schema Validation', () => {
         }
       });
 
-      it('has at least one default model (or is volcengine/ollama/openai-compatible)', () => {
+      it('has a default model unless models are user-supplied or discovered live', () => {
         // openai-compatible is a generic third-party gateway: the user names
         // their own model. Fabricating a default lineup would be fake data —
         // same rationale as volcengine/ollama.
-        if (preset.key === 'volcengine' || preset.key === 'ollama' || preset.key === 'openai-compatible') return;
+        // TokenDance's authoritative directory declares protocol membership;
+        // a bundled guess could route a media-only model into a chat request.
+        if (['volcengine', 'ollama', 'openai-compatible', 'tokendance', 'tokendance-anthropic'].includes(preset.key)) return;
         assert.ok(preset.defaultModels.length > 0, `Preset ${preset.key} expected at least one default model`);
       });
 

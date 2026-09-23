@@ -15,6 +15,7 @@ import { FileMutationProvider, useFileMutation } from "@/hooks/useFileMutation";
 import { PanelContext, type PreviewViewMode, type PreviewSource } from "@/hooks/usePanel";
 import { UpdateContext } from "@/hooks/useUpdate";
 import { useUpdateChecker } from "@/hooks/useUpdateChecker";
+import { CliMaintenanceContext, useCliMaintenanceChecker } from '@/hooks/useCliMaintenance';
 import { BatchImageGenContext, useBatchImageGenState } from "@/hooks/useBatchImageGen";
 import { SplitContext, type SplitSession } from "@/hooks/useSplit";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -22,7 +23,6 @@ import { SentryInit } from "./SentryInit";
 import { getActiveSessionIds, getSnapshot } from "@/lib/stream-session-manager";
 import { useGitStatus } from "@/hooks/useGitStatus";
 import { Toaster } from '@/components/ui/toast';
-import { useNotificationPoll } from '@/hooks/useNotificationPoll';
 import { useNotificationClickRoute } from '@/hooks/useNotificationClickRoute';
 import { useGlobalSearchShortcut } from '@/hooks/useGlobalSearchShortcut';
 import { GlobalSearchDialog } from './GlobalSearchDialog';
@@ -268,8 +268,6 @@ export function AppShell({ children }: { children: React.ReactNode }) {
     }
   }, [pathname]);
 
-  // Poll server-side notification queue and display as toasts
-  useNotificationPoll();
   // Phase 3 Step 3: route Electron notification clicks (carrying
   // taskId / sessionId payload) to the right page.
   useNotificationClickRoute();
@@ -675,6 +673,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   // --- Update checker (native Electron + browser fallback) ---
   const updateContextValue = useUpdateChecker();
+  const cliMaintenanceContextValue = useCliMaintenanceChecker();
 
   const panelContextValue = useMemo(
     () => ({
@@ -717,6 +716,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <UpdateContext.Provider value={updateContextValue}>
+      <CliMaintenanceContext.Provider value={cliMaintenanceContextValue}>
       <SentryInit />
       <PanelContext.Provider value={panelContextValue}>
         <FileMutationProvider>
@@ -827,6 +827,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         </WorkspaceSidebarProvider>
         </FileMutationProvider>
       </PanelContext.Provider>
+      </CliMaintenanceContext.Provider>
     </UpdateContext.Provider>
   );
 }

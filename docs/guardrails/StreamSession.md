@@ -1,5 +1,7 @@
 # StreamSession Guardrail
 
+> 2026-09-18 Gemini Native：每个已完成 SDK step 通过 `native_step` 保存 canonical response.messages 到 content block 的隐藏 `nativeStep`。只接受 assistant/tool role；桌面 collector 与 bridge 均沿用 owner gate。仅相同 Provider ID + upstream model 回放签名，跨路线/旧记录降级为可见历史；后续未完成 step 必须保留，不能被前一 step 元数据覆盖。UI/摘要不渲染 opaque 元数据，token 估算不重复计算。`length` 结束保留正文并发送本地化桌面截断通知；通知不是持久化的完成质量标记。回归：`gemini-native.test.ts`。
+
 > **Status: Active** — 2026-07-22 因同 Runtime 子 Agent 的 tool stream、历史配对与侧栏 transcript 接线完成首次 on-touch 激活。
 > **为什么先读**：聊天主路径——双入口（`/chat` page.tsx 首消息 + `/chat/[id]` ChatView.tsx 后续）必须**独立**管理 effort / thinking / runtime override 并各自向 `/api/chat` 传递。这是上一次 SDK 0.2.111 接入的重灾区，也是即将到来的 Phase 6 上下文可视化的主要触及点。
 > **已知关键文件**：`src/lib/claude-client.ts`、`src/lib/stream-session-manager.ts`、`src/hooks/useSSEStream.ts`、`src/app/chat/page.tsx`、`src/components/chat/ChatView.tsx`。
@@ -42,6 +44,20 @@
 | 26 | Runtime 内部 lifecycle envelope 不得经通用 status fallback 原样出现在聊天中。已知成功/瞬态事件默认静默；真正影响能力的失败保留结构化诊断事实但只展示本地化人类提示；未知 Codex kind 降级为通用人类状态。双聊天入口均不得暴露 server id、payload JSON 或协议 kind | `codex/event-mapper.ts` + `useSSEStream.ts` + `chat/page.tsx` |
 | 27 | 持久化并重放给 AI SDK 的每个非 provider-executed tool-call，在下一条 user/system 或 transcript 结束前必须有匹配 tool-result。回合结束仍未收到结果时，只能补 app-owned、`is_error:true` 的“未收到结果”事实，不能伪造工具成功/执行失败；legacy history 同样修复。无调用来源的 orphan result 可留在 UI/DB 审计，但不得原样送进模型 prompt | `stream-session-manager.ts` + `message-builder.ts` + `tool-history-integrity.ts` + Native loops |
 | 28 | 由多个异步 callback 写入的 server-side `ReadableStream` 必须把 enqueue/close 的唯一所有权交给 `SingleOwnerStreamWriter`。consumer cancel 先原子宣告 terminal，再 kill/abort producer；producer 的 exit/error/data callback 只能调用 writer，取消后的迟到写入必须 no-op。stream attach 后禁止任何 callback 继续直接操作裸 `controller` | `single-owner-stream-writer.ts` + marketplace/CLI/media stream routes |
+| 29 | DB `token_usage` 是跨 Runtime/历史版本输入；历史消息展示前必须运行时验证 `input_tokens` / `output_tokens` 都是有限非负安全整数，缺失/非法时隐藏整项统计，不得补假 0。assistant `addMessage` 的 insert、session timestamp update 与 row read 必须在同一同步 SQLite transaction 中完成；读不到真实行时抛稳定产品错误并整体回滚，调用方不得依赖 `as Message` 后读取 `undefined.id` | `token-usage-display.ts` + `MessageItem.tsx` + `db.ts` |
+| 30 | 每个父聊天第一次 execution 必须先完成 Runtime binding，再 resolve Provider 或启动 child。bound 后请求 Runtime 只能与 owner 一致；legacy/unbound 的自动执行必须在任何 transcript、工具调用和费用发生前 fail closed | `/api/chat` + `thread-execution-binding.ts` |
+| 31 | 跨 Runtime 只能以新 session handoff 继续。目标首轮从 `runtime_handoff` fragment 消费同一份有边界、可截断、已脱敏事实；不得复制原生 SDK/thread ref，也不得把 handoff card 写成用户消息 | handoff API + `handoff-payload.ts` + `ChatView.tsx` |
+| 32 | v2 usage 中 missing cache/cost 是 unknown，不是 0。Native 必须核对 provider raw usage，不能接受 AI SDK 合成的缓存零；聚合与 UI 只有在每轮 denominator/source 完整时才显示 rate/金额 | `turn-usage.ts` + collector + usage UI |
+
+## 保存失败的后台与客户端边界（2026-09-07）
+
+- `/api/chat` 启动 collector 后立即用 `observeChatCollection` 拥有 rejection，客户端 detach 后仍捕获一次安全遥测；失败处理自身不得产生新的未处理拒绝。
+- runtime SSE 的 done 不是保存确认。响应结束前只等待 terminal persistence 的独立 one-shot 信号，不能等待 collector finally 中的 onboarding/check-in 模型调用或通知；整个 collector 仍有独立 rejection owner。失败发送固定 `CODEPILOT_CHAT_SAVE_UNCONFIRMED`，双聊天入口通过共同错误映射显示“未确认保存、先复制后刷新”的双语提示。后续 finally 失败不能撤销已经确认的保存。
+- 首条聊天保存未确认时不得自动跳转到 DB 历史页；在 `/chat` 内把真实 session 与内存消息交给 ChatView，后续发送复用该 session 和既有 route CAS / 权限 / Stop 行为。只重读 session metadata，不能重读历史覆盖正文；正常首条继续跳转。
+- 明确保存错误通过 SSE parser 的原始码传到 snapshot.saveUnconfirmed，再写入 renderer-only Message.saveUnconfirmed；不能解析翻译后正文猜状态。snapshot rebuild 必须保留标记。ChatView 的 DB reconcile 在 state updater 内检查未确认回复（含 fetch 期间到达的警告），后续成功回合也不能将其覆盖；流在页面切走后结束时，恢复从 snapshot 追加本地正文，不用 DB 替代，initialMessages 初始化不得覆盖这次追加。
+- client tee branch cancel 不能取消 server collector，也不能 await 需要另一分支结束的 tee cancel Promise。所有追加 SSE/关闭走 `SingleOwnerStreamWriter`。
+- 不修改 DB 空读的 fail-closed 事务语义，不声称修复初始空读或保证数据已落库。测试必须同时覆盖正常保存和首次/兜底保存失败，并验证失败时 cleanup/lock 释放。
+- 回归：`chat-collection-response.test.ts`（真实 onboarding 处理器的模型请求被测试 fetch 阻塞时 SSE 已关闭、finally 在 onComplete 前抛错仍有 owner）、`chat-collection-telemetry.test.ts`、`chat-save-warning.spec.ts`（中英文、双入口、失败后续聊同 session、长会话裁剪、离页恢复、正常首条跳转对照）。
 
 ## 关键文件 + 责任
 
@@ -53,6 +69,7 @@
 | `src/app/chat/page.tsx` | 首消息入口 |
 | `src/components/chat/ChatView.tsx` | 后续消息入口 |
 | `src/components/chat/MessageItem.tsx` | 历史 tool 配对；保持真实 tool id；子 Agent 分流 |
+| `src/lib/token-usage-display.ts` | 历史/跨 Runtime token usage 运行时 shape 验证；缺证据隐藏，不制造 0 |
 | `src/components/chat/StreamingMessage.tsx` | 流式子 Agent 卡片分流 |
 | `src/components/ai-elements/tool-actions-group.tsx` | 流式 reasoning 行与工具活动折叠展示 |
 | `src/lib/subagent-view.ts` | requested/effective/runtime/status 的诚实归一化 |
@@ -107,6 +124,8 @@
 - [ ] 新增 Runtime status kind 时明确 quiet / human-copy / actionable-UI 三选一，并同时覆盖 `/chat` 首轮和 `/chat/[id]` 后续流；禁止落入原始 JSON 展示
 - [ ] 改 tool persistence/replay 时覆盖正常 pair、Stop 后 missing result、多 call、provider-executed call 与 orphan result；synthetic marker 只能陈述“CodePilot 未收到结果”，不得冒充工具执行结论。
 - [ ] 新增 subprocess/callback 驱动的 `ReadableStream` 时使用 `SingleOwnerStreamWriter`；cancel 必须先终止 writer，再 kill/abort，所有迟到 callback 都要有行为断言。
+- [ ] 改 chat execution 入口时确认 binding 在 Provider/child 之前完成；auto/retry/queue/bridge 不能重新读取全局 Runtime
+- [ ] 改 usage producer 时用 raw provider 事实区分真实 0 与缺失；unknown 不得经 `?? 0`、SQL `COALESCE` 或图表补点变成 0
 
 ## 常见坑
 
@@ -125,6 +144,8 @@
 - 不要同时转发 managed dynamic tool 的本地 side-channel lifecycle 与 app-server mirror lifecycle；同一次调用会出现两个 tool_use / tool_result。managed local tool 只保留一个事实流。
 - 不要假设 `turn/interrupt` 会打断正在等待本地 `item/tool/call` 的执行。Codex Account Stop 还必须 abort 该父 turn 的进程内 controller；terminal wrapper随后必须以 immutable durable record 为准。
 - 不要只在 SSE `done` 后 `addMessage`。页面刷新、renderer 重载或 dev 进程重启会让整个 Assistant 回复和 Sub-agent tool blocks 从历史消失；必须先 checkpoint，再原位收口。
+- 不要把 `JSON.parse(token_usage)` 的结果直接断言成 `TokenUsage`；数据库 JSON 可合法但缺字段，UI 会在 `toLocaleString()` 二次崩溃。缺真实输入/输出计数时隐藏统计。
+- 不要把 message insert、session timestamp 和回读拆成三个自动提交语句，再用 `as Message` 假定回读必有值；必须事务内验证真实 row，失败回滚并抛稳定产品错误。
 - 不要把 renderer fetch 的断连当成用户 Stop。页面切换会自然 abort 客户端请求，但 server collector 应继续完成并持久化；取消权必须来自显式 `/api/chat/interrupt`。
 - 不要假设 schema 模块初始化等于真正的进程启动；Next route/module duplication 会在活进程中重复执行初始化，restart recovery 必须由独立的进程 owner 守门。
 - 不要只把 parent sessionId 放进 child permission event；独立 subprocess 没有归属字段时，多个 child 的 Write/Bash 提示看起来完全相同。
@@ -170,6 +191,7 @@
 | 20px Thinking Orb 的 React 兼容、decorative 语义与 wait/reasoning state 接线 | `chat-thinking-orb.test.ts` |
 | terminal missing result、legacy repair 与真实 AI SDK `MissingToolResults` 正/反对照 | `codex-tool-only-completion.test.ts` + `agent-loop-messages.test.ts` + `tool-history-integrity.test.ts` |
 | subprocess stream cancel、迟到 data/exit/error 与单终态；marketplace install/remove、CLI install、media plan 四条 route 接线 | `single-owner-stream-writer.test.ts` |
+| token usage 非法/缺字段隐藏且不补 0；message insert/update/read 原子回滚与真实行返回 | `token-usage-display.test.ts` + `message-persistence.test.ts` |
 
 ## 设计决策日志
 
@@ -196,3 +218,13 @@
 - 2026-08-04：用户实机发现 Codex `mcpServerReady` 经 `unknown_item → status` 显示成原始 JSON。现将 ready/starting 在 mapper 静默，startup failed 仍保留结构化诊断，但由共享 resolver 在首轮与后续流转换为本地化人类提示；旧 server 发来的 ready envelope 也由 renderer 防御性消费。generic fallback 只允许普通人类字符串直通，结构化对象及以 `{` / `[` 开头的残缺 JSON 统一降级为本地化状态，防止同类问题换 Runtime 复发。
 - 2026-08-07：0.65 真实 Sentry stack 证明 `AI_MissingToolResultsError` 发生在下一轮 prompt conversion；根因是终止回合可持久化只有 tool_use 的 transcript。未来收口补诚实 missing-result，legacy replay 再防御性修复；真实 AI SDK 正/反对照证明修复前拒绝、修复后进入模型调用。
 - 2026-08-24：marketplace 与 CLI/media subprocess stream 的 cancel/exit 同时争抢 controller，生产出现 closed-controller Sentry。统一由 `SingleOwnerStreamWriter` 认领终态；cancel 先 close owner 再 kill，迟到 callback 只会 no-op。行为测试覆盖 writer 的迟到写入，并逐条钉住四个 route attach/cancel/no-raw-controller 接线；`safe-stream.ts` 仅保留给尚未迁移的 callback-heavy 旧流，不再宣称每个 ReadableStream 都必须使用。
+- 2026-08-27：生产 Sentry 暴露两条持久化边界：合法 JSON 但缺 `output_tokens` 会在历史 UI 崩溃；assistant insert 后非原子回读可能让 collector 访问 `saved.id`。UI 改为运行时 shape 验证且不补假 0，`addMessage` 改为 insert/update/select 同事务并以稳定错误回滚空读。
+
+
+## 2026-09-14 #685：已选路由与运行时回报分离
+
+- `chat_sessions.model` 是用户提交的 route model identity；SDK/Native `status.model` 是运行时观察值，collector 不得用它覆盖 route，也不得借 status 绕过 `route_revision` CAS。续接引用 `sdk_session_id` 仍由现有 lock owner gate 写入；模型观察值继续留在 SSE/usage 元数据中。
+- `resolveChatMessageRoute` 是普通消息的 identity gate。Provider 未随请求回显时仍固定使用 session Provider，不能回退默认/env；明确不同 Provider 立即拒绝。
+- 兼容旧版已写成 upstream 的会话只作读取：必须在同一 Provider 的 live enabled catalog 唯一匹配到本次请求的 modelId，并且当前 Runtime 兼容、实际 resolver upstream 一致。stored ID 若本身是另一条 catalog modelId，或多个 alias 共享它、映射隐藏/删除/修改，不能自动解释为同一路线。虚拟账号路线继续精确 identity。
+- 兼容不改 owner、历史、Provider 或 route_revision；真正改 route 仍走用户显式 CAS。无法无歧义恢复的旧会话继续要求明确重选，不能按显示名或跨 Provider 猜测。
+- 回归：`chat-message-route.test.ts`（多 Provider 连续/重开、旧 upstream、反例和 Native/Codex owner 兼容）、`chat-message-route-http.test.ts`（真实 POST 双回合与错路由在持久化/Runtime 前拒绝）、`collect-owner-gate.test.ts`（owner 也不覆盖 model、stale owner 不写续接状态）。

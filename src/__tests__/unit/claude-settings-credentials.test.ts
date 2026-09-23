@@ -12,7 +12,7 @@
  * back. They write into a temp HOME directory to avoid touching the real user
  * file.
  */
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach, mock } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -142,9 +142,9 @@ describe('claude-settings credential reader', () => {
 // Walks the actual call chain (no mocks, no inlined logic):
 //   provider-resolver.resolveProvider() → hasCredentials becomes TRUE
 //   runtime/registry.predictNativeRuntime() → returns FALSE (i.e. picks SDK)
-//   ai-provider.createModel() → does NOT throw the legacy "No provider credentials" error
+//   ai-provider.createModel() → refuses Native transport with CLAUDE_SETTINGS_ONLY
 //
-// Pre-fix this would all fail and route to native, which throws.
+// The shared resolver must keep SDK credentials visible without claiming Native can use them.
 describe('cc-switch end-to-end (no CodePilot provider, settings.json only)', () => {
   // Each test gets its own DB dir so the migration runs in a clean slate
   let originalDataDir: string | undefined;
@@ -185,7 +185,7 @@ describe('cc-switch end-to-end (no CodePilot provider, settings.json only)', () 
 
     // Pre-fix: hasCredentials would be false (resolver only checked process.env + DB).
     // Post-fix: settings.json is recognized as a credential source.
-    assert.equal(resolved.hasCredentials, true, 'hasCredentials must be true so ai-provider does not abort');
+    assert.equal(resolved.hasCredentials, true, 'Claude SDK must remain available via settingSources');
     assert.equal(resolved.provider, undefined, 'still env mode — settings.json does not create a DB provider');
     // settingSources includes 'user' so the SDK subprocess will load and apply the env
     assert.deepEqual(resolved.settingSources, ['user', 'project', 'local']);
@@ -224,7 +224,31 @@ describe('cc-switch end-to-end (no CodePilot provider, settings.json only)', () 
     assert.equal(typeof result, 'boolean');
   });
 
-  it('ai-provider.createModel does NOT throw "No provider credentials" with cc-switch settings', async () => {
+  it('production resolver keeps SDK credentials while every auxiliary scene stops before Native transport', async () => {
+    writeSettings('settings.json', { env: { ANTHROPIC_AUTH_TOKEN: 'synthetic-CLI-only-token' } });
+    const { resolveExactProvider, toAiSdkConfig } = await import('../../lib/provider-resolver');
+    const { getNativeTransportAvailability } = await import('../../lib/ai-provider');
+    const { runAuxiliaryText } = await import('../../lib/auxiliary-provider');
+    const resolved = resolveExactProvider('env')!;
+    assert.equal(resolved.hasCredentials, true, 'exercise the production buildResolution branch');
+    const config = toAiSdkConfig(resolved, 'haiku');
+    assert.equal(config.apiKey, undefined);
+    assert.equal(config.authToken, undefined);
+    assert.equal(getNativeTransportAvailability(resolved, config).available, false);
+    const fetchMock = mock.method(globalThis, 'fetch', async () => { throw new Error('unexpected provider request'); });
+    try {
+      for (const callScene of ['automatic_memory_extract', 'automatic_quick_actions', 'active_turn_memory_rerank'] as const) {
+        const result = await runAuxiliaryText({ providerId: 'env', callScene, scopeKey: tempHome,
+          system: 'Synthetic settings-only regression', prompt: 'No network allowed' });
+        assert.equal(result.status, 'unavailable');
+        assert.equal(result.reason, 'claude_settings_only');
+      }
+      assert.equal(fetchMock.mock.callCount(), 0);
+      assert.equal(process.env.ANTHROPIC_AUTH_TOKEN, undefined, 'never copy CLI credentials to Native');
+    } finally { fetchMock.mock.restore(); }
+  });
+
+  it('Native factory rejects settings-only credentials while the resolver keeps Claude SDK available', async () => {
     writeSettings('settings.json', {
       env: {
         ANTHROPIC_BASE_URL: 'https://relay.example.com',
@@ -233,23 +257,8 @@ describe('cc-switch end-to-end (no CodePilot provider, settings.json only)', () 
     });
 
     const { createModel } = await import('../../lib/ai-provider');
-    // Pre-fix: this throws "No provider credentials available...".
-    // Post-fix: it constructs a Vercel AI SDK LanguageModel pointed at the relay.
-    let result;
-    let err: Error | undefined;
-    try {
-      result = createModel({ callScene: 'interactive_chat' });
-    } catch (e) {
-      err = e as Error;
-    }
-    assert.equal(err, undefined, `createModel should not throw, got: ${err?.message}`);
-    assert.ok(result, 'createModel returns a result');
-    // The resolved baseUrl should reflect either the settings.json relay
-    // (if ai-provider reads process.env after settings load — it does for env mode)
-    // OR an undefined baseUrl (if it didn't pick up the relay yet — that's still
-    // fine, the SDK subprocess will get it via settingSources).
-    // Either way the chain doesn't abort.
-    assert.ok(result.modelId, 'modelId is set');
+    assert.throws(() => createModel({ callScene: 'interactive_chat' }),
+      (error: unknown) => (error as { code?: string }).code === 'CLAUDE_SETTINGS_ONLY');
   });
 });
 

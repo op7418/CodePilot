@@ -3,6 +3,11 @@
  * Exposed via contextBridge.exposeInMainWorld('electronAPI', ...) in electron/preload.ts.
  */
 import type { UpdaterInstallResult, UpdaterSnapshot } from '@/lib/updater-contract';
+import type {
+  CliMaintenanceSnapshot,
+  CliMaintenanceSnapshots,
+  CliProvider,
+} from '@/lib/cli-maintenance-contract';
 
 interface ClaudeInstallDetection {
   path: string;
@@ -34,6 +39,14 @@ interface ElectronUpdaterAPI {
   downloadUpdate: () => Promise<UpdaterSnapshot>;
   quitAndInstall: () => Promise<UpdaterInstallResult>;
   onStatus: (callback: (data: UpdaterSnapshot) => void) => () => void;
+}
+
+interface ElectronCliMaintenanceAPI {
+  getStatus: () => Promise<CliMaintenanceSnapshots | null>;
+  check: (provider?: CliProvider) => Promise<CliMaintenanceSnapshots>;
+  update: (provider: CliProvider) => Promise<CliMaintenanceSnapshot | null>;
+  cancel: (provider: CliProvider) => Promise<boolean>;
+  onStatus: (callback: (data: CliMaintenanceSnapshots) => void) => () => void;
 }
 
 interface ElectronTerminalAPI {
@@ -142,6 +155,7 @@ interface ElectronAPI {
   };
   install: ElectronInstallAPI;
   updater?: ElectronUpdaterAPI;
+  cliMaintenance?: ElectronCliMaintenanceAPI;
   bridge?: {
     isActive: () => Promise<boolean>;
   };

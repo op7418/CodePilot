@@ -13,7 +13,16 @@
 
 ---
 
-![CodePilot](https://github.com/user-attachments/assets/9750450a-9f6f-49ce-acd4-c623a4e24281)
+![CodePilot](apps/site/public/screenshots/en/chat-window.webp)
+
+<details>
+<summary>More of the current interface</summary>
+
+| Skills and extensions | Connect AI services |
+| --- | --- |
+| ![Skills and extensions](apps/site/public/screenshots/en/plugins-window.webp) | ![Connect AI services](apps/site/public/screenshots/en/providers-window.webp) |
+
+</details>
 
 ---
 

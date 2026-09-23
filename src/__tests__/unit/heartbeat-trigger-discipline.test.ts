@@ -493,8 +493,12 @@ describe('ensureHeartbeatTask refresh discipline', () => {
     });
 
     assert.deepEqual(
-      [...heartbeat.allowedTools], ['mcp__codepilot-memory'],
-      'allowedTools on heartbeat must be ["mcp__codepilot-memory"] only — every other MCP that was previously auto-approved must require explicit permission (and there should be no UI to grant it because it isn\'t registered anyway).',
+      [...heartbeat.allowedTools], [
+        'mcp__codepilot-memory__codepilot_memory_search',
+        'mcp__codepilot-memory__codepilot_memory_get',
+        'mcp__codepilot-memory__codepilot_memory_recent',
+      ],
+      'Heartbeat allows exactly the three memory reads; whole-server approval would also approve managed writes.',
     );
 
     for (const banned of ['Bash', 'Edit', 'Write', 'WebSearch', 'WebFetch']) {

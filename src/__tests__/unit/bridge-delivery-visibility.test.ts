@@ -132,11 +132,11 @@ describe('bridge × priority — Phase 3 Step 3', () => {
         0,
         `priority=${priority} must produce zero bridge-* rows — Bridge isn't a candidate at this priority (v4 fix #3)`,
       );
-      if (priority === 'low') {
-        assert.deepEqual(deliveries.map((d) => d.channel), ['renderer-toast']);
-      } else {
-        assert.deepEqual(deliveries.map((d) => d.channel), ['electron-native']);
-      }
+      assert.deepEqual(
+        deliveries.map((d) => d.channel),
+        ['electron-native'],
+        `priority=${priority} must use the Main-owned system notification channel`,
+      );
     }
   });
 });

@@ -8,6 +8,8 @@
 
 | 文件 | 主题 |
 |------|------|
+| [tokendance-integration.md](tokendance-integration.md) | TokenDance 单连接跨 Runtime、六款精选模型、PKCE API Key 授权、归因与失败恢复 |
+| chat-fixes-review-2026-09-05.md | **本聊天全部修改的 Claude 审查文案**：GLM 冲突恢复、旧聊天同 Runtime 跨模型/Provider、长历史与图片续接、Astra/OAuth；含用户取舍、独立核对点、审查后续修复/Fable 5.1 接入与真实 smoke 边界 |
 | windows-unsigned-auto-update.md | **Windows 无签名自动更新技术交接**：GitHub 单一信任根、unsigned NSIS provenance、`latest.yml`/EXE blockmap、差分→完整包回退、Immutable Releases/ruleset/Action SHA 门禁与 RC-A→RC-B 验收矩阵 |
 | windows-runtime-recovery-hardening.md | **Windows Runtime P0/P1 加固与跨机复查**：Path Identity、三 Runtime Doctor、Codex sandbox 真实状态、复制固定官方命令并打开 PowerShell、safeStorage + AES-GCM Provider secret 迁移、另一台 Windows 的 smoke 清单 |
 | windows-runtime-path-compatibility-review.md | **Windows Runtime / 路径兼容性修复交接与跨机复查手册**：中文/空格/特殊字符 CWD、PowerShell 编码命令、无 bash/rg 回退、Claude `.exe/.cmd`、Codex Desktop vs standalone、WindowsApps/沙盒边界、参考项目专项适配与另一台 Windows 电脑的验收矩阵 |
@@ -33,8 +35,10 @@
 | memory-system-v3.md | 记忆系统 V3/V3.1：对话式 Onboarding、HEARTBEAT_OK 心跳协议、Memory Search MCP、时间衰减、Obsidian 感知、渐进式文件更新、Telegram 静默、transcript 裁剪 |
 | buddy-gamification.md | Buddy 游戏化系统：生成/进化/3D 视觉、心跳双模式（完整 tick + 软 hint）、定时任务调度器健壮性、通知队列/轮询/Electron IPC、symlink 安全、cron 4 年扫描 |
 | context-management.md | 上下文管理系统：token 预估、自动压缩（80% 阈值）、消息归一化 + microcompaction、PTL reactive compact、前端双指标可视化 |
+| runtime-thread-ownership-and-handoff.md | **Runtime 会话所有权与交接**：首次执行绑定 owner、route revision CAS、legacy recovery、同 Runtime 原聊天跨服务商换模型、Codex 按预算分页与安全历史图片续接、目录校验、跨 Runtime handoff、v2 usage truth 与 compaction 事实 |
 | compact-coverage-boundary.md | 压缩覆盖边界不变量：rowid 而非时间戳、boundary 只前进不后退、slash-command 反馈不入 DB、三条压缩路径的 boundary 写入规则、`_rowid` 端到端透传 |
 | cli-upgrade-proxy.md | CLI 版本检测 + 一键升级 + 系统代理透传 + WinGet 支持 + Git for Windows 自动安装 |
+| cli-maintenance.md | **Claude/Codex CLI Maintenance 技术交接**：Main-owned selected-target proof、same-channel advisory、Windows shim/standalone、provider lease、process-tree post-verify、app updater/quit lifecycle latch 与 Release Notes strict sanitize |
 | tool-call-ux.md | 工具调用 UX 优化：thinking 展示全链路、工具注册表、上下文归组、状态动画、流式缓冲/节流 |
 | performance-memory.md | v0.45.0 内存优化：LRU 缓存、消息 300 条上限双向修剪、面板懒加载、流式文件读取、定时器追踪 |
 | provider-architecture.md | 服务商架构全景：18 服务商配置对比、与 Claude Code 关系、认证/协议/模型矩阵、已知问题、优化建议 |

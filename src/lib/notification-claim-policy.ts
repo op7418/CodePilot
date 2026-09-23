@@ -2,16 +2,13 @@ const LOOPBACK = new Set(['127.0.0.1', 'localhost', '::1']);
 
 export type LocalNotificationConsumer = 'electron-main' | 'renderer';
 
-export function validateNotificationConsumerRequest(
-  request: Request,
-  channel: unknown,
-): { ok: true; consumer: LocalNotificationConsumer } | { ok: false; status: number; error: string } {
+type PolicyFailure = { ok: false; status: number; error: string };
+type CommonRequestResult = { ok: true; target: URL } | PolicyFailure;
+
+function validateJsonLoopbackRequest(request: Request): CommonRequestResult {
   const contentType = request.headers.get('content-type')?.split(';', 1)[0].trim().toLowerCase();
   if (contentType !== 'application/json') {
     return { ok: false, status: 415, error: 'Content-Type must be application/json.' };
-  }
-  if (channel !== 'electron-native' && channel !== 'renderer-toast') {
-    return { ok: false, status: 400, error: 'Unsupported notification channel.' };
   }
 
   let target: URL;
@@ -25,22 +22,42 @@ export function validateNotificationConsumerRequest(
   if (!LOOPBACK.has(target.hostname.toLowerCase())) {
     return { ok: false, status: 403, error: 'Notification consumers must use loopback.' };
   }
+  return { ok: true, target };
+}
+
+export function validateNotificationConsumerRequest(
+  request: Request,
+  channel: unknown,
+): { ok: true; consumer: 'electron-main' } | PolicyFailure {
+  const common = validateJsonLoopbackRequest(request);
+  if (!common.ok) return common;
+  if (channel !== 'electron-native') {
+    return { ok: false, status: 400, error: 'Unsupported notification channel.' };
+  }
 
   const declaredConsumer = request.headers.get('x-codepilot-consumer');
   const origin = request.headers.get('origin');
-  if (channel === 'electron-native') {
-    if (declaredConsumer !== 'electron-main' || origin) {
-      return { ok: false, status: 403, error: 'electron-native is owned by Electron Main.' };
-    }
-    return { ok: true, consumer: 'electron-main' };
+  if (declaredConsumer !== 'electron-main' || origin) {
+    return { ok: false, status: 403, error: 'electron-native is owned by Electron Main.' };
   }
+  return { ok: true, consumer: 'electron-main' };
+}
 
+/** Same-origin browser boundary for the Settings "test notification" action. */
+export function validateRendererNotificationTestRequest(
+  request: Request,
+): { ok: true; consumer: 'renderer' } | PolicyFailure {
+  const common = validateJsonLoopbackRequest(request);
+  if (!common.ok) return common;
+
+  const declaredConsumer = request.headers.get('x-codepilot-consumer');
   if (declaredConsumer) {
-    return { ok: false, status: 403, error: 'Renderer claims cannot impersonate Electron Main.' };
+    return { ok: false, status: 403, error: 'Renderer requests cannot impersonate Electron Main.' };
   }
+  const origin = request.headers.get('origin');
   if (!origin) return { ok: false, status: 403, error: 'A same-origin renderer request is required.' };
   try {
-    if (new URL(origin).origin !== target.origin) {
+    if (new URL(origin).origin !== common.target.origin) {
       return { ok: false, status: 403, error: 'Cross-origin requests are not allowed.' };
     }
   } catch {

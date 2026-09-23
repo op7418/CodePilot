@@ -3,6 +3,7 @@ import { parseClaudeSession } from '@/lib/claude-session-parser';
 import { createSession, addMessage, updateSdkSessionId, getAllSessions } from '@/lib/db';
 import { deriveConversationTitle } from '@/lib/conversation-title';
 import { serverErrorResponse } from '@/lib/api-error';
+import { resolveAutomaticSessionRoute } from '@/lib/runtime/automatic-session-route';
 
 export async function POST(request: NextRequest) {
   try {
@@ -55,16 +56,22 @@ export async function POST(request: NextRequest) {
     // Create a new CodePilot session. origin 'import': this title describes a
     // conversation that happened elsewhere, so semantic re-generation must
     // never touch it.
+    const route = resolveAutomaticSessionRoute('interactive_chat', { runtimeId: 'claude_code' });
     const session = createSession(
       title,
-      undefined, // model — will use default
+      route.modelId,
       undefined, // system prompt
       info.cwd || info.projectPath,
       'code',
-      undefined, // provider id
+      route.providerId,
       undefined, // permission profile
       undefined, // source
       'import',
+      {
+        runtimeId: 'claude_code',
+        state: 'bound',
+        source: 'legacy_runtime_ref',
+      },
     );
 
     // Store the original Claude Code SDK session ID so the conversation can be resumed

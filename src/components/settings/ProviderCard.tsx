@@ -50,6 +50,7 @@ export interface ProviderCardData {
   /** Runtime compatibility — drives the secondary pill in the card header.
    *  Computed via `getProviderCompat` in `src/lib/runtime-compat.ts`. */
   compat?: import('@/types').ProviderRuntimeCompat;
+  provider?: Pick<import('@/types').ApiProvider, 'base_url' | 'protocol'>;
   /** Rows shown as a single combined sub-card with `divide-y` between them.
    *  Skip entries with no real data — don't pad with "未检测". */
   info?: ProviderCardInfoRow[];
@@ -212,10 +213,10 @@ export function ProviderCard({
                 <TooltipTrigger asChild>
                   <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-medium text-muted-foreground cursor-help whitespace-nowrap">
                     <span className={cn("size-1.5 rounded-full", compatDotColor(data.compat))} aria-hidden />
-                    {compatLabel(data.compat, isZh)}
+                    {compatLabel(data.compat, isZh, data.provider)}
                   </span>
                 </TooltipTrigger>
-                <TooltipContent>{compatTooltip(data.compat, isZh)}</TooltipContent>
+                <TooltipContent>{compatTooltip(data.compat, isZh, data.provider)}</TooltipContent>
               </Tooltip>
             )}
           </div>

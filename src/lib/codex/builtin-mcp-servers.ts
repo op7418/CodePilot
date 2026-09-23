@@ -24,7 +24,8 @@ import { createWidgetMcpServer } from '@/lib/widget-guidelines';
 import { createNotificationMcpServer } from '@/lib/notification-mcp';
 import { createDashboardMcpServer } from '@/lib/dashboard-mcp';
 import { createCliToolsMcpServer } from '@/lib/cli-tools-mcp';
-import { getSetting } from '@/lib/db';
+import { getSetting, getSession } from '@/lib/db';
+import { getSessionMemoryWorkspace, canWriteSessionMemory } from '@/lib/memory-binding';
 import { sameRealPath } from './mcp-config';
 
 /** The connectable MCP server (the `.instance` of a `createSdkMcpServer`). */
@@ -67,8 +68,16 @@ export const CODEX_BUILTIN_MCP_SERVERS: Readonly<Record<string, BuiltinMcpServer
   codepilot_memory: {
     serverName: 'codepilot_memory',
     elicitationPolicy: 'auto_accept', // read-only memo reads (auto_safe)
-    create: ({ workspacePath }) => createMemorySearchMcpServer(workspacePath).instance,
-    authorize: ({ workspacePath }) => authorizeAssistantWorkspace(workspacePath),
+    create: ({ workspacePath, sessionId }) => createMemorySearchMcpServer(workspacePath, { access: 'read', sourceSessionId: sessionId, providerId: getSession(sessionId)?.provider_id }).instance,
+    authorize: ({ workspacePath, sessionId }) => getSessionMemoryWorkspace(sessionId, workspacePath)
+      ? { ok: true } : { ok: false, status: 403, message: 'Memory scope does not match session' },
+  },
+  codepilot_memory_write: {
+    serverName: 'codepilot_memory_write',
+    elicitationPolicy: 'user_approval',
+    create: ({ workspacePath, sessionId }) => createMemorySearchMcpServer(workspacePath, { access: 'write', sourceSessionId: sessionId, authorizeWrite: () => canWriteSessionMemory(sessionId, workspacePath) }).instance,
+    authorize: ({ workspacePath, sessionId }) => getSession(sessionId)?.mode !== 'plan' && getSessionMemoryWorkspace(sessionId, workspacePath)
+      ? { ok: true } : { ok: false, status: 403, message: 'Memory write scope or permission denied' },
   },
   codepilot_widget: {
     serverName: 'codepilot_widget',

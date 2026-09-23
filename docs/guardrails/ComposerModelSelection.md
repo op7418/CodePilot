@@ -16,10 +16,11 @@
 ### 1.1 统一 Runtime → Provider × Model route 与能力菜单（2026-08-26 修订）
 
 - Picker 左侧主体导航**只能是 Runtime**，顺序来自 `RUNTIME_IDS`。唯一例外是 Runtime 列表上方固定的 Favorites 快捷入口；Provider、最近使用不得成为左侧一级导航。
-- 点击左侧 Runtime 是真实 session runtime 变更：既有会话走 `runtime_pin` PATCH，新会话更新待创建状态；不得只在前端临时过滤列表而不改变本次执行 Runtime。
+- 点击左侧 Runtime 是 binding-aware action：未绑定新聊天更新待创建完整 route；第一次真实执行被接受后，左侧 Runtime lane 必须 visibly disabled，普通 Picker 不得创建 handoff 或突然跳到另一个聊天。未来若开放跨 Runtime 交接，只能由独立、明确写明“在新聊天中继续”且带确认的入口调用；不得直接 PATCH `runtime_pin`，也不得只改前端过滤状态。
 - 右侧只显示所选 Runtime 当前可执行的 live route，并按 provider instance 小标题分组；Provider 图标/名称是分组身份，用于区分同名模型，不是选择器的第一层。
+- 已有聊天可在固定 Runtime 内切换不同 Provider 的兼容模型；普通模型选择必须保留当前 session ID、消息和页面，不能创建或导入另一个聊天。不要把“禁止换 Runtime”扩大为“禁止换服务商”。底层续接由 Runtime adapter 处理，详情见 `Runtime.md` §0。
 - Picker 的可执行 identity 是 `(providerInstanceId, modelId)`，不能只按 model id。两个渠道实例即使暴露同名模型也必须是两个独立 route。
-- 收藏以版本化 localStorage `codepilot:model-route-favorites:v2` 保存 `(runtimeId, providerInstanceId, modelId)` 精确组合；点击必须依次调用 Runtime 与 Provider/Model 的真实更新 handler。provider/model snapshot 绝不能据以猜一条可执行 route。失效或不兼容收藏只在 Favorites lane 以 disabled 行展示真实原因和取消收藏入口，不进入普通 Runtime 可用列表，也不能执行。
+- 收藏以版本化 localStorage `codepilot:model-route-favorites:v2` 保存 `(runtimeId, providerInstanceId, modelId)` 精确组合；点击必须走一次完整 route action：同 owner Runtime 使用 CAS route mutation，bound 聊天中其它 Runtime 的收藏必须 disabled，不能借收藏绕过 Runtime lock。provider/model snapshot 绝不能据以猜一条可执行 route。
 - 未发布 V1 收藏缺 Runtime identity，当前 parser 必须 fail closed；不得用打开 picker 时的 Runtime 猜迁移。
 - 搜索可覆盖右侧 live route 的 model id/name 与 provider name，但不得搜索/展示 secret、base URL 原文或隐藏 metadata。
 - 搜索排序固定为 `exact > prefix/substring > favorite > recency > catalog order`。收藏 boost 不得压过更准确文本匹配。
@@ -124,7 +125,7 @@ if (providerFetchState === 'loaded' && (!resolvedProviderId || !resolvedModel)) 
 
 不变量：
 - 页面加载、全局 Runtime 变化或目录 refetch 都不得静默 `setCurrentProviderId` / PATCH session route。
-- 只有用户在统一 Picker 中显式选择 Runtime 或右侧模型路线，才能分别持久化 `runtime_pin` 或 `(provider_id, model)`。
+- 只有用户在统一 Picker 中显式选择 owner Runtime 内的完整路线，才能通过带 `expected_route_revision` 的原子 route mutation 持久化；bound 聊天的普通 Picker 不提供跨 Runtime 动作。独立 handoff 入口若将来开放，只创建目标、不改来源 route。
 - 服务端并发删除 provider 时用 `INVALID_SESSION_PROVIDER` 409 回到同一恢复面，不得由客户端猜 fallback 后继续发送。
 
 ## 5. ChatView 初始化保留 '' 语义
@@ -160,6 +161,7 @@ useEffect(() => {
 - 只在 `modelName` 不在 `modelOptions` 时触发（别频繁 fire）
 - fallback 用 `modelOptions[0]`，不要用 `globalDefaultModel`（globalDefault 只对新会话有意义；存量 session 强行覆盖会把用户原选择丢掉）
 - `onProviderModelChange` 传 `currentProviderIdValue`（hook 算的 fallback group ID），不要传 raw `providerId` prop（那是已被替换的旧 ID）
+- `isAuto` 回调只同步 Composer 本地显示，不得调用 route mutation。unbound 会话切 Runtime 后的完整 route 只在第一次手动 Send 中与 `first_execution` owner 一起原子保存；不得用一个可能长期残留的“刚选过 Runtime”标志授权后续 catalog refetch 偷写 revision。
 
 ## 7. New Chat Page (chat/page.tsx) 自治
 
@@ -172,6 +174,17 @@ useEffect(() => {
 - `groups: []` → `noCompatibleProvider=true` + 清 currentProviderId/Model
 - 不要把 saved provider/model 塞回到刚被 runtime 滤掉的位置
 - `sendFirstMessage` 加 `noCompatibleProvider` + `!currentModel || !currentProviderId` 防御
+
+侧栏、项目行和目录选择器会先创建一个零消息的 `/chat/[id]` 空会话。此类入口只有两种合法请求：
+
+- 已经掌握一条经过当前 catalog 解析的明确 route：同时提交 `runtime_id + provider_id + model`；
+- 只想创建可编辑的 unbound 空会话：三个 route 字段全部省略，由 Composer 展示当前可用 route，第一条真实执行再绑定。
+
+不得从 localStorage 只拼 `model + provider_id`。这既不是完整 route，也会被 `/api/chat/sessions` 的 all-or-none 校验以 `INCOMPLETE_SESSION_ROUTE` 拒绝。相关回归钉在 `sidebar-compose-new-chat.test.ts`。
+
+对第二种空会话，第一条手动 Send 必须先调用 route CAS，并显式携带 `bind_for_execution: true`：服务端在同一次事务中写完整 route、`runtime_binding_state='bound'`、`runtime_binding_source='first_execution'` 和新 revision。只有该请求成功后，客户端才可添加 optimistic 用户气泡并启动 `/api/chat`。不得把裸 `model/provider` 直接交给 `/api/chat` 让它猜 owner，也不得在绑定失败时先把消息显示成已发送。
+
+若 route CAS 返回 `ROUTE_REVISION_CONFLICT`，客户端必须采用响应中的权威 session 快照（完整 route、binding state、owner 与 `route_revision`），保留用户草稿且不添加 optimistic 气泡。用户下一次 Send 使用最新快照重试；不能继续拿旧 revision 无限 409，也不能要求整页刷新才能恢复。
 
 ## 8. Auto-trigger 同样吃 resolved pair
 
@@ -213,7 +226,7 @@ if (!resolvedProviderId || !resolvedModel) return;
   - 收藏 key 必须包含 Runtime + provider instance + model；收藏点击必须切完整组合
   - 普通 Runtime lane 只能显示所选 Runtime 下 `selectable && live` 的 route；Favorites lane 可显示 disabled 快照，但只能解释/删除，不能执行
   - 右侧必须先显示 Provider 分组标题，再列该 Provider 的模型
-  - 切 Runtime 必须调用 session/new-chat runtime handler，不得只改 picker 本地 state
+  - unbound 聊天切 Runtime 只更新待发送的本地 route；第一次手动 Send 必须调用原子 route handler 并绑定 owner。bound / 已接受第一条消息的会话必须 disable Runtime lane，并在 callback 再次 fail closed；不得直写 `runtime_pin`，也不得从普通 Picker 自动 handoff / 跳转
   - Composer 不得同时出现统一 Picker 与独立 `RuntimeSelector`
   - 改 onProviderModelChange callback 时确保把 hook 的 `currentProviderIdValue` 传上去而非 prop
   - 收藏/最近项不能绕过 runtime-filtered live route；snapshot 不得执行
@@ -237,7 +250,7 @@ if (!resolvedProviderId || !resolvedModel) return;
 5. **没 abort** — 慢的旧请求覆盖新请求
 6. **idle 状态不 gate** — 加载窗口 send 绕过 runtime 过滤
 7. **append user message 在 gate 之前** — gate 退出后用户消息悬挂无回复
-8. **auto-trigger 用 raw currentModel/currentProviderId** — backend 端绕过 runtime gate
+8. **auto-trigger 用 raw currentModel/currentProviderId 或全局 Runtime** — backend 端绕过 route/binding gate；自动会话必须创建即绑定
 9. **同步 effect 缺 `providerFetchState` deps** — eslint-disable React Hook 后忘记加
 10. **MessageInput auto-correct fallback 用 globalDefaultModel** — 存量 session 被强行改
 11. **把 Provider 放进左栏，或让 Favorites 丢失 Runtime** — 执行渠道被误当 Runtime，或快捷选择只换半套 route
@@ -253,6 +266,8 @@ if (!resolvedProviderId || !resolvedModel) return;
 |---|---|
 | `src/__tests__/unit/chat-runtime.test.ts` | 5 个 chat-runtime helper test，含 registry 注册副作用回归 |
 | `src/__tests__/unit/provider-resolver.test.ts` | resolveProvider 在 runtime opt 下的 hidden + runtime stack |
+| `src/__tests__/unit/runtime-route-validation.test.ts` | 未落库 catalog 模型、隐藏/不存在/不兼容模型、Codex 冷缓存发现与 recovery safe mode |
+| `src/__tests__/e2e/old-chat-model-route.spec.ts` | 三 Runtime 旧聊天同/跨 Provider 切模型，保留聊天 ID、页面、消息与聊天总数；跨 Runtime 仍拒绝 |
 | 待补 `useProviderModels.test.ts` | hook 单测：fetchState 转移 / providerWasFilteredOut / requestedProviderId 三层语义 / AbortController 竞态 |
 | 待补 `ChatView-send-gate.test.ts` | 三道 gate / append-before-gate 防御 |
 | `src/__tests__/unit/sdk-subprocess-env.test.ts` | toClaudeCodeEnv 不 leak hidden role default |
@@ -279,3 +294,12 @@ if (!resolvedProviderId || !resolvedModel) return;
 - **2026-08-26** 失效收藏留在 Favorites lane 管理、V1 fail closed — badge 必须对应可见可删条目，缺 Runtime 的旧格式不得靠当前 UI 状态猜执行 identity
 - **2026-08-26** capability requested/effective 分层 — 模型归一化是 session-local，不允许自动污染 provider 共享设置
 - **2026-08-26** footer 菜单收窄 — capability 固定 240px，permission 固定 256px 且动态原因换行；短说明只辅助扫读，完整权限告警继续由确认弹窗承担
+
+
+## 2026-09-14 #685：已选路由与运行时回报分离
+
+- `chat_sessions.model` 是用户提交的 route model identity；SDK/Native `status.model` 是运行时观察值，collector 不得用它覆盖 route，也不得借 status 绕过 `route_revision` CAS。续接引用 `sdk_session_id` 仍由现有 lock owner gate 写入；模型观察值继续留在 SSE/usage 元数据中。
+- `resolveChatMessageRoute` 是普通消息的 identity gate。Provider 未随请求回显时仍固定使用 session Provider，不能回退默认/env；明确不同 Provider 立即拒绝。
+- 兼容旧版已写成 upstream 的会话只作读取：必须在同一 Provider 的 live enabled catalog 唯一匹配到本次请求的 modelId，并且当前 Runtime 兼容、实际 resolver upstream 一致。stored ID 若本身是另一条 catalog modelId，或多个 alias 共享它、映射隐藏/删除/修改，不能自动解释为同一路线。虚拟账号路线继续精确 identity。
+- 兼容不改 owner、历史、Provider 或 route_revision；真正改 route 仍走用户显式 CAS。无法无歧义恢复的旧会话继续要求明确重选，不能按显示名或跨 Provider 猜测。
+- 回归：`chat-message-route.test.ts`（多 Provider 连续/重开、旧 upstream、反例和 Native/Codex owner 兼容）、`chat-message-route-http.test.ts`（真实 POST 双回合与错路由在持久化/Runtime 前拒绝）、`collect-owner-gate.test.ts`（owner 也不覆盖 model、stale owner 不写续接状态）。

@@ -28,6 +28,9 @@ export interface CompressionResult {
   summary: string;
   messagesCompressed: number;
   estimatedTokensSaved: number;
+  auxiliaryProviderId?: string;
+  auxiliaryModelId?: string;
+  auxiliaryRouteSource?: string;
 }
 
 /**
@@ -42,22 +45,44 @@ export interface CompressionResult {
 export function buildContextCompressedStatus(stats: {
   messagesCompressed: number;
   tokensSaved?: number;
+  trigger?: 'manual' | 'automatic' | 'reactive';
+  sourceBoundaryRowid?: number;
+  recreatedUnderlyingSession?: boolean;
 }): {
   notification: true;
   subtype: 'context_compressed';
   message: string;
-  stats: { messagesCompressed: number; tokensSaved: number };
+  stats: {
+    messagesCompressed: number;
+    tokensSaved: number;
+    trigger?: 'manual' | 'automatic' | 'reactive';
+    sourceBoundaryRowid?: number;
+    recreatedUnderlyingSession?: boolean;
+  };
 } {
   const messagesCompressed = stats.messagesCompressed;
   const tokensSaved = stats.tokensSaved ?? 0;
-  const message = tokensSaved > 0
+  const baseMessage = tokensSaved > 0
     ? `Context compressed: ${messagesCompressed} older messages summarized, ~${tokensSaved.toLocaleString()} tokens saved`
     : `Context compressed: ${messagesCompressed} older messages summarized`;
+  const message = stats.recreatedUnderlyingSession
+    ? `${baseMessage}. The underlying Runtime session was recreated, so its cache may rebuild.`
+    : baseMessage;
   return {
     notification: true,
     subtype: 'context_compressed',
     message,
-    stats: { messagesCompressed, tokensSaved },
+    stats: {
+      messagesCompressed,
+      tokensSaved,
+      ...(stats.trigger ? { trigger: stats.trigger } : {}),
+      ...(stats.sourceBoundaryRowid !== undefined
+        ? { sourceBoundaryRowid: stats.sourceBoundaryRowid }
+        : {}),
+      ...(stats.recreatedUnderlyingSession !== undefined
+        ? { recreatedUnderlyingSession: stats.recreatedUnderlyingSession }
+        : {}),
+    },
   };
 }
 
@@ -353,6 +378,9 @@ Summary:`;
       summary,
       messagesCompressed: messages.length,
       estimatedTokensSaved: Math.max(0, originalTokens - summaryTokens),
+      auxiliaryProviderId: effectiveProviderId || undefined,
+      auxiliaryModelId: effectiveModel,
+      auxiliaryRouteSource: auxiliary.source,
     };
   } catch (error) {
     recordFailure(sessionId);

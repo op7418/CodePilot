@@ -416,35 +416,6 @@ export function invalidateWingetCache(): void {
   _wingetDetectionResult = null;
 }
 
-/**
- * Get the upgrade command for a given install type.
- */
-export interface UpgradeCommand {
-  command: string;
-  args: string[];
-  shell: boolean;
-}
-
-export function getUpgradeCommand(installType: ClaudeInstallType): UpgradeCommand {
-  switch (installType) {
-    case 'homebrew':
-      return { command: 'brew', args: ['upgrade', 'claude-code'], shell: false };
-    case 'npm':
-      // On Windows, npm is a .cmd file that requires shell execution
-      return { command: 'npm', args: ['update', '-g', '@anthropic-ai/claude-code'], shell: isWindows };
-    case 'bun':
-      return { command: 'bun', args: ['update', '-g', '@anthropic-ai/claude-code'], shell: false };
-    case 'winget':
-      return { command: 'winget', args: ['upgrade', 'Anthropic.ClaudeCode', '--accept-source-agreements'], shell: true };
-    case 'native':
-    case 'unknown':
-    default:
-      // `claude update` is the official manual update command for native installs.
-      // It works cross-platform and is simpler than re-running the install script.
-      return { command: 'claude', args: ['update'], shell: false };
-  }
-}
-
 // ── #28: platform shell dialect ─────────────────────────────────────
 // The Agent (any Runtime) generates / shows shell commands. On Windows the
 // model defaults to bash/POSIX (export, rm -rf, /tmp, mkdir -p) which the

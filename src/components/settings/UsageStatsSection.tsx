@@ -24,17 +24,25 @@ interface UsageStatsResponse {
   summary: {
     total_input_tokens: number;
     total_output_tokens: number;
-    total_cost: number;
+    total_cost: number | null;
     total_sessions: number;
-    cache_read_tokens: number;
-    cache_creation_tokens: number;
+    usage_turns: number;
+    cost_known_turns: number;
+    cost_legacy_turns: number;
+    cache_read_tokens: number | null;
+    cache_creation_tokens: number | null;
+    uncached_input_tokens: number | null;
+    cache_eligible_turns: number;
+    cache_rate_complete: boolean;
   };
   daily: Array<{
     date: string;
     model: string;
     input_tokens: number;
     output_tokens: number;
-    cost: number;
+    cost: number | null;
+    cost_legacy: boolean;
+    cohort: 'stable_owner' | 'handoff';
   }>;
 }
 
@@ -230,11 +238,13 @@ export function UsageStatsSection() {
   const totalTokens = summary
     ? summary.total_input_tokens + summary.total_output_tokens
     : 0;
-  const cacheTotal = summary
-    ? summary.cache_read_tokens + summary.total_input_tokens
-    : 0;
-  const cacheRate = summary && cacheTotal > 0
-    ? (summary.cache_read_tokens / cacheTotal) * 100
+  const cacheTotal = summary?.cache_rate_complete
+    && summary.cache_read_tokens !== null
+    && summary.uncached_input_tokens !== null
+    ? summary.cache_read_tokens + summary.uncached_input_tokens
+    : null;
+  const cacheRate = summary?.cache_rate_complete && cacheTotal && cacheTotal > 0
+    ? ((summary.cache_read_tokens ?? 0) / cacheTotal) * 100
     : undefined;
 
   return (
@@ -273,7 +283,16 @@ export function UsageStatsSection() {
         />
         <StatCard
           label={t('usage.totalCost')}
-          value={loading ? "–" : formatCost(summary?.total_cost ?? 0)}
+          value={loading
+            ? "–"
+            : summary?.total_cost !== null && summary?.total_cost !== undefined
+              ? formatCost(summary.total_cost)
+              : t('usage.unknown')}
+          sub={summary && summary.cost_known_turns < summary.usage_turns
+            ? t('usage.partialCoverage')
+            : summary && summary.cost_legacy_turns > 0
+              ? t('usage.legacy')
+              : undefined}
         />
         <StatCard
           label={t('usage.sessions')}
@@ -283,9 +302,11 @@ export function UsageStatsSection() {
           label={t('usage.cacheHitRate')}
           value={loading ? "–" : formatPercent(cacheRate)}
           sub={
-            summary && summary.cache_read_tokens > 0
-              ? `${formatTokens(summary.cache_read_tokens)} ${t('usage.cached')}`
-              : undefined
+            summary && !summary.cache_rate_complete
+              ? t('usage.partialCoverage')
+              : summary?.cache_read_tokens !== null && summary?.cache_read_tokens !== undefined
+                ? `${formatTokens(summary.cache_read_tokens)} ${t('usage.cached')}`
+                : undefined
           }
         />
       </div>
@@ -477,20 +498,22 @@ function StatCard({
 function deriveCostData(
   daily: UsageStatsResponse["daily"],
   days: number,
-): Array<{ date: string; cost: number }> {
+): Array<{ date: string; cost: number | null }> {
+  const knownRows = daily.filter((row) => row.cost !== null);
+  if (knownRows.length === 0) return [];
   const byDate = new Map<string, number>();
-  for (const row of daily) {
-    byDate.set(row.date, (byDate.get(row.date) ?? 0) + (row.cost || 0));
+  for (const row of knownRows) {
+    byDate.set(row.date, (byDate.get(row.date) ?? 0) + (row.cost ?? 0));
   }
 
   const today = new Date();
   today.setHours(0, 0, 0, 0);
-  const result: Array<{ date: string; cost: number }> = [];
+  const result: Array<{ date: string; cost: number | null }> = [];
   for (let i = days - 1; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
     const key = getLocalDateString(d);
-    result.push({ date: shortDate(key), cost: byDate.get(key) ?? 0 });
+    result.push({ date: shortDate(key), cost: byDate.get(key) ?? null });
   }
   return result;
 }

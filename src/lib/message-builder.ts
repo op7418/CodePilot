@@ -28,6 +28,7 @@ import type {
 import type { Message, MessageContentBlock } from '@/types';
 import { parseMessageContent } from '@/types';
 import fs from 'fs';
+import { replayNativeSteps } from './native-step-history';
 import { repairIncompleteToolHistory } from './tool-history-integrity';
 
 interface FileMeta {
@@ -72,7 +73,7 @@ function isTextLikeMime(mime: string | undefined, name: string | undefined): boo
  *
  * Skips heartbeat-ack messages. Strips file metadata from user messages.
  */
-export function buildCoreMessages(dbMessages: Message[]): ModelMessage[] {
+export function buildCoreMessages(dbMessages: Message[], route?: { providerId: string; modelId: string }): ModelMessage[] {
   const raw: ModelMessage[] = [];
 
   for (const msg of dbMessages) {
@@ -83,7 +84,7 @@ export function buildCoreMessages(dbMessages: Message[]): ModelMessage[] {
     } else {
       // assistant — may contain structured blocks
       const blocks = parseMessageContent(msg.content);
-      const converted = convertAssistantBlocks(blocks);
+      const converted = replayNativeSteps(blocks, route, convertAssistantBlocks);
       raw.push(...converted);
     }
   }
@@ -92,21 +93,21 @@ export function buildCoreMessages(dbMessages: Message[]): ModelMessage[] {
   // semantics, then repair incomplete tool segments left by Stop/partial SSE
   // persistence. The repair inserts only an explicit app-owned missing-result
   // marker; it never fabricates a successful tool output.
-  const alternated = enforceAlternation(raw);
+  const alternated = enforceAlternation(raw, Boolean(route));
   const repaired = repairIncompleteToolHistory(alternated);
   if (repaired.synthesizedResults > 0 || repaired.droppedOrphanResults > 0) {
     console.warn(
       `[message-builder] repaired incomplete tool history: missing_results=${repaired.synthesizedResults} orphan_results=${repaired.droppedOrphanResults}`,
     );
   }
-  return enforceAlternation(repaired.messages);
+  return enforceAlternation(repaired.messages, Boolean(route));
 }
 
 /**
  * Ensure messages alternate between user and assistant/tool roles.
  * Consecutive user messages are merged. Consecutive assistant messages keep the last.
  */
-function enforceAlternation(messages: ModelMessage[]): ModelMessage[] {
+function enforceAlternation(messages: ModelMessage[], preserveNativeParts = false): ModelMessage[] {
   if (messages.length <= 1) return messages;
 
   const result: ModelMessage[] = [messages[0]];
@@ -119,6 +120,12 @@ function enforceAlternation(messages: ModelMessage[]): ModelMessage[] {
       // Merge consecutive user messages, preserving multi-part content
       result[result.length - 1] = { role: 'user', content: mergeUserContent(prev.content, curr.content) };
     } else if (curr.role === prev.role && curr.role === 'assistant') {
+      if (preserveNativeParts) {
+        const previous = typeof prev.content === 'string' ? [{ type: 'text' as const, text: prev.content }] : prev.content;
+        const current = typeof curr.content === 'string' ? [{ type: 'text' as const, text: curr.content }] : curr.content;
+        result[result.length - 1] = { role: 'assistant', content: [...previous, ...current] } as AssistantModelMessage;
+        continue;
+      }
       // Keep the later assistant message (more recent)
       result[result.length - 1] = curr;
     } else {

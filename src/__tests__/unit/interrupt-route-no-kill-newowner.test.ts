@@ -116,7 +116,22 @@ describe('/api/chat/interrupt — authoritative runtime_status, lock-safe', () =
   });
 
   it('converges executing and queued child rows to durable cancelled facts', async () => {
-    const sid = createSession('interrupt-cancels-managed-children').id;
+    const sid = createSession(
+      'interrupt-cancels-managed-children',
+      'qwen-max',
+      undefined,
+      undefined,
+      'code',
+      'provider-qwen',
+      'default',
+      'user',
+      undefined,
+      {
+        runtimeId: 'claude_code',
+        state: 'bound',
+        source: 'first_execution',
+      },
+    ).id;
     startSubagentRun({
       id: 'interrupt-running-child',
       parentSessionId: sid,

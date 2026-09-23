@@ -1,7 +1,7 @@
 # Workspace Surface Sidebar：项目 Pin、Primary + Inspector 与迁移
 
 > 创建时间：2026-08-25
-> 最后更新：2026-08-26
+> 最后更新：2026-08-28
 > 状态：🚧 单一 shell / identity / pin / Primary+Inspector / v13 清理已落；hydration、Tab/Pin、Inspector 三条真实点击路径及全量回归通过，待复审
 > 风险等级：Tier 1；workspace identity / Git 子进程边界按 Tier 2 审查
 > 事实基线：[T3 Code 模型输入区、统一侧边栏与内置浏览器专项调研](../../research/t3code-composer-sidebar-browser-ux-2026-08-25.md)
@@ -45,6 +45,7 @@
 - 2026-08-26：用户实测发现 Standalone 网页预览上通过“+”添加 Widget 后无法切入。根因是交互激活只改 `activePrimaryId`，仍保留 `inspectorOpen:true`；窄栏 Inspector overlay 完全覆盖了已切换的 Widget。新增 `activatePrimaryInteractively`，交互点击关闭 Inspector 展示但保留 preview tab；hydrate 仍直接调用 `setActivePrimary`，继续保留重载恢复出的 Inspector。真实 dev Electron 与 Playwright 均完成 Preview → Widget → Preview → Widget 双向切换。
 - 2026-08-26：用户继续验收指出 Preview 与看板已经是顶部同级 Tab，内容区再显示“← 看板”没有层级依据且浪费高度。移除所有窄宽度 Inspector 来源栏；切换 Primary 统一点击顶部 Tab，Esc 仍关闭当前 Inspector 展示。
 - 2026-08-26：UI smoke 必须用当前 worktree 的 Electron 完整路径并核对 URL 为 `127.0.0.1:3000`。仅按 `CodePilot` display name 操作会启动已安装正式版（本机监听 47823、旧 UI），其旧文件树不能作为 dev 实现证据。
+- 2026-08-28：用户现场发现左侧堆积 44 条 Workspace Sidebar E2E 项目。根因是 Playwright `reuseExistingServer` 把 session POST 发到日常 dev DB，且三条用例 finally 只删除临时目录。已精确删除 44 条（627→583，匹配残留 0）和 1 条目录已不存在的旧 Codex image smoke（583→582）；Playwright 改为单 owner 临时 DB + 独立 `.next-e2e-*` server，所有相关 fixture 增加 session DELETE；直接 `npx playwright` 缺少隔离环境时 fail closed。Computer Use 刷新真实 Electron 后重复 sidebar/smoke 项目消失；有 298/192/15 条长期历史的 `test-workspace2/ui-test/test-workspace` 明确保留，不以名字猜测为垃圾。
 
 ## Phase 0：UX contract + 宽度 POC
 
@@ -250,6 +251,7 @@ interface ThreadSurfaceStateV1 {
 | 2026-08-26 | Final regression | N/A | N/A | fixture + local web server | typecheck / full unit / scoped UI / full smoke / production build | ✅ PASS | `npm run test` 5363 pass + 1 skip；scoped Playwright 14/14；smoke 23/23；production build 137 pages（live dev 占用 `.next`，故在同源 `/tmp` 副本验证） |
 | 2026-08-26 | Browser UI + Playwright | N/A | N/A | local dev app | Launcher 图标左上；文案组相对卡片水平/垂直居中；说明无句号 | ✅ PASS | 三卡 98px 高，copy center delta 0px，icon offset 17px/17px；`project-panel.spec.ts` 10/10；console 0 warning/error |
 | 2026-08-26 | Electron dev + Node + Playwright | N/A | N/A | 当前 worktree Electron；用户 `demo-page.html` preview | Preview → 加号添加看板 → Preview → 看板双向切换；网页内容直接从 Inspector 工具栏开始，无重复“返回看板”栏；preview tab 保留；旧独立 FileTree shell 不存在 | ✅ PASS | Electron App=`Electron`、URL=`127.0.0.1:3000` AX 实证；`right-rail-mutex.test.ts` 7/7；`workspace-sidebar.test.ts` 44/44；`project-panel.spec.ts` 13/13；`npm run test` 5384 pass / 0 fail / 1 skip |
+| 2026-08-28 | Playwright isolation + real DB audit | N/A | N/A | `/tmp` SQLite + 独立 `.next-e2e-*`；真实库只读前后计数 | scoped `project-panel` 创建/删除三类 session；并发日常 Electron dev；历史测试项目清理 | ✅ 隔离成立；修正英文 `Dashboard` selector 后 13/13；full unit 5423 pass / 0 fail / 1 skip；真实库无新增 | wrapper 结束后 temp DB/build dir 均不存在；真实匹配数运行前后保持 44，随后按双证据删除为 0；另删 1 条 dead `/tmp` smoke，总会话 627→582；Computer Use 刷新确认重复项目消失 |
 
 ## 完成定义
 

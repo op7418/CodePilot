@@ -81,29 +81,39 @@ describe('memory-extractor', () => {
   });
 
   describe('hasMemoryWritesInResponse', () => {
-    it('detects tool_use with memory.md path', async () => {
+    it('does not treat a memory write attempt as persisted', async () => {
       const { hasMemoryWritesInResponse } = await import('../../lib/memory-extractor');
       const json = JSON.stringify([
         { type: 'text', text: 'I updated your memory.' },
         { type: 'tool_use', id: '1', name: 'Write', input: { file_path: '/workspace/memory.md' } },
       ]);
-      assert.equal(hasMemoryWritesInResponse(json), true);
+      assert.equal(hasMemoryWritesInResponse(json), false);
     });
 
-    it('detects tool_result with daily memory path', async () => {
+    it('does not trust an unpaired textual write claim', async () => {
       const { hasMemoryWritesInResponse } = await import('../../lib/memory-extractor');
       const json = JSON.stringify([
         { type: 'tool_result', tool_use_id: '1', content: 'Written to memory/daily/2026-04-01.md' },
       ]);
-      assert.equal(hasMemoryWritesInResponse(json), true);
+      assert.equal(hasMemoryWritesInResponse(json), false);
     });
 
-    it('detects tool_use with soul.md path', async () => {
+    it('does not treat a soul edit attempt as persisted', async () => {
       const { hasMemoryWritesInResponse } = await import('../../lib/memory-extractor');
       const json = JSON.stringify([
         { type: 'tool_use', id: '1', name: 'Edit', input: { file_path: 'soul.md' } },
       ]);
-      assert.equal(hasMemoryWritesInResponse(json), true);
+      assert.equal(hasMemoryWritesInResponse(json), false);
+    });
+
+    it('requires a matching successful managed receipt', async () => {
+      const { hasMemoryWritesInResponse } = await import('../../lib/memory-extractor');
+      const call = { type: 'tool_use', id: 'save', name: 'mcp__codepilot-memory__codepilot_memory_remember' };
+      const result = { type: 'tool_result', tool_use_id: 'save', content: JSON.stringify({ type: 'memory_write_receipt', status: 'saved', revision: 'actual-revision' }) };
+      assert.equal(hasMemoryWritesInResponse(JSON.stringify([call, result])), true);
+      assert.equal(hasMemoryWritesInResponse(JSON.stringify([call, { ...result, is_error: true }])), false);
+      assert.equal(hasMemoryWritesInResponse(JSON.stringify([{ ...call, name: 'codepilot_memory_get' }, result])), false);
+      assert.equal(hasMemoryWritesInResponse(JSON.stringify([call, { ...result, tool_use_id: 'other' }])), false);
     });
 
     it('returns false for plain text without tool blocks', async () => {

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import type { MarketingContent } from '../../../content/marketing/en';
-import { RainbowButton } from '@/components/ui/rainbow-button';
+import { buttonVariants } from '@/components/ui/button-variants';
+import { cn } from '@/lib/utils';
 
 export function FinalCTA({
   content,
@@ -19,11 +20,9 @@ export function FinalCTA({
           <span className="text-muted-foreground">{content.description}</span>
         </h2>
 
-        <div className="mt-8 flex items-center gap-4">
-          <a href="https://github.com/op7418/CodePilot/releases/latest" target="_blank" rel="noopener noreferrer">
-            <RainbowButton className="h-12 rounded-full px-10 text-base">
-              {content.primary}
-            </RainbowButton>
+        <div className="mt-8 flex flex-wrap items-center gap-4">
+          <a href="https://github.com/op7418/CodePilot/releases/latest" target="_blank" rel="noopener noreferrer" className={cn(buttonVariants(), 'rainbow-glow h-12 rounded-full px-10 text-base')}>
+            {content.primary}
           </a>
           <Link
             href={`${prefix}/docs`}

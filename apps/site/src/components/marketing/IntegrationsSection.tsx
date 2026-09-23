@@ -2,18 +2,20 @@ import { Star } from 'lucide-react';
 import { CapabilityIcon } from './IconMap';
 import type { MarketingContent } from '../../../content/marketing/en';
 
-async function getStarCount(): Promise<string> {
+async function getStarCount(): Promise<string | null> {
   try {
     const res = await fetch('https://api.github.com/repos/op7418/CodePilot', {
       next: { revalidate: 3600 },
+      signal: AbortSignal.timeout(5000),
     });
-    if (!res.ok) return '3.4k';
+    if (!res.ok) return null;
     const data = await res.json();
     const count = data.stargazers_count;
+    if (!Number.isSafeInteger(count) || count < 0) return null;
     if (count >= 1000) return `${(count / 1000).toFixed(1)}k`;
     return String(count);
   } catch {
-    return '3.4k';
+    return null;
   }
 }
 
@@ -44,9 +46,9 @@ export async function IntegrationsSection({
           >
             <Star className="h-4 w-4 fill-amber-400 text-amber-400" />
             {content.githubCta}
-            <span className="ml-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
+            {stars !== null && <span className="ml-1 rounded-full bg-muted px-2.5 py-0.5 text-xs font-bold text-muted-foreground">
               {stars}
-            </span>
+            </span>}
           </a>
         </div>
 

@@ -7,6 +7,8 @@
 > P0 对标复核：[Sub-agent 编排竞品补充调研](../../research/subagent-orchestration-competitor-followup-2026-07-24.md)
 > 交接：[same-runtime-multi-model-subagents](../../handover/same-runtime-multi-model-subagents.md)；产品复盘：[insights](../../insights/same-runtime-multi-model-subagents.md)
 
+> 父会话 Runtime owner 职责补充（2026-09-01）：[Runtime 会话所有权计划](runtime-thread-ownership-and-handoff.md) 负责父聊天 binding 与 route CAS；本计划继续负责 child 的 exact Provider+Model route、durable lifecycle、权限和结果。managed child 的 Runtime 必须等于父 owner，child 不得绑定或修改父 route / Runtime refs / `route_revision`，跨 Runtime child 在 durable row 和 Provider 调用前 fail closed。
+
 ## 用户问题与取舍
 
 用户希望当前会话选中的 Runtime / Provider / Model 始终担任父 Agent，同时允许父 Agent 创建同 Runtime、不同模型的子 Agent。固定 Profile 被否决：Agent 身份与执行路由分离，模型每次从当前 Runtime / Provider 的真实可用集合中动态选择。

@@ -4,6 +4,10 @@ import pkg from "./package.json" with { type: "json" };
 
 const nextConfig: NextConfig = {
   output: 'standalone',
+  // Playwright owns a side-by-side dev server with a separate temp DB. Give
+  // that server its own build directory too, so it never reuses or locks the
+  // everyday Electron dev server's `.next/dev` state.
+  distDir: process.env.CODEPILOT_NEXT_DIST_DIR || '.next',
   // Official builds upload these privately before packaging. The package
   // filters below exclude every *.map from distributable artifacts.
   productionBrowserSourceMaps: process.env.CODEPILOT_SOURCE_MAPS === '1',

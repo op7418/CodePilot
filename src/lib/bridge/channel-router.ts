@@ -1,3 +1,4 @@
+import { bindAssistantMemory, canonicalMemoryWorkspace } from '../memory-binding';
 /**
  * Channel Router — resolves IM addresses to CodePilot sessions.
  *
@@ -7,6 +8,7 @@
 
 import type { ChannelAddress, ChannelBinding, ChannelType } from './types';
 import {
+  getDb,
   getChannelBinding,
   upsertChannelBinding,
   updateChannelBinding,
@@ -14,11 +16,11 @@ import {
   getSession,
   createSession,
   getSetting,
-  updateSessionProviderId,
   updateSessionWorkingDirectory,
   updateSdkSessionId,
 } from '../db';
 import { resolveWorkingDirectory } from '../working-directory';
+import { resolveAutomaticSessionRoute } from '../runtime/automatic-session-route';
 
 function shouldResetResumeForSource(source: string): boolean {
   return source === 'setting' || source === 'home' || source === 'process';
@@ -98,36 +100,49 @@ export function createBinding(
   const defaultCwd = resolved.path;
   const defaultModel = getSetting('bridge_default_model') || '';
   const defaultProviderId = getSetting('bridge_default_provider_id') || '';
+  const route = resolveAutomaticSessionRoute('bridge', {
+    providerId: defaultProviderId || undefined,
+    modelId: defaultModel || undefined,
+  });
 
   const displayName = address.displayName || address.chatId;
-  const session = createSession(
-    `Bridge: ${displayName}`,
-    defaultModel,
-    undefined,
-    defaultCwd,
-    'code',
-    undefined, // provider id — set below once known
-    undefined, // permission profile
-    undefined, // source
-    // The channel identity IS the name here; a fallback derived from the
-    // first inbound message would be strictly worse information.
-    'system',
-  );
+  return getDb().transaction(() => {
+    const session = createSession(
+      `Bridge: ${displayName}`,
+      route.modelId,
+      undefined,
+      defaultCwd,
+      'code',
+      route.providerId,
+      undefined, // permission profile
+      undefined, // source
+      // The channel identity IS the name here; a fallback derived from the
+      // first inbound message would be strictly worse information.
+      'system',
+      {
+        runtimeId: route.runtimeId,
+        state: 'bound',
+        source: 'bridge_create',
+      },
+    );
 
-  if (defaultProviderId) {
-    updateSessionProviderId(session.id, defaultProviderId);
-  }
+    // An explicit bridge directory selection (including its saved default) is
+    // the production opt-in. Fallback home/process directories never enable it.
+    const assistantRoot = canonicalMemoryWorkspace(getSetting('assistant_workspace_path'));
+    if (assistantRoot && canonicalMemoryWorkspace(defaultCwd) === assistantRoot
+        && (resolved.source === 'requested' || resolved.source === 'setting')) bindAssistantMemory(session.id);
 
-  return upsertChannelBinding({
-    channelType: address.channelType,
-    chatId: address.chatId,
-    codepilotSessionId: session.id,
-    sdkSessionId: '',
-    workingDirectory: defaultCwd,
-    model: defaultModel,
-    mode: 'code',
-    providerId: defaultProviderId || undefined,
-  });
+    return upsertChannelBinding({
+      channelType: address.channelType,
+      chatId: address.chatId,
+      codepilotSessionId: session.id,
+      sdkSessionId: '',
+      workingDirectory: defaultCwd,
+      model: route.modelId,
+      mode: 'code',
+      providerId: route.providerId,
+    });
+  })();
 }
 
 /**
@@ -158,6 +173,7 @@ export function bindToSession(
     workingDirectory: resolved.path,
     model: session.model,
     mode: 'code',
+    providerId: session.provider_id || undefined,
   });
 }
 

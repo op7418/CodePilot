@@ -63,6 +63,9 @@ export const CODEPILOT_TOOL_MUTATION_LEVELS: Readonly<Record<string, MutationLev
   codepilot_memory_recent: 'safe_read',
   codepilot_memory_search: 'safe_read',
   codepilot_memory_get: 'safe_read',
+  codepilot_memory_remember: 'mutating_external',
+  codepilot_memory_update: 'mutating_external',
+  codepilot_memory_forget: 'mutating_external',
 
   // Widget — loads static design spec; no model state mutation.
   codepilot_load_widget_guidelines: 'safe_read',

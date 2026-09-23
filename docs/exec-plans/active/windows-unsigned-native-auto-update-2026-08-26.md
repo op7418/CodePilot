@@ -1,8 +1,8 @@
 # Windows 无签名原生自动更新与差分下载
 
 > 创建时间：2026-08-26
-> 最后更新：2026-08-27
-> 当前状态：✅ **`v0.67.10` Windows updater bootstrap 已 Shipped**。不可变 tag 指向 `1bf6ff31`；正式 run [`33001442911`](https://github.com/op7418/CodePilot/actions/runs/33001442911) 全绿并公开 [20 个资产的 Latest Release](https://github.com/op7418/CodePilot/releases/tag/v0.67.10)。Windows 采用用户确认过的“无 Authenticode、GitHub 为单一信任根”模型；Linux 保持手动安装并明确延期。公开 `latest-mac.yml` / `latest.yml`、对应完整包、外置 blockmap 与 checksum 已复核；Windows RC-A → RC-B 真实差分/完整回退 smoke 仍待完成，因此不写 `Smoke passed` / `Release ready`。
+> 最后更新：2026-08-29
+> 当前状态：✅ **`v0.67.10` Windows updater bootstrap 与后续 `v0.67.11` stable 均已 Shipped**。`v0.67.11` 不可变 tag 指向 `08f0bb80`；正式 run [`33230535883`](https://github.com/op7418/CodePilot/actions/runs/33230535883) 全绿并公开 [20 个资产的 Latest Release](https://github.com/op7418/CodePilot/releases/tag/v0.67.11)。Windows 继续采用用户确认过的“无 Authenticode、GitHub 为单一信任根”模型；Linux 保持手动安装。公开 `latest-mac.yml` / `latest.yml`、对应完整包、外置 blockmap、checksum 与 provenance 已复核；Windows RC-A → RC-B 真实差分/完整回退 smoke 仍待完成，因此不写 `Smoke passed` / `Release ready`。
 
 ## 用户问题与取舍
 
@@ -106,6 +106,7 @@ official stable Windows app
 | 2026-08-26 | GitHub repository API | `op7418/CodePilot` | n/a | 管理员 token + anonymous read；未记录 token value | no-bypass 管理员确认状态生成与 Actions 等价防漂移复验 | ✅ Gate fixture pass | 管理员响应确认两条 ruleset 的 `bypass_actors=[]`；公开响应隐藏该字段但 live `id` / `updated_at` 与 `CODEPILOT_RULESETS_CONFIRMED_STATE` 精确一致；定向契约 8/8 |
 | 2026-08-27 | GitHub Actions macOS + Intel + Windows + Linux | stable `v0.67.9` | n/a | 正式 Apple secrets；Windows signer 全缺；Actions `GITHUB_TOKEN` | 正式三平台 package + central asset audit | ❌ Release blocked，未公开 | run [`32995824925`](https://github.com/op7418/CodePilot/actions/runs/32995824925)：所有 source/package/Intel ABI job 与 single-trust-root gate 全绿；central audit 错把外置 ZIP blockmap 要求成 metadata `blockMapSize`，在 draft/public Release 前阻断。锁定 builder 类型与公开 v0.67.7 metadata 均确认该字段只属嵌入式 blockmap；tag 保留 |
 | 2026-08-27 | GitHub Actions macOS + Intel + Windows + Linux | stable `v0.67.10` | n/a | 正式 Apple secrets；Windows signer 全缺；Actions `GITHUB_TOKEN` | 正式三平台 package、Intel universal 启动、single-trust-root、20 资产 central audit、draft → public | ✅ **Shipped**；workflow 全绿；Latest Release 公开 | [Actions](https://github.com/op7418/CodePilot/actions/runs/33001442911) / [Release](https://github.com/op7418/CodePilot/releases/tag/v0.67.10)。tag 精确指向 `1bf6ff31`；20 资产含 Mac 3 DMG + 3 ZIP + 3 ZIP blockmap + `latest-mac.yml`、Windows unsigned NSIS + EXE blockmap + `latest.yml`、Linux 6 手动包及 checksum。公开 metadata 均为 0.67.10、各恰好一个完整包目标，size 与公开资产一致；19 个非 checksum 资产全部进入 `SHA256SUMS.txt`，无 `latest-linux*.yml`。真实 Windows RC-A → RC-B 未跑，不记 `Smoke passed` |
+| 2026-08-29 | GitHub Actions macOS + Intel + Windows + Linux | stable `v0.67.11` | n/a | 正式 Apple secrets；Windows signer 全缺；Actions `GITHUB_TOKEN` | bootstrap 后首个 stable 后继版本、single-trust-root、20 资产 central audit、attestation、draft → public | ✅ **Shipped**；workflow 7/7 jobs 全绿；Latest immutable Release 公开 | [Actions](https://github.com/op7418/CodePilot/actions/runs/33230535883) / [Release](https://github.com/op7418/CodePilot/releases/tag/v0.67.11)。tag 精确指向 `08f0bb80`；`latest.yml` 只引用同版本完整 NSIS，size 与公开资产一致，EXE blockmap 存在；19/19 checksum 与 20/20 provenance 独立复核通过，无 Linux updater metadata。未在 installed v0.67.10 上执行真实差分/完整回退，因此仍不记 `Smoke passed` |
 | _待执行_ | Windows packaged Electron | GitHub Release | n/a | unsigned NSIS | RC-A bootstrap → RC-B differential/full fallback | ⏳ | clean VM run / installer logs / version+data checks |
 
 ## 决策日志
@@ -119,3 +120,4 @@ official stable Windows app
 - 2026-08-26：不把缺失 `bypass_actors` 降级为空，也不把管理员 PAT 放进 Actions。改为管理员完整响应验证 no-bypass 后生成短时确认状态，CI 实时核对同一 ruleset 的 shape、`id` 与 `updated_at`；任何规则改动都会要求管理员重新确认。修复版本递增为 `v0.67.9`。
 - 2026-08-27：`v0.67.9` 已通过 ruleset gate，却在 central audit 暴露 `blockMapSize` 语义错误。锁定的 builder 类型定义说明该字段用于嵌入式 blockmap，公开 v0.67.7 的原生 `latest-mac.yml` 也只包含 sha512/size；Mac ZIP 与完整 NSIS 使用外置 sidecar。修复保留 sidecar 存在性与 checksum fail-closed 门禁，不手写 metadata，候选递增为 `v0.67.10`。
 - 2026-08-27：不可变 `v0.67.10` tag 精确指向 `1bf6ff31`，正式 run `33001442911` 的 source、Windows unsigned package、Linux 双架构、Mac Developer ID/公证/staple、Intel universal SQLite、single-trust-root、精确版本资产审计、attestation 与 draft → public 全绿；公开 Release 为 Latest 且资产图与 updater metadata 复核通过。首个 Windows updater bootstrap 因此记为 `Shipped`；它证明正式产物链可发布，不替代下一版本 RC-A → RC-B 的真实差分、完整回退、活动任务拦截与安装接管 smoke。
+- 2026-08-29：后继 stable `v0.67.11` 正式发布，tag `08f0bb80` 与 run `33230535883` 全绿；公开 `latest.yml`、完整 NSIS、外置 blockmap、checksum、immutable/Latest 状态与 provenance 复核通过。它证明 bootstrap 后续版本资产已公开，但由于未在 installed v0.67.10 上真实执行下载/安装，本计划仍保留差分、完整回退、活动任务拦截与安装接管 smoke。

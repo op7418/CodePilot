@@ -1,3 +1,4 @@
+import { isTokenDanceBaseUrl, TOKENDANCE_RECOVERY_ERRORS } from './tokendance';
 /**
  * Error Classifier — structured error categorization for Claude Code process errors.
  *
@@ -11,6 +12,8 @@ import {
   statusClass,
 } from './telemetry/contract';
 import { markProviderFailureHandled } from './telemetry/provider-marker';
+import { telemetryCallScene } from './telemetry/diagnostics';
+import { telemetryReportBudget } from './telemetry/report-budget';
 import {
   createSafeTelemetryError,
   normalizeTelemetryFailure,
@@ -77,6 +80,9 @@ function reportToSentry(category: string, error: unknown, context: SentryReportC
     // Fire-and-forget async import — never blocks the classifier
     import('@sentry/node').then((Sentry) => {
       if (!Sentry.isInitialized()) return;
+      const budget = telemetryReportBudget.take({ failure: normalized, callScene: context.callScene,
+        providerProtocol: context.providerProtocol, providerClass: context.providerClass, runtimeId: context.runtimeId });
+      if (!budget.allowed) return;
       Sentry.withScope((scope) => {
         scope.setTag('error.category', normalized.category);
         scope.setTag('error.outcome', normalized.outcome);
@@ -85,10 +91,13 @@ function reportToSentry(category: string, error: unknown, context: SentryReportC
         scope.setTag('provider.protocol', context.providerProtocol || 'unknown');
         scope.setTag('provider.class', context.providerClass || 'unknown');
         scope.setTag('status.class', statusClass(normalized.statusCode));
+        scope.setTag('failure.kind', normalized.rootCause);
+        scope.setTag('call.scene', telemetryCallScene(context.callScene));
         scope.setExtras({
           callScene: context.callScene,
           retryExhausted: normalized.retryExhausted,
           timeoutStage: context.timeoutStage,
+          ...(budget.suppressed ? { telemetrySuppressedCount: budget.suppressed } : {}),
         });
         const useDefaultStackGrouping = shouldUseDefaultStackGrouping(normalized.outcome, error);
         if (normalized.outcome === 'unknown') scope.setTag('needs_classification', 'yes');
@@ -491,6 +500,24 @@ export function classifyError(ctx: ErrorContext): ClassifiedError {
   const stderrContent = ctx.stderr || '';
   const cause = error instanceof Error ? (error as { cause?: unknown }).cause : undefined;
   const extraDetail = stderrContent || (cause instanceof Error ? cause.message : cause ? String(cause) : '');
+
+  // The relay preserves an upstream recovery header as a stable marker.
+  // Keep its precise user action instead of collapsing balance/quota into auth.
+  if (isTokenDanceBaseUrl(ctx.baseUrl)) {
+    const combined = `${rawMessage}\n${stderrContent}\n${extraDetail}`;
+    for (const [action, message] of Object.entries(TOKENDANCE_RECOVERY_ERRORS)) {
+      if (combined.includes(message)) {
+        return {
+          category: action === 'reauthorize_api_key' ? 'AUTH_REJECTED' : 'UNKNOWN',
+          userMessage: message, actionHint: '', rawMessage, providerName: ctx.providerName,
+          retryable: false,
+          recoveryActions: action === 'top_up_balance'
+            ? [{ label: 'TokenDance', url: 'https://tokendance.space/' }]
+            : [{ label: 'TokenDance', action: 'open_settings' }],
+        };
+      }
+    }
+  }
 
   // Combined text to search through
   const searchText = `${rawMessage}\n${stderrContent}\n${extraDetail}`.toLowerCase();

@@ -25,9 +25,11 @@
  */
 
 import type { ToolSet } from 'ai';
+import { canWriteSessionMemory, getSessionMemoryWorkspace } from '@/lib/memory-binding';
 import { adaptForNative } from '@/lib/harness/runtime-adapter';
 import { shouldSkipPermission } from '@/lib/harness/mutation-level';
 import { createMediaTools, MEDIA_SYSTEM_PROMPT } from './media';
+import { createMemorySearchTools, MEMORY_SEARCH_SYSTEM_PROMPT } from './memory-search';
 
 export interface BuiltinToolGroup {
   name: string;
@@ -94,7 +96,7 @@ function capabilityIdsForGroup(groupName: string): readonly string[] {
       // with what Native actually mounts.
       return ['tasks_and_notify', 'assistant_buddy'];
     case 'codepilot-memory':
-      return ['memory'];
+      return ['memory', 'memory_write'];
     case 'codepilot-widget-guidelines':
       return ['widget'];
     case 'codepilot-dashboard':
@@ -170,7 +172,10 @@ export function getBuiltinTools(
     Object.assign(tools, groupTools);
     const capIds = capabilityIdsForGroup(group.name);
     if (capIds.length > 0) {
-      for (const id of capIds) enabledCapabilities.add(id);
+      for (const id of capIds) {
+        if (id === 'memory_write' && !['codepilot_memory_remember', 'codepilot_memory_update', 'codepilot_memory_forget'].some(name => name in groupTools)) continue;
+        enabledCapabilities.add(id);
+      }
     } else if (group.systemPrompt) {
       // Non-capability group whose prompt hasn't been canonicalised
       // yet (session-search / ask-user-question). Keep its raw
@@ -335,16 +340,14 @@ function getToolGroups(options: GetBuiltinToolsOptions): BuiltinToolGroup[] {
     }),
   });
 
-  // Memory search tools — workspace-gated
-  if (options.workspacePath) {
+  // Built-in memory is assistant-bound; ordinary projects keep normal file tools.
+  if (options.workspacePath && options.sessionId && getSessionMemoryWorkspace(options.sessionId, options.workspacePath)) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { createMemorySearchTools, MEMORY_SEARCH_SYSTEM_PROMPT } = require('./memory-search');
       groups.push({
         name: 'codepilot-memory',
         systemPrompt: MEMORY_SEARCH_SYSTEM_PROMPT,
         condition: 'workspace',
-        tools: createMemorySearchTools(options.workspacePath),
+        tools: createMemorySearchTools(options.workspacePath, { access: options.safeReadOnly ? 'read' : 'all', sourceSessionId: options.sessionId, providerId: options.providerId, authorizeWrite: () => canWriteSessionMemory(options.sessionId, options.workspacePath!) }),
       });
     } catch (error) { reportLoadFailure('codepilot-memory', error); }
   }

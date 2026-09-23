@@ -161,6 +161,18 @@ describe('xAI OAuth manager lifecycle', () => {
     assert.equal(manager.readXaiOAuthBundle(), undefined);
   });
 
+  it('missing OAuth credentials use the structured reconnect code before text or media transport', async () => {
+    let calls = 0;
+    const fetchImpl: typeof fetch = async () => { calls++; return jsonResponse({}); };
+    for (const [request, endpoint] of [
+      [manager.createXaiOAuthFetch('grok-code-fast-1', fetchImpl), 'https://cli-chat-proxy.grok.com/v1/responses'],
+      [manager.createXaiOAuthMediaFetch(fetchImpl), 'https://api.x.ai/v1/images/generations'],
+    ] as const) {
+      await assert.rejects(request(endpoint, { method: 'POST' }), (error: unknown) => (error as { code?: string }).code === 'PROVIDER_OAUTH_EXPIRED');
+    }
+    assert.equal(calls, 0);
+  });
+
   it('fetch override injects the complete Build proxy contract without mutating caller headers', async () => {
     manager.saveXaiOAuthTokens({ accessToken: 'fresh-access', expiresAt: Date.now() + 3600_000 });
     const callerHeaders = new Headers({

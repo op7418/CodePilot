@@ -32,6 +32,21 @@ export function roughTokenEstimate(text: string, isJson = false): number {
 export function estimateMessageTokens(content: string): number {
   if (!content) return 0;
   const isJson = content.startsWith('[') || content.startsWith('{');
+  if (content.startsWith('[')) {
+    try {
+      const blocks: unknown = JSON.parse(content);
+      if (Array.isArray(blocks) && blocks.some(block => block && typeof block === 'object' && 'nativeStep' in block)) {
+        // Canonical replay duplicates the visible parts and carries opaque
+        // signatures; neither is additional user/model text to budget twice.
+        content = JSON.stringify(blocks.map(block => {
+          if (!block || typeof block !== 'object') return block;
+          const visible = { ...block };
+          delete visible.nativeStep;
+          return visible;
+        }));
+      }
+    } catch { /* Plain text that starts with '[' keeps the existing estimate. */ }
+  }
   return roughTokenEstimate(content, isJson);
 }
 

@@ -24,6 +24,8 @@
  */
 
 import type { ApiProvider, ProviderRuntimeCompat } from '@/types';
+import { isTokenDanceBaseUrl } from '@/lib/tokendance';
+import { getEffectiveProviderProtocol } from '@/lib/provider-catalog';
 import { getProviderCompat } from '@/lib/runtime-compat';
 
 /**
@@ -32,6 +34,7 @@ import { getProviderCompat } from '@/lib/runtime-compat';
  * this and stops disabling rows for that tier.
  */
 export const ADAPTER_STATUS_BY_COMPAT: Record<ProviderRuntimeCompat, ProxyAdapterStatus> = {
+  native_only: 'pending',
   // Native runtime never goes through the proxy — Codex Account
   // routes through Codex's own app-server, not via codepilot_proxy.
   codex_account: 'not_applicable',
@@ -58,6 +61,7 @@ export type AdapterFamily = 'openai_compatible' | 'anthropic_compatible' | 'code
 
 /** Which adapter family a compat tier maps to. */
 export const ADAPTER_FAMILY_BY_COMPAT: Record<ProviderRuntimeCompat, AdapterFamily> = {
+  native_only: 'native',
   // Codex Account routes through Codex natively, never via the proxy.
   codex_account: 'native',
   media_only: 'native',
@@ -97,7 +101,11 @@ export interface ProviderParityEntry {
  */
 export function getProxyParityEntry(provider: ApiProvider): ProviderParityEntry {
   const compat = getProviderCompat(provider);
-  const family = ADAPTER_FAMILY_BY_COMPAT[compat];
+  // Provider reach includes Claude Code; Codex's actual wire still follows
+  // the connection protocol. Do not label TokenDance Chat Completions CodePlan.
+  const family = isTokenDanceBaseUrl(provider.base_url) && compat !== 'media_only'
+    ? (getEffectiveProviderProtocol(provider.provider_type, provider.protocol, provider.base_url, provider.preset_key) === 'anthropic' ? 'anthropic_compatible' : 'openai_compatible')
+    : ADAPTER_FAMILY_BY_COMPAT[compat];
   const status = ADAPTER_STATUS_BY_COMPAT[compat];
   return {
     provider_id: provider.id,

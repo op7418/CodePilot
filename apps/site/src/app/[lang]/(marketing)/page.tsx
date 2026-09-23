@@ -17,13 +17,20 @@ export async function generateMetadata({
 }): Promise<Metadata> {
   const { lang } = await params;
   const isZh = lang === 'zh';
+  const content = getMarketingContent(lang);
+  const socialImage = `/screenshots/${isZh ? 'zh' : 'en'}/chat-window.webp`;
+  const title = isZh ? 'CodePilot — 你的 AI 桌面工作台' : 'CodePilot — Your Desktop AI Workspace';
   return {
-    title: isZh
-      ? 'CodePilot — 多模型 AI Agent 桌面客户端'
-      : 'CodePilot — Multi-Model AI Agent Desktop Client',
-    description: isZh
-      ? '连接任意 AI 服务商，通过 MCP 和 Skills 扩展能力，手机远程控制，让你的助理学会你的工作方式。'
-      : siteConfig.description,
+    title: { absolute: title },
+    description: content.hero.description,
+    openGraph: {
+      title,
+      description: content.hero.description,
+      locale: isZh ? 'zh_CN' : 'en_US',
+      url: isZh ? `${siteConfig.url}/zh` : siteConfig.url,
+      images: [{ url: socialImage, width: 2560, height: 1720, alt: title }],
+    },
+    twitter: { card: 'summary_large_image', title, description: content.hero.description, images: [socialImage] },
     alternates: {
       canonical: isZh ? `${siteConfig.url}/zh` : siteConfig.url,
       languages: {
@@ -49,7 +56,7 @@ export default async function HomePage({
       <FeaturesSection content={content.features} />
       <IntegrationsSection content={content.openSource} />
       <FAQSection content={content.faq} />
-      <ReleasesSection content={content.releases} />
+      <ReleasesSection content={content.releases} locale={lang} />
       <FinalCTA content={content.cta} locale={lang} />
       <SiteFooter content={content.footer} />
     </main>

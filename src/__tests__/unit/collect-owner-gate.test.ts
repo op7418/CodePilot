@@ -12,7 +12,7 @@
  * newer send) reaches collect LATE carrying its OLD lockId and must write NOTHING.
  *
  *   - happy path (true owner still holds the lock): assistant message lands,
- *     sdk_session_id / model / tasks persisted — the reverse example that proves
+ *     sdk_session_id / tasks persisted, committed model preserved — proves
  *     the gate does NOT drop the legitimate owner's writes.
  *   - stale path (lock taken over by lockB): assistant message DROPPED (DP1),
  *     sdk_session_id / model / tasks all left untouched — only diagnostic logs.
@@ -74,8 +74,8 @@ function assistantMessages(sessionId: string) {
 }
 
 describe('collectStreamResponse session-level write owner gate (Phase 3 B)', () => {
-  it('happy path: the lock owner persists assistant message + sdk_session_id + model + tasks', async () => {
-    const sid = createSession('collect-owner-happy').id;
+  it('happy path: the lock owner persists output and SDK reference without changing the committed model', async () => {
+    const sid = createSession('collect-owner-happy', 'sonnet').id;
     const lockA = 'lockA-happy';
     assert.equal(acquireSessionLock(sid, lockA, 'test-owner', 600), true, 'acquire should succeed');
     assert.equal(isLockOwner(sid, lockA), true, 'A owns the lock');
@@ -98,7 +98,8 @@ describe('collectStreamResponse session-level write owner gate (Phase 3 B)', () 
     // Session-level state written by the owner.
     const row = getSession(sid)!;
     assert.equal(row.sdk_session_id, 'sdk-happy', 'owner wrote sdk_session_id');
-    assert.equal(row.model, 'claude-happy', 'owner wrote model');
+    assert.equal(row.model, 'sonnet', 'reported model must not overwrite committed route');
+    assert.equal(row.route_revision, 0, 'runtime reports are not route mutations');
 
     // SDK tasks synced by the owner.
     const tasks = getTasksBySession(sid);

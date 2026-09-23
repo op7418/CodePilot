@@ -6,7 +6,7 @@
  */
 
 import { createServer, type Server } from 'node:http';
-import { getSetting, setSetting } from './db';
+import { getDb, getSetting, setSetting } from './db';
 import {
   type OAuthTokens,
   CALLBACK_PORT,
@@ -15,6 +15,7 @@ import {
   refreshTokens,
   parseIdTokenClaims,
   extractAccountId,
+  OpenAIOAuthTokenError,
 } from './openai-oauth';
 
 // ── Settings Keys ──────────────────────────────────────────────
@@ -111,42 +112,57 @@ export async function ensureTokenFresh(): Promise<{ accessToken: string; account
     return undefined;
   }
 
-  try {
-    console.log('[openai-oauth] Refreshing tokens...');
-    const newTokens = await refreshTokens(refreshToken);
-    saveTokens(newTokens);
-    console.log('[openai-oauth] Tokens refreshed successfully');
-    return {
-      accessToken: newTokens.accessToken,
-      accountId: getSetting(KEYS.accountId) || undefined,
-    };
-  } catch (err) {
-    console.error('[openai-oauth] Token refresh failed:', err);
-    clearOAuthTokens();
-    return undefined;
-  }
+  const generation = oauthState.generation ?? 0;
+  if (oauthState.refresh?.generation === generation) return oauthState.refresh.promise;
+  const stillCurrent = () => (oauthState.generation ?? 0) === generation
+    && getSetting(KEYS.refreshToken) === refreshToken;
+  const promise = (async () => {
+    try {
+      const newTokens = await refreshTokens(refreshToken);
+      if (!stillCurrent()) return undefined;
+      saveTokens(newTokens);
+      return { accessToken: newTokens.accessToken, accountId: getSetting(KEYS.accountId) || undefined };
+    } catch (err) {
+      if (!stillCurrent()) return undefined;
+      if (err instanceof OpenAIOAuthTokenError && err.permanent) {
+        clearOAuthTokens();
+        return undefined;
+      }
+      // Network / rate limit / server failures retain refresh credentials.
+      throw new Error('OpenAI token refresh temporarily failed. Please retry.', { cause: err });
+    } finally {
+      if (oauthState.refresh?.generation === generation) oauthState.refresh = undefined;
+    }
+  })();
+  oauthState.refresh = { generation, promise };
+  return promise;
 }
 
 function saveTokens(tokens: OAuthTokens): void {
-  setSetting(KEYS.accessToken, tokens.accessToken);
-  setSetting(KEYS.idToken, tokens.idToken);
-  if (tokens.refreshToken) setSetting(KEYS.refreshToken, tokens.refreshToken);
-  if (tokens.expiresAt) setSetting(KEYS.expiresAt, String(tokens.expiresAt));
-
+  if (!tokens.accessToken) throw new Error('OpenAI returned an empty access token');
   const claims = parseIdTokenClaims(tokens.idToken);
-  if (claims.email) setSetting(KEYS.email, claims.email);
-
-  const authClaims = claims['https://api.openai.com/auth'];
-  const plan = claims.chatgpt_plan_type || authClaims?.chatgpt_plan_type;
-  const accountId = extractAccountId(claims);
-  if (plan) setSetting(KEYS.plan, plan);
-  if (accountId) setSetting(KEYS.accountId, accountId);
+  const accountId = extractAccountId(claims) || extractAccountId(parseIdTokenClaims(tokens.accessToken));
+  getDb().transaction(() => {
+    setSetting(KEYS.accessToken, tokens.accessToken);
+    setSetting(KEYS.idToken, tokens.idToken || '');
+    if (tokens.refreshToken) setSetting(KEYS.refreshToken, tokens.refreshToken);
+    setSetting(KEYS.expiresAt, String(tokens.expiresAt ?? Date.now() + 3600000));
+    if (claims.email) setSetting(KEYS.email, claims.email);
+    const plan = claims.chatgpt_plan_type || claims['https://api.openai.com/auth']?.chatgpt_plan_type;
+    if (plan) setSetting(KEYS.plan, plan);
+    if (accountId) setSetting(KEYS.accountId, accountId);
+  })();
 }
 
+/** Opaque account epoch for caches; contains no token or account details. */
+export function getOpenAIOAuthGeneration(): number { return oauthState.generation ?? 0; }
+
 export function clearOAuthTokens(): void {
-  for (const key of Object.values(KEYS)) {
-    setSetting(key, '');
-  }
+  oauthState.generation = (oauthState.generation ?? 0) + 1;
+  oauthState.refresh = undefined;
+  getDb().transaction(() => {
+    for (const key of Object.values(KEYS)) setSetting(key, '');
+  })();
 }
 
 /**
@@ -154,6 +170,8 @@ export function clearOAuthTokens(): void {
  * Safe to call even when no flow is pending.
  */
 export async function cancelOAuthFlow(): Promise<void> {
+  oauthState.generation = (oauthState.generation ?? 0) + 1;
+  oauthState.refresh = undefined;
   const pending = getPendingOAuth();
   if (pending) {
     pending.reject(new Error('OAuth flow cancelled by user'));
@@ -167,6 +185,7 @@ export async function cancelOAuthFlow(): Promise<void> {
 interface PendingOAuth {
   codeVerifier: string;
   state: string;
+  generation: number;
   resolve: (accessToken: string) => void;
   reject: (err: Error) => void;
 }
@@ -174,6 +193,8 @@ interface PendingOAuth {
 // Use globalThis to survive Next.js HMR / module re-evaluation in dev mode.
 // Without this, hot reload would orphan the callback server and lose pending state.
 interface OAuthGlobalState {
+  generation?: number;
+  refresh?: { generation: number; promise: Promise<{ accessToken: string; accountId?: string } | undefined> };
   oauthServer?: Server;
   pendingOAuth?: PendingOAuth;
 }
@@ -201,6 +222,9 @@ export async function startOAuthFlow(): Promise<{ authUrl: string; completion: P
     setPendingOAuth(undefined);
   }
 
+  oauthState.generation = (oauthState.generation ?? 0) + 1;
+  oauthState.refresh = undefined;
+  const generation = oauthState.generation;
   const flow = prepareOAuthFlow();
 
   // Start callback server and WAIT for it to be listening
@@ -216,6 +240,7 @@ export async function startOAuthFlow(): Promise<{ authUrl: string; completion: P
     }, 5 * 60 * 1000);
 
     setPendingOAuth({
+      generation,
       codeVerifier: flow.codeVerifier,
       state: flow.state,
       resolve: (token) => { clearTimeout(timeout); resolve(token); },
@@ -272,7 +297,11 @@ async function startOAuthServer(): Promise<void> {
     // Exchange code for tokens FIRST, then show result to user
     try {
       const tokens = await exchangeCodeForTokens(code, current.codeVerifier);
-      saveTokens(tokens);
+      if (current.generation !== oauthState.generation) throw new Error('OAuth login was cancelled or replaced');
+      getDb().transaction(() => {
+        clearOAuthTokens();
+        saveTokens(tokens);
+      })();
       res.writeHead(200, { 'Content-Type': 'text/html' });
       res.end(successHtml());
       current.resolve(tokens.accessToken);

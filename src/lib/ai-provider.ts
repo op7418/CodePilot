@@ -1,3 +1,5 @@
+import { isTokenDanceBaseUrl } from './tokendance';
+import { tokenDanceFetch } from './tokendance-fetch';
 /**
  * ai-provider.ts — Unified AI model factory for the native Agent Loop.
  *
@@ -23,6 +25,7 @@ import { createAnthropic } from '@ai-sdk/anthropic';
 import { createOpenAI } from '@ai-sdk/openai';
 import { createXai } from '@ai-sdk/xai';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
+import { GEMINI_FLASH_MODEL, geminiFlashMiddleware } from './google-model-options';
 import { createAmazonBedrock } from '@ai-sdk/amazon-bedrock';
 import { createVertexAnthropic } from '@ai-sdk/google-vertex/anthropic';
 import {
@@ -31,11 +34,12 @@ import {
   resolveProvider,
   toAiSdkConfig,
 } from './provider-resolver';
+import { extractComputeResidency } from './openai-oauth';
 import { ensureTokenFresh } from './openai-oauth-manager';
 import { createXaiOAuthFetch } from './xai-oauth-manager';
-import { hasClaudeSettingsCredentials } from './claude-settings';
 import { withChatImageDataUrlFetch } from './openai-chat-image-normalizer';
 import { assertProviderCallAllowed, type ProviderCallScene } from './provider-call-policy';
+import { ProviderTransportError } from './provider-transport-error';
 import type { ChatRuntime } from './chat-runtime';
 
 // ── Public API ──────────────────────────────────────────────────
@@ -51,6 +55,8 @@ export interface CreateModelOptions {
   sessionModel?: string;
   /** Runtime-specific transport selection (for example native Responses in Codex Runtime). */
   runtime?: ChatRuntime;
+  /** Internal auxiliary snapshot: captured with resolvedProvider before async work. */
+  resolvedConfig?: AiSdkConfig;
 }
 
 export interface CreateModelResult {
@@ -78,27 +84,22 @@ export function createModel(opts: CreateModelOptions): CreateModelResult {
 
   if (!resolved.hasCredentials) {
     if (resolved.provider) {
-      throw new Error(
+      throw new ProviderTransportError('PROVIDER_CREDENTIALS_UNAVAILABLE',
         'The selected provider credential is missing or unavailable. Re-enter its API key in Settings → Providers.',
       );
     }
-    // If the user has credentials in ~/.claude/settings.json (e.g. cc-switch)
-    // but we landed here anyway, it means the native runtime was explicitly
-    // selected — native cannot read settings.json, only the Claude Code SDK
-    // runtime can. Point users at the fix instead of the generic message.
-    if (hasClaudeSettingsCredentials()) {
-      throw new Error(
-        'Credentials found in ~/.claude/settings.json (managed by cc-switch or similar), but the Native runtime cannot read them. Switch the runtime to "Claude Code SDK" in Settings → Runtime, or add the provider to CodePilot directly.',
-      );
-    }
-    throw new Error(
+    throw new ProviderTransportError('NATIVE_CREDENTIALS_REQUIRED',
       'No provider credentials available. Please configure a provider in Settings or set ANTHROPIC_API_KEY.',
     );
   }
 
-  const config = toAiSdkConfig(resolved, opts.model || opts.sessionModel, {
+  const config = opts.resolvedConfig ? { ...opts.resolvedConfig } : toAiSdkConfig(resolved, opts.model || opts.sessionModel, {
     runtime: opts.runtime,
   });
+  const availability = getNativeTransportAvailability(resolved, config);
+  if (!availability.available) {
+    throw new ProviderTransportError(availability.code, availability.message);
+  }
 
   // ── Model ID resolution ─────────────────────────────────────
   // toAiSdkConfig tries to resolve via availableModels catalog, but if
@@ -138,6 +139,27 @@ export function createModel(opts: CreateModelOptions): CreateModelResult {
   const languageModel = applyMiddleware(rawModel, config, isThirdPartyProxy);
 
   return { languageModel, modelId: config.modelId, config, resolved, isThirdPartyProxy };
+}
+
+/** Claude SDK settings availability is not evidence that Native can authenticate. */
+export function getNativeTransportAvailability(resolved: ResolvedProvider, config: AiSdkConfig):
+  | { available: true }
+  | { available: false; code: 'CLAUDE_SETTINGS_ONLY' | 'NATIVE_CREDENTIALS_REQUIRED' | 'PROVIDER_TRANSPORT_UNSUPPORTED'; message: string } {
+  if (resolved._codexAccount) return {
+    available: false, code: 'PROVIDER_TRANSPORT_UNSUPPORTED',
+    message: 'This account is available through Codex Runtime. Native auxiliary requests are unavailable.',
+  };
+  if (config.responsesApiAuth === 'codex_oauth' || config.useXaiOAuth
+    || config.sdkType === 'bedrock' || config.sdkType === 'vertex') return { available: true };
+  if (config.apiKey || config.authToken) return { available: true };
+  const settingsOnly = !resolved.provider && resolved.hasCredentials;
+  return {
+    available: false,
+    code: settingsOnly ? 'CLAUDE_SETTINGS_ONLY' : 'NATIVE_CREDENTIALS_REQUIRED',
+    message: settingsOnly
+      ? 'Credentials are available only to Claude Code SDK. Configure a Native provider to enable optional background AI features.'
+      : 'No Native provider credentials are available. Configure a provider in Settings.',
+  };
 }
 
 function isShortAlias(modelId: string): boolean {
@@ -252,6 +274,7 @@ function createLanguageModel(config: AiSdkConfig, isThirdPartyProxy: boolean): L
           : { apiKey: config.apiKey }),
         baseURL,
         headers,
+        ...(isTokenDanceBaseUrl(config.baseUrl) ? { fetch: tokenDanceFetch } : {}),
       });
       return anthropic(config.modelId);
     }
@@ -307,12 +330,16 @@ function createLanguageModel(config: AiSdkConfig, isThirdPartyProxy: boolean): L
           apiKey: 'codex-oauth',  // placeholder — overridden by custom fetch
           // Keep default baseURL so SDK constructs valid paths
           fetch: async (url: RequestInfo | URL, init?: RequestInit) => {
+            const reqUrl = url instanceof URL ? url : new URL(typeof url === 'string' ? url : url.url);
+            if (new URL(codexEndpoint).href !== 'https://chatgpt.com/backend-api/codex/responses'
+              || reqUrl.origin !== 'https://api.openai.com' || reqUrl.pathname !== '/v1/responses') {
+              throw new ProviderTransportError('PROVIDER_TRANSPORT_UNSUPPORTED', 'OpenAI OAuth requires the ChatGPT Codex endpoint');
+            }
             const creds = await ensureTokenFresh();
             if (!creds) {
-              throw new Error('OpenAI OAuth token expired or not available. Please log in again in Settings.');
+              throw new ProviderTransportError('PROVIDER_OAUTH_EXPIRED', 'OpenAI OAuth token expired or not available. Please log in again in Settings.');
             }
             // Rewrite URL to Codex endpoint
-            const reqUrl = url instanceof URL ? url : new URL(url as string);
             const targetUrl = reqUrl.pathname.includes('/responses')
               ? new URL(codexEndpoint)
               : reqUrl;
@@ -327,6 +354,9 @@ function createLanguageModel(config: AiSdkConfig, isThirdPartyProxy: boolean): L
               headers.set('chatgpt-account-id', creds.accountId);
             }
 
+            const residency = extractComputeResidency(creds.accessToken);
+            if (residency) headers.set('x-openai-internal-codex-residency', residency);
+
             // Timeout: 30s default, configurable via CODEX_TIMEOUT_MS
             const timeoutMs = parseInt(process.env.CODEX_TIMEOUT_MS || '30000', 10);
             const timeoutCtl = new AbortController();
@@ -336,7 +366,7 @@ function createLanguageModel(config: AiSdkConfig, isThirdPartyProxy: boolean): L
               : timeoutCtl.signal;
 
             try {
-              const resp = await fetch(targetUrl, { ...init, headers, signal: combinedSignal });
+              const resp = await fetch(targetUrl, { ...init, headers, signal: combinedSignal, redirect: 'error' });
               clearTimeout(timer);
               if (!resp.ok) {
                 const body = await resp.clone().text().catch(() => '');
@@ -346,7 +376,7 @@ function createLanguageModel(config: AiSdkConfig, isThirdPartyProxy: boolean): L
             } catch (err) {
               clearTimeout(timer);
               if (err instanceof Error && err.name === 'AbortError' && timeoutCtl.signal.aborted) {
-                throw new Error(
+                throw new ProviderTransportError('PROVIDER_REQUEST_TIMEOUT',
                   `OpenAI Codex API 连接超时 (${timeoutMs}ms)。如果你在防火墙内，请配置系统代理或在设置中设置 HTTPS_PROXY。`
                 );
               }
@@ -368,7 +398,7 @@ function createLanguageModel(config: AiSdkConfig, isThirdPartyProxy: boolean): L
         // wire. The wrapper sniffs the real MIME (png/jpeg/webp/gif/svg) and
         // prefixes it; already-schemed URLs pass through verbatim, so an
         // upstream fix cannot double-prefix.
-        fetch: withChatImageDataUrlFetch(),
+        fetch: withChatImageDataUrlFetch(isTokenDanceBaseUrl(config.baseUrl) ? tokenDanceFetch : undefined),
       });
       // Chat Completions, NOT the Responses API. In @ai-sdk/openai v3 the bare
       // `openai(modelId)` call defaults to `.responses()` (/v1/responses), but
@@ -400,7 +430,10 @@ function createLanguageModel(config: AiSdkConfig, isThirdPartyProxy: boolean): L
         baseURL: config.baseUrl,
         ...(hasHeaders ? { headers: config.headers } : {}),
       });
-      return google(config.modelId);
+      const model = google(config.modelId);
+      return config.modelId === GEMINI_FLASH_MODEL
+        ? wrapLanguageModel({ model, middleware: geminiFlashMiddleware })
+        : model;
     }
 
     case 'bedrock': {

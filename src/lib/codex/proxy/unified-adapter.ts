@@ -23,6 +23,7 @@
  * error via `classifyUpstreamError` / `makeFailureStream`.
  */
 
+import { buildOpenAIOAuthOptions } from '../../openai-oauth-models';
 import {
   streamText,
   generateText,
@@ -52,7 +53,7 @@ import { buildXaiProviderOptions } from '@/lib/xai-provider-options';
 import { buildCodexSubagentRunContext } from '@/lib/subagent-run-context';
 import { anthropic } from '@ai-sdk/anthropic';
 import { openai } from '@ai-sdk/openai';
-import type { AiSdkConfig } from '@/lib/provider-resolver';
+import type { AiSdkConfig, ResolvedProvider } from '@/lib/provider-resolver';
 import type { ClassifiedNonFunctionTool } from './types';
 import {
   translateCodexNamespaceTools,
@@ -109,6 +110,7 @@ export function createUnifiedAdapter(family: string): ResponsesAdapter {
     //    the default provider inside createModel.
     let languageModel: LanguageModel;
     let modelConfig: AiSdkConfig;
+    let modelProvider: ResolvedProvider;
     let isThirdPartyProxy = false;
     const callScene: ProviderCallScene = isManagedCodexSubagentSession(input.sessionId)
       ? 'delegated_interactive'
@@ -122,6 +124,7 @@ export function createUnifiedAdapter(family: string): ResponsesAdapter {
       });
       languageModel = created.languageModel;
       modelConfig = created.config;
+      modelProvider = created.resolved;
       isThirdPartyProxy = created.isThirdPartyProxy;
     } catch (err) {
       const classified = classifyUpstreamError(err);
@@ -161,6 +164,7 @@ export function createUnifiedAdapter(family: string): ResponsesAdapter {
       sessionId: input.sessionId,
       workspacePath: input.workspacePath,
       targetProviderId: input.targetProviderId,
+      resolvedProvider: modelProvider,
     });
 
     let codexTools: ToolSet | undefined;
@@ -212,7 +216,18 @@ export function createUnifiedAdapter(family: string): ResponsesAdapter {
     // executed in this adapter (`bridge.toolNames` + hosted tools): an
     // executed bridge call must never be echoed to app-server, even when the
     // capability catalog has no entry for it (for example Sub-agent spawn).
-    const bridgeMounted = bridge.toolNames.size > 0;
+    // Memory writes remain definition-only MCP tools executed by app-server.
+    // Advertise their contract only when that exact routed surface is present.
+    const compilerToolNames = new Set(bridge.toolNames);
+    for (const [alias, route] of namespaceTools.routes) {
+      if (/^(?:mcp__)?codepilot_memory_write(?:__)?$/.test(route.namespace)
+        && /^codepilot_memory_(remember|update|forget)$/.test(route.name)
+        && tools?.[alias]) compilerToolNames.add(route.name);
+    }
+    for (const name of Object.keys(codexTools ?? {})) {
+      const match = /^(?:mcp__)?codepilot_memory_write__(codepilot_memory_(?:remember|update|forget))$/.exec(name);
+      if (match) compilerToolNames.add(match[1]);
+    }
     // Phase 5e review fix P1 #2 (2026-05-18) — scan User + External
     // Harness extensions and pass through the adapter so the model
     // sees the user's MCP servers / Skills / commands / external
@@ -278,12 +293,10 @@ export function createUnifiedAdapter(family: string): ResponsesAdapter {
       providerId: input.targetProviderId,
       model: input.body.model,
       userPrompt: '',
-      enabledCapabilities: bridgeMounted
-        ? capabilitiesFromBridgeToolNames(bridge.toolNames)
-        : new Set<string>(),
+      enabledCapabilities: capabilitiesFromBridgeToolNames(compilerToolNames),
       // Auth-gated tools (currently Grok video) must be absent from compiler
       // hints whenever the concrete bridge did not mount them.
-      availableToolNames: bridge.toolNames,
+      availableToolNames: compilerToolNames,
       userExtensions,
       externalExtensions,
       canonicalHarness,
@@ -382,6 +395,13 @@ export function createUnifiedAdapter(family: string): ResponsesAdapter {
           : {}),
       },
     );
+    if (modelConfig.responsesApiAuth === 'codex_oauth' && providerOptions) {
+      try {
+        providerOptions.openai = { ...providerOptions.openai, ...buildOpenAIOAuthOptions(modelConfig.modelId, input.body.reasoning?.effort) };
+      } catch (err) {
+        return makeErrorResult('invalid_request', err instanceof Error ? err.message : String(err), { family });
+      }
+    }
     const wantsStream = input.body.stream !== false;
 
     // Phase 5d Phase 3 review fix #1 (2026-05-17) — Path inputs read
@@ -499,6 +519,9 @@ function capabilitiesFromBridgeToolNames(toolNames: ReadonlySet<string>): Set<st
     toolNames.has('codepilot_memory_get')
   ) {
     out.add('memory');
+  }
+  if (['codepilot_memory_remember', 'codepilot_memory_update', 'codepilot_memory_forget'].some(name => toolNames.has(name))) {
+    out.add('memory_write');
   }
   if (
     toolNames.has('codepilot_notify') ||

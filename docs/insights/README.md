@@ -8,6 +8,7 @@
 
 | 文档 | 对应交接文档 | 主题 |
 |------|------------|------|
+| [tokendance-integration.md](tokendance-integration.md) | [handover/tokendance-integration.md](../handover/tokendance-integration.md) | 为什么授权仍写入普通连接、按协议筛选模型、原连接恢复与计费边界 |
 | [windows-unsigned-auto-update.md](./windows-unsigned-auto-update.md) | [handover/windows-unsigned-auto-update.md](../handover/windows-unsigned-auto-update.md) | 为什么 Windows 可以无证书自动更新但不能冒充 publisher verification；GitHub 单一信任根的接受边界、应用内风险提示、差分更新诚实承诺与 Linux 延后原因 |
 | [windows-runtime-recovery-hardening.md](./windows-runtime-recovery-hardening.md) | [handover/windows-runtime-recovery-hardening.md](../handover/windows-runtime-recovery-hardening.md) | 为什么 Windows 适配必须从路径补丁升级为可证明的执行链；如何吸收 OpenClaw/Craft/OpenCode/Codex 原则而不照搬弱安全实现；为什么恢复按钮只复制并打开 PowerShell、最终仍靠真实 probe 验收 |
 | [harness-home.md](./harness-home.md) | [handover/harness-home.md](../handover/harness-home.md) | 为什么 Harness Home 是用户所有的领域聚合根而不是一张页面；普通文件可读与 Assistant 自动服务为何分层；Skill/MCP/CLI/builtin/renderer/model adapter 如何成为一个可相互调用的 Capability Package；Asset ownership 与 `creative` 效果/policy/多模型扩展取舍 |
@@ -20,7 +21,9 @@
 | [dashboard-generative-ui.md](./dashboard-generative-ui.md) | [handover/dashboard.md](../handover/dashboard.md) | 生成式 UI 持久化、AI-first 项目看板、系统级渲染层构想、实现后复盘 |
 | [buddy-gamification.md](./buddy-gamification.md) | [handover/buddy-gamification.md](../handover/buddy-gamification.md) | Buddy 宠物伙伴设计：从工具到伙伴的用户旅程、稀有度/进化/心跳、视觉体系、审查修复决策 |
 | [context-management.md](./context-management.md) | [handover/context-management.md](../handover/context-management.md) | 上下文管理：长对话失忆/PTL 问题、分级压缩策略、Claude Code 参考与取舍、Codex 审计驱动的优先级 |
+| [runtime-thread-ownership-and-handoff.md](./runtime-thread-ownership-and-handoff.md) | [handover/runtime-thread-ownership-and-handoff.md](../handover/runtime-thread-ownership-and-handoff.md) | 为什么低频原地跨 Runtime 的收益不抵静默丢上下文、缓存重建和维护成本；稳定 owner、显式新聊天交接与真实费用口径的取舍 |
 | [cli-upgrade-proxy.md](./cli-upgrade-proxy.md) | [handover/cli-upgrade-proxy.md](../handover/cli-upgrade-proxy.md) | CLI 升级 + 代理透传：P0 版本问题、分渠道升级策略、系统代理无感透传、Git 依赖引导 |
+| [cli-maintenance.md](./cli-maintenance.md) | [handover/cli-maintenance.md](../handover/cli-maintenance.md) | 为什么 CLI 更新的核心是 selected-target ownership 与 same-channel truth；Windows 宁可 manual-only 也不能更新错安装，执行窗口为何需要 Runtime lease 与 app lifecycle latch |
 | [tool-call-ux.md](./tool-call-ux.md) | [handover/tool-call-ux.md](../handover/tool-call-ux.md) | 工具调用 UX：thinking 展示设计决策、注册表 vs if/else、归组阈值、缓冲旁路、竞品对比 |
 | [performance-memory.md](./performance-memory.md) | [handover/performance-memory.md](../handover/performance-memory.md) | 内存优化：LRU vs 定期清理、300 条上限 + reconciliation、定时器泄漏、大文件流式读取 |
 | [user-audience-analysis.md](./user-audience-analysis.md) | [handover/provider-architecture.md](../handover/provider-architecture.md) | 用户受众分析：画像、需求优先级、竞品格局、品牌定位路线取舍（2026-04-04 数据快照） |

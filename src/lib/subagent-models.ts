@@ -65,6 +65,7 @@ export function listSubagentRoutes(runtime: Extract<ChatRuntime, 'codepilot_runt
 
     for (const model of models) {
       const compat = getModelCompat({
+        providerBaseUrl: resolved.provider?.base_url,
         modelId: model.modelId,
         upstreamModelId: model.upstreamModelId,
         providerCompat: candidate.providerCompat,

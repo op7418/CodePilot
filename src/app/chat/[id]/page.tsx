@@ -32,6 +32,27 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
   // Threaded into ChatView so the picker filters per-session, not per
   // global agent_runtime.
   const [sessionRuntimePin, setSessionRuntimePin] = useState<string>('');
+  const [sessionBindingState, setSessionBindingState] = useState<ChatSession['runtime_binding_state']>('unbound');
+  const [sessionRouteRevision, setSessionRouteRevision] = useState(0);
+  const [sessionHandoff, setSessionHandoff] = useState<{
+    sourceSessionId: string | null;
+    sourceTitle: string;
+    sourceRuntimeId: string;
+    targetRuntimeId: string;
+    sourceBoundaryRowid: number;
+    payloadSource: string;
+    truncated: boolean;
+  } | undefined>(undefined);
+  const [sessionCompaction, setSessionCompaction] = useState<{
+    trigger: 'manual' | 'automatic' | 'reactive';
+    sourceBoundaryRowid: number;
+    messagesCompressed: number;
+    estimatedTokensSaved: number;
+    recreatedUnderlyingSession: boolean;
+    auxiliaryProviderId: string | null;
+    auxiliaryModelId: string | null;
+    createdAt: string;
+  } | undefined>(undefined);
   const [sessionInfoLoaded, setSessionInfoLoaded] = useState(false);
   const [sessionPermissionProfile, setSessionPermissionProfile] = useState<SessionPermissionProfile>('default');
   const [sessionMode, setSessionMode] = useState<'code' | 'plan' | 'ask'>('code');
@@ -53,6 +74,10 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
     setSessionModel('');
     setSessionProviderId('');
     setSessionRuntimePin('');
+    setSessionBindingState('unbound');
+    setSessionRouteRevision(0);
+    setSessionHandoff(undefined);
+    setSessionCompaction(undefined);
     setSessionInfoLoaded(false);
 
     async function loadSession() {
@@ -60,7 +85,11 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
         const sessionRes = await fetch(`/api/chat/sessions/${id}`);
         if (cancelled) return;
         if (sessionRes.ok) {
-          const data: { session: ChatSession } = await sessionRes.json();
+          const data: {
+            session: ChatSession;
+            handoff?: typeof sessionHandoff;
+            compaction?: typeof sessionCompaction;
+          } = await sessionRes.json();
           if (cancelled) return;
           if (data.session.working_directory) {
             setWorkingDirectory(data.session.working_directory);
@@ -79,6 +108,10 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
           setSessionModel(resolved.model);
           setSessionProviderId(resolved.providerId);
           setSessionRuntimePin(data.session.runtime_pin || '');
+          setSessionBindingState(data.session.runtime_binding_state || 'unbound');
+          setSessionRouteRevision(data.session.route_revision ?? 0);
+          setSessionHandoff(data.handoff);
+          setSessionCompaction(data.compaction);
           setSessionPermissionProfile(normalizePermissionProfile(data.session.permission_profile));
           setSessionMode((data.session.mode as 'code' | 'plan' | 'ask') || 'code');
           setSessionHasSummary(!!data.session.context_summary);
@@ -234,7 +267,7 @@ export default function ChatSessionPage({ params }: ChatSessionPageProps) {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <ChatView key={id} sessionId={id} initialMessages={messages} initialHasMore={hasMore} modelName={sessionModel} providerId={sessionProviderId} runtimePin={sessionRuntimePin} initialPermissionProfile={sessionPermissionProfile} initialMode={sessionMode} initialHasSummary={sessionHasSummary} />
+      <ChatView key={id} sessionId={id} initialMessages={messages} initialHasMore={hasMore} modelName={sessionModel} providerId={sessionProviderId} runtimePin={sessionRuntimePin} initialRuntimeBindingState={sessionBindingState} initialRouteRevision={sessionRouteRevision} initialHandoff={sessionHandoff} initialCompaction={sessionCompaction} initialPermissionProfile={sessionPermissionProfile} initialMode={sessionMode} initialHasSummary={sessionHasSummary} />
     </div>
   );
 }

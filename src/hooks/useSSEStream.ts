@@ -7,6 +7,7 @@ import {
 } from '@/lib/permission/review-event';
 import { resolveStatusNoticeKeys } from '@/lib/status-notice-i18n';
 import { translateActive } from '@/i18n';
+import { localizeModelSelectionError } from '@/lib/model-selection-error-i18n';
 
 interface ToolUseInfo {
   id: string;
@@ -75,7 +76,7 @@ export interface SSECallbacks {
   onFileChanged?: (paths: string[]) => void;
   onThinking?: (delta: string) => void;
   onKeepAlive: () => void;
-  onError: (accumulated: string) => void;
+  onError: (accumulated: string, rawError?: string) => void;
   onSkillNudge?: (data: SkillNudgeData) => void;
   onContextCompressed?: (data: { message: string; messagesCompressed: number; tokensSaved: number }) => void;
   onInitMeta?: (meta: {
@@ -122,6 +123,8 @@ export interface RateLimitInfo {
  * needs to see regardless of subsequent streaming progress belong here.
  */
 export const TOAST_STATUS_CODES = new Set<string>([
+  'GEMINI_OPTIONS_ADJUSTED',
+  'NATIVE_OUTPUT_TRUNCATED',
   'RUNTIME_EFFORT_IGNORED', // Opus 4.7+ family on native runtime — explicit effort dropped
   'RUNTIME_EFFORT_ADJUSTED', // Opus 5: disabled thinking caps xhigh/max to high
   'THINKING_ALWAYS_ON', // Fable 5 — thinking:'disabled' cannot be honored, adaptive runs anyway
@@ -580,8 +583,8 @@ export function handleSSEEvent(
         // Plain text error (backward compatible)
         errorDisplay = event.data;
       }
-      const next = accumulated + '\n\n**Error:** ' + errorDisplay;
-      callbacks.onError(next);
+      const next = accumulated + '\n\n**Error:** ' + localizeModelSelectionError(errorDisplay);
+      callbacks.onError(next, event.data);
       return next;
     }
 
@@ -670,7 +673,7 @@ export function useSSEStream() {
         onRewindPoint: (id) => callbacksRef.current?.onRewindPoint(id),
         onThinking: (d) => callbacksRef.current?.onThinking?.(d),
         onKeepAlive: () => callbacksRef.current?.onKeepAlive(),
-        onError: (a) => callbacksRef.current?.onError(a),
+        onError: (a, rawError) => callbacksRef.current?.onError(a, rawError),
         onInitMeta: (m) => callbacksRef.current?.onInitMeta?.(m),
         onRateLimit: (info) => callbacksRef.current?.onRateLimit?.(info),
         onContextUsage: (snap) => callbacksRef.current?.onContextUsage?.(snap),

@@ -156,10 +156,13 @@ export function isHumanOnlyTool(toolName: string): boolean {
  * they never reach the Claude MCP surface.
  */
 export const CODEPILOT_MCP_TOOL_SERVERS: Readonly<Record<string, string>> = {
-  // codepilot-memory — read-only assistant_workspace/memory access.
+  // codepilot-memory — shared reads and permission-gated local mutations.
   codepilot_memory_search: 'codepilot-memory',
   codepilot_memory_get: 'codepilot-memory',
   codepilot_memory_recent: 'codepilot-memory',
+  codepilot_memory_remember: 'codepilot-memory',
+  codepilot_memory_update: 'codepilot-memory',
+  codepilot_memory_forget: 'codepilot-memory',
   // codepilot-widget — registered under this key, though the server declares
   // itself 'codepilot-widget-guidelines'.
   codepilot_load_widget_guidelines: 'codepilot-widget',
@@ -555,7 +558,7 @@ export function resolveRuntimeAutoReview(input: {
  * interception and (under auto_review) the SDK reviewer are all skipped for a
  * whole server at a time. Only read-only servers may appear:
  *
- *   - memory            — reads assistant_workspace/memory/
+ *   - memory            — exact read tool names only; the server also has writes
  *   - widget            — renders host UI; no model-visible state
  *   - widget-guidelines — loads a static design spec
  *
@@ -565,15 +568,21 @@ export function resolveRuntimeAutoReview(input: {
  * They now flow through `canUseTool`, which keeps the safe subset prompt-free
  * via the per-TOOL {@link HOST_AUTO_APPROVED_TOOLS} list.
  */
+export const MEMORY_READ_MCP_TOOLS: readonly string[] = [
+  'mcp__codepilot-memory__codepilot_memory_search',
+  'mcp__codepilot-memory__codepilot_memory_get',
+  'mcp__codepilot-memory__codepilot_memory_recent',
+];
+
 export const BARE_ALLOWED_MCP_SERVERS: readonly string[] = [
-  'mcp__codepilot-memory',
+  ...MEMORY_READ_MCP_TOOLS,
   'mcp__codepilot-widget',
   'mcp__codepilot-widget-guidelines',
   'mcp__codepilot-subagent',
 ];
 
 /** Heartbeat runs get memory only — see the heartbeat note in claude-client. */
-export const HEARTBEAT_ALLOWED_MCP_SERVERS: readonly string[] = ['mcp__codepilot-memory'];
+export const HEARTBEAT_ALLOWED_MCP_SERVERS: readonly string[] = MEMORY_READ_MCP_TOOLS;
 
 /**
  * SDK builtins hard-blocked for heartbeat runs. `allowedTools` is auto-approve,

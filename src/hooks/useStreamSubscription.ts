@@ -38,7 +38,7 @@ export function useStreamSubscription({
       }
       // If stream finished while this ChatView was unmounted, consume finalMessageContent now.
       if (existing.phase !== 'active' && existing.finalMessageContent) {
-        if (existing.phase === 'completed') {
+        if (existing.phase === 'completed' && !existing.saveUnconfirmed) {
           // Normal completion — both messages are persisted. Re-fetch from DB
           // to get canonical state and avoid duplicating the temp assistant message.
           fetch(`/api/chat/sessions/${sessionId}/messages?limit=50`)
@@ -62,13 +62,14 @@ export function useStreamSubscription({
               setMessages((prev) => [...prev, assistantMessage]);
             });
         } else {
-          // Error/stopped/idle-timeout — partial output may not be persisted yet.
+          // Failed saves and error/stopped/idle-timeout may be missing from DB.
           // Append locally to preserve the content the user saw before unmount.
           const assistantMessage: Message = {
             id: 'temp-assistant-' + Date.now(),
             session_id: sessionId,
             role: 'assistant',
             content: existing.finalMessageContent!,
+            saveUnconfirmed: existing.saveUnconfirmed,
             created_at: new Date().toISOString(),
             token_usage: existing.tokenUsage ? JSON.stringify(existing.tokenUsage) : null,
           };
@@ -116,6 +117,7 @@ export function useStreamSubscription({
             session_id: sessionId,
             role: 'assistant',
             content: finalContent,
+            saveUnconfirmed: event.snapshot.saveUnconfirmed,
             created_at: new Date().toISOString(),
             token_usage: event.snapshot.tokenUsage ? JSON.stringify(event.snapshot.tokenUsage) : null,
           };

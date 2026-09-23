@@ -96,30 +96,29 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
       .catch(() => {});
   }, [sessions.length]);
 
-  /** Read current model + provider_id from localStorage for new session creation */
-  const getCurrentModelAndProvider = useCallback(() => {
-    const model = typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-model') || '' : '';
-    const provider_id = typeof window !== 'undefined' ? localStorage.getItem('codepilot:last-provider-id') || '' : '';
-    return { model, provider_id };
-  }, []);
-
   const handleFolderSelect = useCallback(async (path: string) => {
     try {
-      const { model, provider_id } = getCurrentModelAndProvider();
       const res = await fetch("/api/chat/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ working_directory: path, model, provider_id }),
+        // This entry creates an empty, still-unbound conversation. Route
+        // identity is deliberately omitted as a whole: the composer resolves
+        // the current default, and the first accepted execution atomically
+        // binds Runtime + provider + model. Sending only the two legacy
+        // localStorage fields would violate the all-or-none route contract.
+        body: JSON.stringify({ working_directory: path }),
       });
       if (res.ok) {
         const data = await res.json();
         window.dispatchEvent(new CustomEvent("session-created"));
         router.push(`/chat/${data.session.id}`);
+      } else {
+        showToast({ type: 'error', message: t('error.sessionCreateFailed') });
       }
     } catch {
-      // Silently fail
+      showToast({ type: 'error', message: t('error.sessionCreateFailed') });
     }
-  }, [router, getCurrentModelAndProvider]);
+  }, [router, t]);
 
   const openFolderPicker = useCallback(async (defaultPath?: string) => {
     if (isElectron) {
@@ -189,11 +188,10 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
         }
       }
 
-      const { model, provider_id } = getCurrentModelAndProvider();
       const res = await fetch("/api/chat/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ working_directory: lastDir, model, provider_id }),
+        body: JSON.stringify({ working_directory: lastDir }),
       });
       if (!res.ok) {
         // Backend rejected it (e.g. INVALID_DIRECTORY) — prompt user
@@ -209,7 +207,7 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
     } finally {
       setCreatingChat(false);
     }
-  }, [router, workingDirectory, openFolderPicker, getCurrentModelAndProvider, t]);
+  }, [router, workingDirectory, openFolderPicker, t]);
 
   const toggleProject = useCallback((wd: string) => {
     setCollapsedProjects((prev) => {
@@ -348,19 +346,20 @@ export function ChatListPanel({ open, hasUpdate, readyToInstall }: ChatListPanel
   ) => {
     e.stopPropagation();
     try {
-      const { model, provider_id } = getCurrentModelAndProvider();
       const res = await fetch("/api/chat/sessions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ working_directory: workingDirectory, model, provider_id }),
+        body: JSON.stringify({ working_directory: workingDirectory }),
       });
       if (res.ok) {
         const data = await res.json();
         window.dispatchEvent(new CustomEvent("session-created"));
         router.push(`/chat/${data.session.id}`);
+      } else {
+        showToast({ type: 'error', message: t('error.sessionCreateFailed') });
       }
     } catch {
-      // Silently fail
+      showToast({ type: 'error', message: t('error.sessionCreateFailed') });
     }
   };
 

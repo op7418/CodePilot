@@ -11,6 +11,7 @@
  */
 
 import { consumeSSEStream } from '@/hooks/useSSEStream';
+import { CHAT_SAVE_UNCONFIRMED } from '@/lib/chat-collection-response';
 import { transferPendingToMessage } from '@/lib/image-ref-store';
 import { dispatchFileChanged } from '@/lib/file-changed-event';
 import { refreshSessionTitle } from '@/lib/session-title-events';
@@ -281,6 +282,7 @@ function normalizeContentToString(value: unknown): string {
 function buildSnapshot(stream: ActiveStream): SessionStreamSnapshot {
   return {
     sessionId: stream.sessionId,
+    saveUnconfirmed: stream.snapshot.saveUnconfirmed,
     phase: stream.snapshot.phase,
     streamingContent: stream.accumulatedText,
     streamingThinkingContent: stream.accumulatedThinking,
@@ -806,8 +808,9 @@ async function runStream(stream: ActiveStream, params: StartStreamParams): Promi
       onKeepAlive: () => {
         markActive();
       },
-      onError: (acc) => {
+      onError: (acc, rawError) => {
         markActive();
+        if (rawError === CHAT_SAVE_UNCONFIRMED) stream.snapshot.saveUnconfirmed = true;
         stream.accumulatedText = acc;
         emit(stream, 'snapshot-updated');
       },

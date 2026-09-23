@@ -1,3 +1,5 @@
+import { createStreamTurnOutcome } from '../stream-turn-outcome';
+import { enqueueCommittedMemoryTurn, getMemoryTurnUserMessageId } from '@/lib/memory-lifecycle';
 /**
  * Conversation Engine — processes inbound IM messages through Claude.
  *
@@ -11,6 +13,7 @@ import path from 'path';
 import type { ChannelBinding } from './types';
 import type { SSEEvent, TokenUsage, MessageContentBlock, FileAttachment } from '@/types';
 import { streamClaude } from '../claude-client';
+import { attachNativeStep, parseNativeStepHistory } from '../native-step-history';
 import {
   addMessage,
   getMessages,
@@ -19,11 +22,9 @@ import {
   releaseSessionLock,
   setSessionRuntimeStatus,
   updateSdkSessionId,
-  updateSessionModel,
   syncSdkTasks,
   getSession,
   getSetting,
-  getDefaultProviderId,
   isLockOwner,
 } from '../db';
 import { createSessionLockSettler } from '../session-lock-settle';
@@ -34,13 +35,13 @@ import {
 } from '../permission/profile';
 import { isAutoReviewSupported } from '../permission/sdk-capability';
 import { evaluateRenewal } from '../session-lock-renewal';
-import { resolveProvider as resolveProviderUnified } from '../provider-resolver';
-import { getActiveChatRuntime } from '../chat-runtime';
+import { resolveProviderForSession } from '../provider-resolver';
 import { loadCodePilotMcpServers, loadAllMcpServers } from '../mcp-loader';
 import { assembleContext } from '../context-assembler';
 import { predictNativeRuntime } from '../runtime';
 import crypto from 'crypto';
 import { resolveWorkingDirectory } from '../working-directory';
+import { isRuntimeId } from '../runtime/runtime-id';
 
 export interface PermissionRequestInfo {
   permissionRequestId: string;
@@ -146,6 +147,17 @@ export async function processMessage(
   try {
     // Resolve session early — needed for workingDirectory and provider resolution
     const session = getSession(sessionId);
+    if (!session
+      || session.runtime_binding_state !== 'bound'
+      || !isRuntimeId(session.runtime_pin)
+      || !session.provider_id
+      || !session.model) {
+      throw new Error('Bridge session has no bound Runtime route. Recover the session before sending again.');
+    }
+    if ((binding.providerId && binding.providerId !== session.provider_id)
+      || (binding.model && binding.model !== session.model)) {
+      throw new Error('Bridge route is stale. Reconnect the channel before sending again.');
+    }
 
     // Save user message — persist file attachments to disk using the same
     // <!--files:JSON--> format as the desktop chat route, so the UI can render them.
@@ -164,7 +176,7 @@ export async function processMessage(
             const safeName = path.basename(f.name)
               // Preserve Unicode names; replace only characters that are
               // invalid on Windows or unsafe as control characters.
-              // eslint-disable-next-line no-control-regex
+               
               .replace(/[<>:"/\\|?*\x00-\x1f]/g, '_')
               .replace(/[. ]+$/g, '_')
               .slice(0, 180) || 'attachment';
@@ -185,7 +197,7 @@ export async function processMessage(
         savedContent = `[${files.length} image(s) attached] ${text}`;
       }
     }
-    addMessage(sessionId, 'user', savedContent);
+    const initiatingUserMessage = addMessage(sessionId, 'user', savedContent);
 
     // Resolve provider via unified resolver.
     // Priority chain:
@@ -193,22 +205,23 @@ export async function processMessage(
     // 2. Session's provider_id (if the DB column exists)
     // 3. Global default provider (getDefaultProviderId)
     // 4. 'env' mode fallback
-    const effectiveProviderId = binding.providerId || session?.provider_id || getDefaultProviderId() || undefined;
+    const effectiveProviderId = session.provider_id;
 
     // Same runtime gate as the main /api/chat route — bridge sessions go
     // through the same SDK / ai-sdk paths, so the default-model fallback
     // must respect the active runtime's compat constraints.
-    const activeRuntime = getActiveChatRuntime();
-    const resolved = resolveProviderUnified({
-      providerId: effectiveProviderId,
-      model: binding.model || undefined,
-      sessionModel: session?.model || undefined,
-      runtime: activeRuntime,
-    });
+    const activeRuntime = session.runtime_pin;
+    const resolved = resolveProviderForSession({
+      provider_id: effectiveProviderId,
+      model: session.model,
+    }, { runtime: activeRuntime, callScene: 'bridge' });
+    if (resolved.invalidReason) {
+      throw new Error(`Bridge route is unavailable: ${resolved.invalidReason}`);
+    }
     const resolvedProvider = resolved.provider;
 
     // Use upstream model from unified resolver (same chain as chat route)
-    const effectiveModel = resolved.upstreamModel || resolved.model || binding.model || session?.model || getSetting('default_model') || undefined;
+    const effectiveModel = resolved.upstreamModel || resolved.model || session.model;
 
     // Guard: protocol/model mismatch — e.g. google protocol with model 'sonnet'
     // would silently send a wrong request. Fail fast with a clear error.
@@ -354,7 +367,7 @@ export async function processMessage(
     // Consume the stream server-side (replicate collectStreamResponse pattern).
     // Permission requests are forwarded immediately via the callback during streaming
     // because the stream blocks until permission is resolved — we can't wait until after.
-    return await consumeStream(stream, sessionId, lockId, onPermissionRequest, onPartialText, onToolEvent);
+    return await consumeStream(stream, sessionId, lockId, onPermissionRequest, onPartialText, onToolEvent, initiatingUserMessage.id);
   } finally {
     // Session ownership — lockId-scoped settle: clears the renewal interval,
     // releases only THIS lockId's row, and writes runtime_status='idle' ONLY when
@@ -383,7 +396,9 @@ export async function consumeStream(
   onPermissionRequest?: OnPermissionRequest,
   onPartialText?: OnPartialText,
   onToolEvent?: OnToolEvent,
+  userMessageId?: string,
 ): Promise<ConversationResult> {
+  const memoryUserMessageId = userMessageId ?? getMemoryTurnUserMessageId(sessionId);
   const reader = stream.getReader();
   const contentBlocks: MessageContentBlock[] = [];
   let currentText = '';
@@ -395,6 +410,7 @@ export async function consumeStream(
   const seenToolResultIds = new Set<string>();
   const permissionRequests: PermissionRequestInfo[] = [];
   let capturedSdkSessionId: string | null = null;
+  const memoryOutcome = createStreamTurnOutcome();
 
   try {
     while (true) {
@@ -412,7 +428,17 @@ export async function consumeStream(
           continue;
         }
 
+        memoryOutcome.observe(event);
         switch (event.type) {
+          case 'native_step': {
+            const step = await parseNativeStepHistory(JSON.parse(event.data));
+            if (step) {
+              if (currentText) contentBlocks.push({ type: 'text', text: currentText });
+              currentText = '';
+              attachNativeStep(contentBlocks, step);
+            }
+            break;
+          }
           case 'thinking': {
             // Accumulate thinking deltas into a thinking content block
             const delta = event.data;
@@ -516,9 +542,8 @@ export async function consumeStream(
                   if (statusData.session_id) {
                     updateSdkSessionId(sessionId, statusData.session_id);
                   }
-                  if (statusData.model) {
-                    updateSessionModel(sessionId, statusData.model);
-                  }
+                  // Runtime-reported model is an observation, not permission to
+                  // mutate the session's atomic route identity.
                 }
               }
               // Skill-nudge: agent loop emits this at end-of-run when the
@@ -605,7 +630,7 @@ export async function consumeStream(
     // Save assistant message
     if (contentBlocks.length > 0) {
       const hasStructuredBlocks = contentBlocks.some(
-        (b) => b.type === 'tool_use' || b.type === 'tool_result' || b.type === 'thinking'
+        (b) => Boolean(b.nativeStep) || b.type === 'tool_use' || b.type === 'tool_result' || b.type === 'thinking'
       );
       const content = hasStructuredBlocks
         ? JSON.stringify(contentBlocks)
@@ -622,7 +647,12 @@ export async function consumeStream(
         if (!isLockOwner(sessionId, lockId)) {
           console.warn(`[conversation-engine] stale owner (lockId superseded) — DP1: dropping assistant message persist for session ${sessionId} (${content.length} chars not written)`);
         } else {
-          addMessage(sessionId, 'assistant', content, tokenUsage ? JSON.stringify(tokenUsage) : null);
+          const saved = addMessage(sessionId, 'assistant', content, tokenUsage ? JSON.stringify(tokenUsage) : null);
+          try {
+            enqueueCommittedMemoryTurn({ sessionId, assistantMessageId: saved.id, userMessageId: memoryUserMessageId ?? null,
+              successful: memoryOutcome.successful && !hasError,
+              ownerValid: isLockOwner(sessionId, lockId), entryPoint: 'bridge', blocks: contentBlocks });
+          } catch { console.warn('[memory] MEMORY_JOB_ENQUEUE_FAILED'); }
         }
       }
     }

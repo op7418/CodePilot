@@ -30,17 +30,19 @@ interface DailyRow {
   model: string;
   input_tokens: number;
   output_tokens: number;
-  cost: number;
+  cost: number | null;
+  cost_legacy?: boolean;
+  cohort?: 'stable_owner' | 'handoff';
 }
 
 interface UsageStatsResponse {
   summary: {
     total_input_tokens: number;
     total_output_tokens: number;
-    total_cost: number;
+    total_cost: number | null;
     total_sessions: number;
-    cache_read_tokens: number;
-    cache_creation_tokens: number;
+    cache_read_tokens: number | null;
+    cache_creation_tokens: number | null;
   };
   daily: DailyRow[];
 }

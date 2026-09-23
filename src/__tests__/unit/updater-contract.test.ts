@@ -16,6 +16,8 @@ import {
 import {
   boundedUpdateText,
   classifyUpdaterError,
+  consumeUpdaterDownloadPromise,
+  createUpdaterFailureReporter,
   resolveUpdaterFeedChannel,
   resolveUpdaterPublisherVerification,
   resolveUpdaterSupport,
@@ -74,6 +76,42 @@ describe('Main-owned updater contract', () => {
     assert.equal(boundedUpdateText([{ note: 'one' }, { note: 'two' }]), 'one\n\ntwo');
   });
 
+  it('owns nested download rejection and deduplicates Promise/emitter arrival order', async () => {
+    const unhandled: unknown[] = [];
+    const onUnhandled = (reason: unknown) => unhandled.push(reason);
+    process.on('unhandledRejection', onUnhandled);
+    try {
+      for (const emitterFirst of [true, false]) {
+        let phase: import('../../lib/updater-contract').UpdaterPhase = 'downloading';
+        let failures = 0;
+        const report = createUpdaterFailureReporter(
+          () => phase,
+          () => {
+            failures += 1;
+            phase = 'error';
+          },
+        );
+        let rejectDownload!: (error: unknown) => void;
+        const nestedDownload = new Promise<void>((_resolve, reject) => {
+          rejectDownload = reject;
+        });
+        const owned = consumeUpdaterDownloadPromise(nestedDownload, report);
+        const failure = new Error(`download failed (${emitterFirst ? 'emitter-first' : 'promise-first'})`);
+
+        if (emitterFirst) report(failure);
+        rejectDownload(failure);
+        await owned;
+        if (!emitterFirst) report(failure);
+
+        assert.equal(failures, 1);
+      }
+      await new Promise<void>((resolve) => setImmediate(resolve));
+      assert.deepEqual(unhandled, []);
+    } finally {
+      process.off('unhandledRejection', onUnhandled);
+    }
+  });
+
   it('keeps feed trust and install eligibility in Main behind narrow IPC', () => {
     const root = path.resolve(__dirname, '../../..');
     const main = fs.readFileSync(path.join(root, 'electron/main.ts'), 'utf8');
@@ -96,13 +134,16 @@ describe('Main-owned updater contract', () => {
     assert.match(updater, /trustedSender\(event\)/);
     assert.match(updater, /activity_unavailable/);
     assert.match(updater, /downloadInFlight/);
+    assert.match(updater, /const result = await autoUpdater\.checkForUpdates\(\)/);
+    assert.match(updater, /result\?\.downloadPromise/);
+    assert.match(updater, /consumeUpdaterDownloadPromise\(autoDownloadPromise, recordUpdaterErrorOnce\)/);
+    assert.match(updater, /autoUpdater\.on\('error',[\s\S]*recordUpdaterErrorOnce\(error\)/);
     assert.match(updater, /snapshot\.phase === 'downloading'/);
     assert.match(updater, /INSTALL_HANDOFF_TIMEOUT_MS/);
     assert.match(updater, /onInstallLifecycleChange\(false\)/);
     assert.match(updater, /phase: 'downloaded', errorCode: 'install_failed'/);
     assert.match(main, /appQuitTeardownStarted/);
     assert.match(main, /updaterInstallLifecycleArmed/);
-    assert.match(updater, /snapshot\.phase !== 'error'/);
     assert.doesNotMatch(updater, /setFeedURL/);
     assert.doesNotMatch(preload, /feedURL|channel:|filePath|updaterOptions/);
     assert.match(preload, /updater:get-status/);

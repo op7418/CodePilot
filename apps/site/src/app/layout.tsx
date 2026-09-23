@@ -4,7 +4,7 @@ import type { Metadata } from 'next';
 import { siteConfig } from '@/lib/site.config';
 
 const title = {
-  default: 'CodePilot — Desktop Workspace for Claude Code',
+  default: 'CodePilot — Your Desktop AI Workspace',
   template: '%s | CodePilot',
 };
 
@@ -16,6 +16,10 @@ export const metadata: Metadata = {
   metadataBase: new URL(siteConfig.url),
   keywords: [
     'Claude Code',
+    'Codex',
+    'OpenAI',
+    'AI workspace',
+    'Skills',
     'AI coding',
     'desktop app',
     'MCP',
@@ -36,9 +40,9 @@ export const metadata: Metadata = {
     images: [
       {
         url: '/og-image.png',
-        width: 1200,
-        height: 630,
-        alt: 'CodePilot — Desktop Workspace for Claude Code',
+        width: 2560,
+        height: 1720,
+        alt: 'CodePilot — Your Desktop AI Workspace',
       },
     ],
   },

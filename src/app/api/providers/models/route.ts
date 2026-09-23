@@ -5,6 +5,7 @@ import { isFirstPartyAnthropicEndpoint } from '@/lib/ai-provider';
 import { getDefaultModelsForProvider, getEffectiveProviderProtocol, findPresetForLegacy, ENV_CLAUDE_CODE_MODELS } from '@/lib/provider-catalog';
 import type { Protocol } from '@/lib/provider-catalog';
 import type { ErrorResponse, ProviderModelGroup } from '@/types';
+import { refreshOpenAIOAuthModels, isOpenAIOAuthDiscoveryPending } from '@/lib/openai-oauth-models';
 import { listManagedVirtualProviderModelGroups } from '@/lib/managed-virtual-provider-models';
 import {
   getProviderCompat,
@@ -495,6 +496,9 @@ export async function GET(request: NextRequest) {
     // Authenticated virtual providers share one catalog with managed
     // Sub-agent route discovery. Do not hand-add a provider here: doing so
     // caused v0.60.0 to show Grok in the picker while rejecting it as a child.
+    // Refresh in the background: OAuth network latency must not hold up the
+    // global feed. Serve the last same-account catalog immediately.
+    void refreshOpenAIOAuthModels();
     for (const virtual of listManagedVirtualProviderModelGroups()) {
       groups.push({
         provider_id: virtual.providerId,
@@ -573,6 +577,7 @@ export async function GET(request: NextRequest) {
     // Media rows (image / video / embedding) are still dropped at
     // the row layer regardless of runtime — those don't belong in
     // chat pickers period.
+    const reasonLocale = getSetting('locale') === 'zh' ? 'zh' : 'en';
     let outGroups = groups.map(g => {
       const providerCompat = g.compat ?? 'unknown';
       // Phase 5b (2026-05-15) — the built-in `env` Claude Code default
@@ -590,6 +595,8 @@ export async function GET(request: NextRequest) {
         .map(m => {
           const normalized = normalizeModelCapabilitySurface(m);
           const cap = getModelCompat({
+            reasonLocale,
+            providerBaseUrl: providers.find(p => p.id === g.provider_id)?.base_url,
             modelId: normalized.value,
             upstreamModelId: normalized.upstreamModelId,
             providerCompat,
@@ -642,6 +649,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       groups: outGroups,
+      model_discovery_pending: isOpenAIOAuthDiscoveryPending(),
       default_provider_id: defaultProviderId,
       // Echo back which runtime the server actually used to filter so
       // the chat picker can surface "showing models for Claude Code

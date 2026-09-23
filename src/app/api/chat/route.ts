@@ -1,9 +1,9 @@
 import { NextRequest } from 'next/server';
 import { streamClaude } from '@/lib/claude-client';
 import { resolveInTreeAttachmentPath } from '@/lib/in-tree-attachment';
-import { addMessage, getActiveProvider, getDefaultProviderId, getMessages, getProvider, getSession, getSessionSummary, updateSessionTitle, updateSdkSessionId, updateSessionModel, updateSessionProvider, updateSessionProviderId, updateSessionRuntime, getSetting, acquireSessionLock, renewSessionLock, releaseSessionLock, setSessionRuntimeStatus, isLockOwner } from '@/lib/db';
+import { addMessage, bindSessionForExecution, commitSessionCompaction, getActiveProvider, getDefaultProviderId, getHandoffForTargetSession, getMessages, getProvider, getSession, getSessionSummary, updateSessionTitle, updateSdkSessionId, updateSessionProvider, acquireSessionLock, renewSessionLock, releaseSessionLock, setSessionRuntimeStatus, isLockOwner } from '@/lib/db';
 import { deriveConversationTitle } from '@/lib/conversation-title';
-import { resolveProviderForSession } from '@/lib/provider-resolver';
+import { resolveChatMessageRoute } from '@/lib/chat-message-route';
 import { resolveRuntimeForSession } from '@/lib/chat-runtime';
 import { notifySessionStart } from '@/lib/telegram-bot';
 import { collectStreamResponse } from '@/lib/chat-collect-stream-response';
@@ -11,7 +11,8 @@ import { loadCodePilotMcpServers, loadAllMcpServers } from '@/lib/mcp-loader';
 import { assembleContext } from '@/lib/context-assembler';
 import { buildContextCompressedStatus } from '@/lib/context-compressor';
 import type { SendMessageRequest, FileAttachment, ClaudeStreamOptions } from '@/types';
-import { wrapController } from '@/lib/safe-stream';
+import { createChatCollectionResponse, createChatPersistenceSignal, observeChatCollection } from '@/lib/chat-collection-response';
+import { reportChatCollectionFailure } from '@/lib/telemetry/chat-collection-failure';
 import { ensureSchedulerRunning } from '@/lib/task-scheduler';
 import { predictNativeRuntime } from '@/lib/runtime';
 import { hasCodePilotProvider } from '@/lib/provider-presence';
@@ -26,6 +27,10 @@ import {
 import { buildReviewEvent } from '@/lib/permission/review-event';
 import { emitReviewEvent } from '@/lib/permission/review-audit';
 import { isAutoReviewSupported, getAutoReviewUnavailableReason } from '@/lib/permission/sdk-capability';
+import { isRuntimeId } from '@/lib/runtime/runtime-id';
+import { decideExecutionBinding, getThreadExecutionBinding, isInternalRuntimeSwitchMarker } from '@/lib/runtime/thread-execution-binding';
+import { buildRuntimeHandoffContextFragment, parseRuntimeHandoffPayload } from '@/lib/runtime/handoff-payload';
+import { getRuntimeCompactionPolicy } from '@/lib/runtime/compaction-policy';
 
 // codex-stop-recovery Phase 3 — after an explicit Runtime interrupt aborts the
 // turn controller, how long to wait for the natural interrupt→terminal→collect
@@ -75,7 +80,7 @@ export async function POST(request: NextRequest) {
     console.log('[chat API] content length:', content.length, 'first 200 chars:', content.slice(0, 200));
     console.log('[chat API] systemPromptAppend:', systemPromptAppend ? `${systemPromptAppend.length} chars` : 'none');
 
-    const session = getSession(session_id);
+    let session = getSession(session_id);
     if (!session) {
       return new Response(JSON.stringify({ error: 'Session not found' }), {
         status: 404,
@@ -122,6 +127,49 @@ export async function POST(request: NextRequest) {
     }
     activeSessionId = session_id;
     activeLockId = lockId;
+
+    // Runtime ownership is committed before provider resolution, transcript
+    // writes, notifications, uploads, or process startup. A failed first turn
+    // therefore cannot leave a chat that silently drifts to another Runtime.
+    const binding = getThreadExecutionBinding(session);
+    const bindingDecision = decideExecutionBinding(
+      binding,
+      autoTrigger ? 'auto' : 'manual',
+      isRuntimeId(session.runtime_pin) ? session.runtime_pin : undefined,
+    );
+    if (!bindingDecision.ok) {
+      releaseSessionLock(session_id, lockId);
+      activeSessionId = undefined;
+      activeLockId = undefined;
+      return new Response(
+        JSON.stringify({ error: bindingDecision.code, code: bindingDecision.code }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    if (bindingDecision.shouldBind) {
+      const bindResult = bindSessionForExecution({
+        sessionId: session_id,
+        expectedRouteRevision: binding.routeRevision,
+        runtimeId: bindingDecision.runtimeId,
+      });
+      if (!bindResult.ok) {
+        releaseSessionLock(session_id, lockId);
+        activeSessionId = undefined;
+        activeLockId = undefined;
+        const code = bindResult.reason === 'recovery_required'
+          ? 'RUNTIME_RECOVERY_REQUIRED'
+          : bindResult.reason === 'route_mismatch'
+            ? 'RUNTIME_OWNERSHIP_CONFLICT'
+            : bindResult.reason === 'not_found'
+              ? 'SESSION_NOT_FOUND'
+              : 'ROUTE_REVISION_CONFLICT';
+        return new Response(
+          JSON.stringify({ error: code, code, session: bindResult.session }),
+          { status: bindResult.reason === 'not_found' ? 404 : 409, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      session = bindResult.session;
+    }
     setSessionRuntimeStatus(session_id, 'running');
 
     // ─── Phase 2 Step 3 — early resolver gate ───────────────────────
@@ -144,15 +192,36 @@ export async function POST(request: NextRequest) {
     // Lift to a local so the lazy-seed below can write the same value
     // we routed THIS turn through (no second call to the registry).
     const effectiveSessionRuntime = resolveRuntimeForSession(session);
-    const resolved = resolveProviderForSession(
-      {
-        provider_id: session.provider_id || '',
-        model: session.model || '',
-        requestProviderId: provider_id || undefined,
-        requestModel: model || undefined,
-      },
-      { runtime: effectiveSessionRuntime, callScene: 'interactive_chat' },
-    );
+    if (!session.provider_id || !session.model) {
+      releaseSessionLock(session_id, lockId);
+      activeSessionId = undefined;
+      activeLockId = undefined;
+      setSessionRuntimeStatus(session_id, 'idle');
+      return new Response(
+        JSON.stringify({ error: 'SESSION_ROUTE_INCOMPLETE', code: 'SESSION_ROUTE_INCOMPLETE' }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
+    const resolved = resolveChatMessageRoute({
+      provider_id: session.provider_id,
+      model: session.model,
+      requestProviderId: provider_id || undefined,
+      requestModel: model || undefined,
+    }, effectiveSessionRuntime);
+    if (!resolved) {
+      releaseSessionLock(session_id, lockId);
+      activeSessionId = undefined;
+      activeLockId = undefined;
+      setSessionRuntimeStatus(session_id, 'idle');
+      return new Response(
+        JSON.stringify({
+          error: 'MESSAGE_ROUTE_MISMATCH',
+          code: 'MESSAGE_ROUTE_MISMATCH',
+          route_revision: session.route_revision ?? 0,
+        }),
+        { status: 409, headers: { 'Content-Type': 'application/json' } },
+      );
+    }
     if (resolved.invalidReason) {
       releaseSessionLock(session_id, lockId);
       activeSessionId = undefined;
@@ -177,46 +246,19 @@ export async function POST(request: NextRequest) {
     }
     const resolvedProvider = resolved.provider;
 
-    // Phase 2 Step 4a — lazy-seed `session.runtime_pin`.
-    //
-    // Sessions created before the column shipped (or before the user
-    // ever explicitly switched runtime in the chat) carry an empty
-    // `runtime_pin`, which means `resolveRuntimeForSession` falls
-    // through to the global `agent_runtime` setting. That's fine for
-    // THIS turn — but on the NEXT turn, after the user has flipped
-    // the global setting in Settings, the same session would silently
-    // resolve to the new global value: drift.
-    //
-    // Lock it in: the moment the user actually sends a message, we
-    // pin the currently-routed runtime to the session row. Subsequent
-    // sends use the pin regardless of global flips. Same principle as
-    // the model + provider lazy-seed below: "the session's first
-    // commitment is whatever they were ACTIVELY using when they
-    // pressed send".
-    //
-    // **autoTrigger guard (Step 4a review)**: invisible system turns
-    // (heartbeat checks, assistant hooks, /skill expansion etc.) must
-    // NOT pin the runtime — the user contract is "first USER send
-    // fixes it", and an autoTrigger firing at the wrong moment would
-    // silently capture whatever global was active for the BACKGROUND
-    // task, not the user's choice. Background turns still resolve via
-    // `effectiveSessionRuntime` for routing this turn, they just don't
-    // persist that decision. Mirrors the same `!autoTrigger` gate
-    // already wrapping `addMessage` / `updateSessionTitle` below.
-    //
-    // Mutates the in-memory `session.runtime_pin` too so the
-    // streamClaude call below picks up the seeded value (rather than
-    // re-reading DB).
-    if (!session.runtime_pin && !autoTrigger) {
-      updateSessionRuntime(session_id, effectiveSessionRuntime);
-      session.runtime_pin = effectiveSessionRuntime;
-    }
-
     // ── /compact command handler ────────────────────────────────────
     if (content.trim() === '/compact') {
       try {
         const { compressConversation, resetCompressionState, filterHistoryByCompactBoundary } = await import('@/lib/context-compressor');
-        const { getMessages: getDbMessages, getSessionSummary: getDbSummary, updateSessionSummary: updateDbSummary } = await import('@/lib/db');
+        const { getMessages: getDbMessages, getSessionSummary: getDbSummary } = await import('@/lib/db');
+        const compactionPolicy = getRuntimeCompactionPolicy(effectiveSessionRuntime);
+        if (compactionPolicy.mode !== 'proactive') {
+          releaseSessionLock(session_id, lockId);
+          setSessionRuntimeStatus(session_id, 'idle');
+          const msg = '当前 Runtime 由自身管理上下文压缩，CodePilot 不会伪造一份可能不生效的摘要。';
+          const sseData = `data: ${JSON.stringify({ type: 'text', data: msg })}\n\ndata: ${JSON.stringify({ type: 'done' })}\n\n`;
+          return new Response(sseData, { headers: { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache' } });
+        }
         // Note: addMessage is intentionally NOT imported here. Neither the
         // success path nor the no-op path persists slash-command feedback
         // to DB — both are UI artifacts that would otherwise land after
@@ -293,14 +335,25 @@ export async function POST(request: NextRequest) {
         // → kept by filter). Claude Code's own /compact handler behaves the
         // same way: slash-command feedback stays out of the model's context.
         const msg = `上下文已压缩。压缩了 ${result.messagesCompressed} 条消息，预计节省 ~${Math.round(result.estimatedTokensSaved / 1000)}K tokens。`;
-        updateDbSummary(session_id, result.summary, compactBoundaryRowid);
+        commitSessionCompaction({
+          sessionId: session_id,
+          summary: result.summary,
+          boundaryRowid: compactBoundaryRowid,
+          trigger: 'manual',
+          messagesCompressed: result.messagesCompressed,
+          estimatedTokensSaved: result.estimatedTokensSaved,
+          auxiliaryProviderId: result.auxiliaryProviderId,
+          auxiliaryModelId: result.auxiliaryModelId,
+          auxiliaryRouteSource: result.auxiliaryRouteSource,
+          recreatedUnderlyingSession: compactionPolicy.recreatedUnderlyingSession,
+        });
         // Invalidate the SDK session so the next user message does NOT resume
         // the old (pre-compaction) transcript. Without this, the Claude Code
         // SDK keeps using its own full history on resume and our fresh summary
         // would never reach the model — reactive compact would re-trigger on
         // the very next turn. See feedback_db_migration_safety note: we only
         // clear the session-id link, never the underlying messages.
-        updateSdkSessionId(session_id, '');
+        if (compactionPolicy.recreatedUnderlyingSession) updateSdkSessionId(session_id, '');
         releaseSessionLock(session_id, lockId);
         setSessionRuntimeStatus(session_id, 'idle');
         // Emit context_compressed BEFORE the text event so the SSE consumer
@@ -311,6 +364,9 @@ export async function POST(request: NextRequest) {
           data: JSON.stringify(buildContextCompressedStatus({
             messagesCompressed: result.messagesCompressed,
             tokensSaved: result.estimatedTokensSaved,
+            trigger: 'manual',
+            sourceBoundaryRowid: compactBoundaryRowid,
+            recreatedUnderlyingSession: compactionPolicy.recreatedUnderlyingSession,
           })),
         })}\n\n`;
         const sseData = compressedStatusFrame
@@ -417,74 +473,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Determine model: request override > session model. We deliberately
-    // do NOT fall through to `getSetting('default_model')` here — Phase 2
-    // Step 3 contract (drift point #5) is "session.model is the truth;
-    // global settings only seed new chats, never silently affect old ones".
-    // If both request body and session.model are empty (new chat first
-    // send, or legacy row), we let the resolver pick a candidate from the
-    // provider's available models; whatever it returns is then lazy-seeded
-    // back to session.model below so subsequent sends are stable.
-    let effectiveModel = model || session.model || undefined;
-
-    // When Claude Code is disabled, sessions with env-provider models
-    // (sonnet/opus/haiku) can't use them anymore. The only "safe" silent
-    // move (clearing to undefined → resolver picks next) is preserved
-    // here as a degenerate-state fallback. NOTE: this branch still
-    // reads `default_model` from settings for the env-only escape-hatch
-    // case — that's separate from the Step 3 contract about session.model
-    // being the source of truth (see the line above that drops the
-    // legacy `|| default_model` tail). RED #5 closes because the
-    // `session.model OR default_model` chain shape is no longer present;
-    // this read is a different shape (standalone, only inside the
-    // env-only degenerate branch).
-    const cliDisabled = getSetting('cli_enabled') === 'false';
-    const ENV_MODELS = new Set(['sonnet', 'opus', 'haiku']);
-    const effectiveProviderId_pre = provider_id || session.provider_id || '';
-    if (cliDisabled && effectiveModel && ENV_MODELS.has(effectiveModel) && (!effectiveProviderId_pre || effectiveProviderId_pre === 'env')) {
-      effectiveModel = getSetting('default_model') || undefined;
-      if (effectiveModel && ENV_MODELS.has(effectiveModel)) {
-        effectiveModel = undefined;
-      }
-    }
-
-    // Phase 2 Step 3 — `resolved` was computed in the early gate above
-    // (before any side effects, so an invalid session can fail closed
-    // without leaving a half-written user turn in the DB). Reuse the
-    // same value here for downstream lazy-seeding + persistence.
-    const effectiveProviderId = provider_id || session.provider_id || '';
-
-    // Lazy-seed session.model + session.provider_id: when the chat had
-    // no committed model/provider (legacy row, brand-new session whose
-    // first message didn't carry either), persist whatever the resolver
-    // picked so the next send no longer needs to re-resolve via the
-    // global picker. This is the contract that lets the route stop
-    // reading `default_model` — session.model + session.provider_id
-    // are guaranteed non-empty after first send.
-    if (!effectiveModel && resolved.model) {
-      effectiveModel = resolved.model;
-    }
-    if (effectiveModel && effectiveModel !== session.model) {
-      updateSessionModel(session_id, effectiveModel);
-    }
+    // Runtime + provider + model was committed atomically before execution.
+    // A message request may repeat those values for display-state coherence,
+    // but it can no longer mutate or lazily repair the route.
+    const effectiveModel = session.model;
+    const effectiveProviderId = session.provider_id;
 
     const providerName = resolvedProvider?.name || '';
     if (providerName !== (session.provider_name || '')) {
       updateSessionProvider(session_id, providerName);
     }
-    // Persist provider_id: prefer request override, then existing session,
-    // then the resolver's pick (real DB providers only — virtual
-    // 'env' / 'openai-oauth' don't have a row to point at). Without the
-    // resolver fallback, a brand-new session whose request didn't carry
-    // a provider_id would write '' here and the next send would re-resolve
-    // through the global fallback chain — exactly the drift Step 3 closes.
-    const persistProviderId = provider_id
-      || session.provider_id
-      || resolved.provider?.id
-      || '';
-    if (persistProviderId !== (session.provider_id || '')) {
-      updateSessionProviderId(session_id, persistProviderId);
-    }
+    const persistProviderId = session.provider_id;
 
     // Resolve permission mode from request body (sent by frontend on each message)
     // or fall back to session's persisted mode from DB.
@@ -559,15 +558,28 @@ export async function POST(request: NextRequest) {
       : undefined;
 
     // Load conversation history from DB as fallback context.
-    // Fetch up to 200 messages (DB query is cheap); actual truncation is done
-    // by buildFallbackContext using a token budget, not a fixed message count.
+    // This recent page seeds context assembly and Claude's emergency fallback.
+    // A replacement Codex thread pages backward from these rowids on demand
+    // until its history budget or summary boundary, rather than stopping here.
     const { messages: recentMsgs } = getMessages(session_id, { limit: 200, excludeHeartbeatAck: true });
     // Load session summary for compression-aware fallback (needed before the
     // compact-boundary filter below).
     const sessionSummaryData = getSessionSummary(session_id);
 
     // Exclude the user message we just saved (last in the list) — it's already the prompt
-    const historyBeforeBoundary = recentMsgs.slice(0, -1);
+    const historyBeforeBoundary = recentMsgs.slice(0, -1)
+      .filter(message => !isInternalRuntimeSwitchMarker(message.content));
+    let executionSystemPromptAppend = systemPromptAppend;
+    if (historyBeforeBoundary.length === 0) {
+      const handoff = getHandoffForTargetSession(session_id);
+      const payload = handoff ? parseRuntimeHandoffPayload(handoff.payload_json) : undefined;
+      if (payload) {
+        const fragment = buildRuntimeHandoffContextFragment(payload);
+        executionSystemPromptAppend = executionSystemPromptAppend
+          ? `${executionSystemPromptAppend}\n\n${fragment}`
+          : fragment;
+      }
+    }
     // Drop history at-or-before the coverage boundary
     // (context_summary_boundary_rowid — the rowid of the last message
     // actually covered by the summary). Rowid, not timestamp: disambiguates
@@ -597,7 +609,7 @@ export async function POST(request: NextRequest) {
       session,
       entryPoint: 'desktop',
       userPrompt: content,
-      systemPromptAppend,
+      systemPromptAppend: executionSystemPromptAppend,
       conversationHistory: historyMsgs,
       autoTrigger: !!autoTrigger,
       nativeProjectRulesOwner:
@@ -627,7 +639,13 @@ export async function POST(request: NextRequest) {
     let activeSessionSummary = sessionSummaryData.summary || undefined;
     let fallbackTokenBudget: number | undefined;
     let compressionOccurred = false;
-    let compressionStats: { messagesCompressed: number; tokensSaved: number } | null = null;
+    let compressionStats: {
+      messagesCompressed: number;
+      tokensSaved: number;
+      sourceBoundaryRowid: number;
+      recreatedUnderlyingSession: boolean;
+    } | null = null;
+    const compactionPolicy = getRuntimeCompactionPolicy(effectiveSessionRuntime);
 
     // Stream handoff variables. Default to the resume path (use the stored SDK
     // session, full history). When auto-compression succeeds below, these get
@@ -642,15 +660,19 @@ export async function POST(request: NextRequest) {
       const { estimateContextTokens } = await import('@/lib/context-estimator');
       const { getContextWindow } = await import('@/lib/model-context');
       const { needsCompression, compressConversation } = await import('@/lib/context-compressor');
-      const { updateSessionSummary } = await import('@/lib/db');
 
       const modelForWindow = resolved.upstreamModel || resolved.model || effectiveModel || 'sonnet';
       // Pass upstream explicitly so alias lookups (e.g. 'opus') resolve to
       // the correct per-provider window — first-party opus → 4.7 (1M) vs
       // Bedrock/Vertex opus → 4.6 (200K).
-      const contextWindow = getContextWindow(modelForWindow, {
+      const selectedCapabilities = resolved.availableModels.find(m => (m.upstreamModelId || m.modelId) === modelForWindow)?.capabilities;
+      const runtimeContextWindow = resolved._codexAccount
+        ? await (await import('@/lib/codex/models')).getCodexContextBudget(modelForWindow, session.working_directory || undefined)
+        : null;
+      const contextWindow = runtimeContextWindow || selectedCapabilities?.contextWindow || getContextWindow(modelForWindow, {
         context1m: context_1m,
         upstream: resolved.upstreamModel,
+        channel: resolved._codexAccount || resolved._openaiOAuth ? 'codex' : 'api',
       }) || 200000;
 
       // Estimate using normalized content (matches what buildFallbackContext actually sends).
@@ -676,7 +698,7 @@ export async function POST(request: NextRequest) {
         contextWindow * 0.7 - estimate.breakdown.system - estimate.breakdown.summary - estimate.breakdown.userMessage
       );
 
-      if (needsCompression(estimate.total, contextWindow, session_id)) {
+      if (compactionPolicy.mode === 'proactive' && needsCompression(estimate.total, contextWindow, session_id)) {
         console.log(`[chat API] Context at ${((estimate.total / contextWindow) * 100).toFixed(1)}% — triggering compression`);
 
         // Slice keep/compress on the raw DB rows (with _rowid) FIRST, then
@@ -724,7 +746,18 @@ export async function POST(request: NextRequest) {
             // any row in rowsToCompress, so the rowid boundary naturally
             // spares it.
             const autoCompactBoundaryRowid = rowsToCompress[rowsToCompress.length - 1]._rowid ?? 0;
-            updateSessionSummary(session_id, result.summary, autoCompactBoundaryRowid);
+            commitSessionCompaction({
+              sessionId: session_id,
+              summary: result.summary,
+              boundaryRowid: autoCompactBoundaryRowid,
+              trigger: 'automatic',
+              messagesCompressed: result.messagesCompressed,
+              estimatedTokensSaved: result.estimatedTokensSaved,
+              auxiliaryProviderId: result.auxiliaryProviderId,
+              auxiliaryModelId: result.auxiliaryModelId,
+              auxiliaryRouteSource: result.auxiliaryRouteSource,
+              recreatedUnderlyingSession: compactionPolicy.recreatedUnderlyingSession,
+            });
             // Recalculate budget with new (larger) summary
             const newSummaryTokens = roughTokenEstimate(result.summary);
             const userMsgTokens = roughTokenEstimate(content);
@@ -736,11 +769,13 @@ export async function POST(request: NextRequest) {
             compressionStats = {
               messagesCompressed: result.messagesCompressed,
               tokensSaved: result.estimatedTokensSaved,
+              sourceBoundaryRowid: autoCompactBoundaryRowid,
+              recreatedUnderlyingSession: compactionPolicy.recreatedUnderlyingSession,
             };
 
             // Force this turn AND all subsequent turns off SDK resume — see
             // planStreamHandoffAfterCompaction for the rationale.
-            updateSdkSessionId(session_id, '');
+            if (compactionPolicy.recreatedUnderlyingSession) updateSdkSessionId(session_id, '');
             const { planStreamHandoffAfterCompaction } = await import('@/lib/context-compressor');
             const handoff = planStreamHandoffAfterCompaction({
               compressed: true,
@@ -921,10 +956,12 @@ export async function POST(request: NextRequest) {
     }, 60_000);
 
     // Save assistant message in background, with cleanup callback to release lock
-    collectStreamResponse(streamForCollect, session_id, lockId, telegramNotifyOpts, () => {
+    const persistence = createChatPersistenceSignal();
+    void observeChatCollection(collectStreamResponse(streamForCollect, session_id, lockId, telegramNotifyOpts, () => {
       settleLock('idle');
     }, {
       suppressNotifications: !!autoTrigger,
+      onPersistenceSettled: persistence.settle,
       // Phase 2 semantic title. Non-null only on the first real user turn.
       // The provider/runtime handed over here are THIS session's resolved
       // values — the same ones that answered the message — so generation can
@@ -937,6 +974,16 @@ export async function POST(request: NextRequest) {
             model: resolved.upstreamModel || resolved.model || effectiveModel || undefined,
           }
         : undefined,
+    }), (error) => {
+      // Covers failures before the collector reaches its persistence boundary.
+      // Resolving again after a confirmed save leaves that result unchanged.
+      persistence.settle(false);
+      try {
+        void reportChatCollectionFailure(error);
+      } finally {
+        // Finalization/reporting failures must still clear renewal/watchdog resources.
+        settleLock('interrupted');
+      }
     });
 
     // codex-stop-recovery Phase 3 — Stop/abort watchdog. The normal path settles
@@ -960,31 +1007,20 @@ export async function POST(request: NextRequest) {
     // If auto-compression happened, prepend a notification event to the stream.
     // The message is human-readable so the browser status bar shows something
     // meaningful, and includes structured data for future rich UI handling.
-    const responseStream = compressionOccurred
-      ? new ReadableStream<string>({
-          async start(controllerRaw) {
-            const controller = wrapController(controllerRaw);
-            controller.enqueue(`data: ${JSON.stringify({
-              type: 'status',
-              data: JSON.stringify(buildContextCompressedStatus({
-                messagesCompressed: compressionStats?.messagesCompressed ?? 0,
-                tokensSaved: compressionStats?.tokensSaved ?? 0,
-              })),
-            })}\n\n`);
-            const reader = streamForClient.getReader();
-            try {
-              while (true) {
-                const { done, value } = await reader.read();
-                if (done) break;
-                controller.enqueue(value);
-                if (controller.closed) break; // consumer aborted
-              }
-            } finally {
-              controller.close();
-            }
-          },
-        })
-      : streamForClient;
+    const responseStream = createChatCollectionResponse(
+      streamForClient,
+      persistence.settled,
+      compressionOccurred ? `data: ${JSON.stringify({
+        type: 'status',
+        data: JSON.stringify(buildContextCompressedStatus({
+          messagesCompressed: compressionStats?.messagesCompressed ?? 0,
+          tokensSaved: compressionStats?.tokensSaved ?? 0,
+          trigger: 'automatic',
+          sourceBoundaryRowid: compressionStats?.sourceBoundaryRowid,
+          recreatedUnderlyingSession: compressionStats?.recreatedUnderlyingSession,
+        })),
+      })}\n\n` : undefined,
+    );
 
     return new Response(responseStream, {
       headers: {

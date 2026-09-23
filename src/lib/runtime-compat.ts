@@ -1,3 +1,4 @@
+import { isTokenDanceBaseUrl, TOKENDANCE_ANTHROPIC_MODEL_IDS } from './tokendance';
 /**
  * Runtime Compatibility Matrix — single source of truth.
  *
@@ -19,6 +20,7 @@
  */
 import type { ApiProvider, ProviderRuntimeCompat, ModelRuntimeCompat } from '@/types';
 import { findMatchingPresetForRecord, type VendorPreset } from '@/lib/provider-catalog';
+import { translate, type Locale } from '@/i18n';
 import type { RuntimeId } from '@/lib/runtime/runtime-id';
 
 export interface ProviderCompatRecord {
@@ -72,8 +74,14 @@ export function getProviderCompat(record: ProviderCompatRecord): ProviderRuntime
   if (record.provider_type === 'gemini-image' || record.provider_type === 'openai-image') {
     return 'media_only';
   }
+  // Google text support is Native-only until each bridge preserves signed
+  // history. Never let an unmatched Google preset fall through to Claude.
+  if (record.protocol === 'google' || (!record.protocol && record.provider_type === 'google')) {
+    return 'native_only';
+  }
   const preset: VendorPreset | undefined = findMatchingPresetForRecord(record);
   if (!preset) return 'unknown';
+  if (isTokenDanceBaseUrl(record.base_url) && (preset.key === 'tokendance' || preset.key === 'tokendance-anthropic')) return 'claude_code_experimental';
   if (CLAUDE_CODE_READY_PRESETS.has(preset.key)) return 'claude_code_ready';
   if (preset.protocol === 'anthropic') {
     // Verified Code Plan / Coding presets get a distinct tier so users
@@ -103,12 +111,26 @@ export function getProviderCompatFromApi(provider: ApiProvider): ProviderRuntime
   return getProviderCompat(provider);
 }
 
+/** The model tier can differ from its provider's overall reach. */
+export function getModelCompatTier(args: {
+  providerBaseUrl?: string;
+  modelId: string;
+  upstreamModelId?: string;
+  providerCompat: ProviderRuntimeCompat;
+}): ProviderRuntimeCompat {
+  if (args.providerCompat === 'media_only' || !isTokenDanceBaseUrl(args.providerBaseUrl)) return args.providerCompat;
+  return TOKENDANCE_ANTHROPIC_MODEL_IDS.has(args.upstreamModelId || args.modelId)
+    ? 'claude_code_experimental' : 'codepilot_only';
+}
+
 /**
  * Model-layer compat. We don't try to introspect every upstream model —
  * we project from provider compat + model id heuristics + any catalog
  * capability flags the caller passes through.
  */
 export function getModelCompat(args: {
+  reasonLocale?: Locale;
+  providerBaseUrl?: string;
   modelId: string;
   upstreamModelId?: string;
   providerCompat: ProviderRuntimeCompat;
@@ -120,7 +142,10 @@ export function getModelCompat(args: {
     supportsAdaptiveThinking?: boolean;
   };
 }): ModelRuntimeCompat {
-  const { modelId, upstreamModelId, providerCompat, capabilities } = args;
+  const { modelId, upstreamModelId, capabilities } = args;
+  const tokenDance = args.providerCompat !== 'media_only' && isTokenDanceBaseUrl(args.providerBaseUrl);
+  const tokenDanceMessages = TOKENDANCE_ANTHROPIC_MODEL_IDS.has(upstreamModelId || modelId);
+  const providerCompat = getModelCompatTier(args);
 
   if (providerCompat === 'media_only') {
     return { media: true };
@@ -162,6 +187,12 @@ export function getModelCompat(args: {
   // the zh-CN form by default to match the rest of `reasons.*`.
 
   switch (providerCompat) {
+    case 'native_only':
+      compat.codepilot_runtime_compatible = true;
+      supported.add('codepilot_runtime');
+      reasons.claude_code = translate(args.reasonLocale ?? 'en', 'provider.nativeOnlyReason');
+      reasons.codex_runtime = reasons.claude_code;
+      break;
     case 'claude_code_ready':
       // Anthropic official / Bedrock / Vertex — `@ai-sdk/anthropic` can also
       // talk to these directly without the Claude Code subprocess, so the
@@ -266,6 +297,9 @@ export function getModelCompat(args: {
   // exported const directly when it adds the en mirror.
   void CODEX_PROXY_PENDING_REASON_EN;
 
+  if (tokenDance && !tokenDanceMessages) {
+    reasons.claude_code = translate(args.reasonLocale ?? 'en', 'provider.tokenDanceMessagesUnavailable');
+  }
   compat.supportedRuntimes = [...supported];
   if (Object.keys(reasons).length > 0) {
     compat.unsupportedReasonByRuntime = reasons;
@@ -279,8 +313,12 @@ export function getModelCompat(args: {
  * page filter, and any future telemetry. UI calls these directly so a
  * future copy change touches one place.
  */
-export function compatLabel(compat: ProviderRuntimeCompat, isZh: boolean): string {
+export function compatLabel(compat: ProviderRuntimeCompat, isZh: boolean, provider?: Pick<ApiProvider, 'base_url' | 'protocol'>): string {
+  if (compat !== 'media_only' && isTokenDanceBaseUrl(provider?.base_url)) {
+    return translate(isZh ? 'zh' : 'en', 'provider.tokenDanceCompatLabel');
+  }
   switch (compat) {
+    case 'native_only':             return 'CodePilot Native';
     case 'claude_code_ready':        return isZh ? 'Claude Code 直连' : 'Claude Code direct';
     case 'claude_code_verified':     return isZh ? 'Claude Code 兼容' : 'Claude Code compat';
     case 'claude_code_experimental': return isZh ? 'Claude Code 实验' : 'Claude Code experimental';
@@ -294,8 +332,13 @@ export function compatLabel(compat: ProviderRuntimeCompat, isZh: boolean): strin
 }
 
 /** Tooltip-length explanation — used on hover and in filter help. */
-export function compatTooltip(compat: ProviderRuntimeCompat, isZh: boolean): string {
+export function compatTooltip(compat: ProviderRuntimeCompat, isZh: boolean, provider?: Pick<ApiProvider, 'base_url' | 'protocol'>): string {
+  if (compat !== 'media_only' && isTokenDanceBaseUrl(provider?.base_url)) {
+    return translate(isZh ? 'zh' : 'en', provider?.protocol === 'anthropic'
+      ? 'provider.tokenDanceAnthropicCompatTooltip' : 'provider.tokenDanceCompatTooltip');
+  }
   switch (compat) {
+    case 'native_only': return translate(isZh ? 'zh' : 'en', 'provider.nativeOnlyReason');
     case 'claude_code_ready':
       return isZh
         ? '官方 Anthropic API / Bedrock / Vertex，Claude Code 直接接入，工具 / thinking 完整支持'
@@ -342,6 +385,7 @@ export function compatTooltip(compat: ProviderRuntimeCompat, isZh: boolean): str
  */
 export function compatTone(compat: ProviderRuntimeCompat): string {
   switch (compat) {
+    case 'native_only':             return 'bg-primary/10 text-primary';
     case 'claude_code_ready':        return 'bg-status-success-muted text-status-success-foreground';
     case 'claude_code_verified':     return 'bg-status-info-muted text-status-info-foreground';
     case 'claude_code_experimental': return 'bg-status-warning-muted text-status-warning-foreground';
@@ -362,6 +406,7 @@ export function compatTone(compat: ProviderRuntimeCompat): string {
  *  next to a muted-foreground label. */
 export function compatDotColor(compat: ProviderRuntimeCompat): string {
   switch (compat) {
+    case 'native_only':             return 'bg-primary';
     case 'claude_code_ready':        return 'bg-status-success-foreground';
     case 'claude_code_verified':     return 'bg-status-info-foreground';
     case 'claude_code_experimental': return 'bg-status-warning-foreground';

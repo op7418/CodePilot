@@ -31,7 +31,7 @@ export async function register() {
       const path = await import('path');
       const { resolveCodePilotDataDir } = await import('@/lib/codepilot-data-dir');
       const { configureNextServerIntegrations, resolveTelemetryConfig, TELEMETRY_IGNORE_ERRORS } = await import('@/lib/telemetry/contract');
-      const { isProviderFailureHandled } = await import('@/lib/telemetry/provider-marker');
+      const { isTelemetryFailureHandled } = await import('@/lib/telemetry/provider-marker');
       const { sanitizeTelemetryBreadcrumb, sanitizeTelemetryEvent } = await import('@/lib/telemetry/sanitize');
       const markerPath = path.join(resolveCodePilotDataDir(), 'sentry-disabled');
       const optedOut = fs.existsSync(markerPath) && fs.readFileSync(markerPath, 'utf-8').trim() === 'true';
@@ -63,7 +63,7 @@ export async function register() {
             return sanitizeTelemetryBreadcrumb(breadcrumb);
           },
           beforeSend(event, hint) {
-            if (isProviderFailureHandled(hint.originalException)) return null;
+            if (isTelemetryFailureHandled(hint.originalException)) return null;
             return sanitizeTelemetryEvent(event, {
               layer: 'next_server',
               channel: config.channel,

@@ -197,7 +197,12 @@ export function useProviderModels(
     // semantics are preserved.
     const url = '/api/providers/models';
     setFetchState('idle');
-    fetch(url, { signal })
+    // Keep the current catalog usable while the server discovers OAuth
+    // capabilities. Poll only while it reports an in-flight discovery and
+    // stop on unmount/runtime change; background updates never reset the gate.
+    const pollUntil = Date.now() + 20_000;
+    let catalogLoaded = false;
+    const fetchCatalog = () => fetch(url, { signal })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();
@@ -205,6 +210,7 @@ export function useProviderModels(
       .then((data) => {
         if (signal.aborted) return; // superseded by newer fetchAll
         if (data && Array.isArray(data.groups)) {
+          catalogLoaded = true;
           setProviderGroups(data.groups);
           setDefaultProviderId(data.default_provider_id || '');
           // Without server-side filtering, `runtime_applied` is no
@@ -218,6 +224,14 @@ export function useProviderModels(
             : (isRuntimeId(data.runtime_applied) ? data.runtime_applied : undefined);
           setRuntimeApplied(fromParam);
           setFetchState('loaded');
+          if (data.model_discovery_pending === true && Date.now() < pollUntil) {
+            const retry = setTimeout(() => {
+              signal.removeEventListener('abort', cancelRetry);
+              if (!signal.aborted) void fetchCatalog();
+            }, 1_000);
+            const cancelRetry = () => clearTimeout(retry);
+            signal.addEventListener('abort', cancelRetry, { once: true });
+          }
         } else {
           // Malformed response — same handling as a network failure.
           throw new Error('Malformed /api/providers/models response');
@@ -227,6 +241,9 @@ export function useProviderModels(
         // Aborted by a newer fetchAll — leave state alone, the newer
         // call owns the next setProviderGroups / setFetchState write.
         if (err?.name === 'AbortError' || signal.aborted) return;
+        // A background refresh failure must not replace a successfully
+        // loaded account catalog with synthetic env defaults.
+        if (catalogLoaded) return;
         setProviderGroups([{
           provider_id: 'env',
           provider_name: 'Anthropic',
@@ -238,6 +255,7 @@ export function useProviderModels(
         setDefaultProviderId('');
         setFetchState('failed');
       });
+    void fetchCatalog();
 
     // Fetch global default model — same abort discipline so its late
     // response doesn't bleed into a subsequent fetchAll's window.

@@ -71,20 +71,20 @@ function uniqueByChannel<T extends { channel: string }>(arr: T[]): boolean {
 describe('sendNotification dedup return shape (v7 P2 fix)', () => {
   it('non-urgent return has one entry per candidate channel, no duplicates', async () => {
     const { sendNotification } = await import('../../lib/notification-manager');
-    const result = await sendNotification({
-      title: 'Normal',
-      body: 'hello',
-      priority: 'normal',
-    });
-    assert.ok(uniqueByChannel(result.deliveries), 'no duplicate channel entries in return');
-    const channels = result.deliveries.map((d) => d.channel);
-    assert.deepEqual(
-      channels.sort(),
-      ['electron-native'],
-      'normal priority has one native candidate owned by Electron Main',
-    );
-    // No bridge candidates at non-urgent.
-    assert.ok(!result.deliveries.some((d) => d.channel.startsWith('bridge-')));
+    for (const priority of ['low', 'normal'] as const) {
+      const result = await sendNotification({
+        title: priority,
+        body: 'hello',
+        priority,
+      });
+      assert.ok(uniqueByChannel(result.deliveries), 'no duplicate channel entries in return');
+      assert.deepEqual(
+        result.deliveries.map((d) => d.channel),
+        ['electron-native'],
+        `${priority} priority has one native candidate owned by Electron Main`,
+      );
+      assert.ok(!result.deliveries.some((d) => d.channel.startsWith('bridge-')));
+    }
   });
 
   it('notification-manager source uses a Map keyed by channel (not Array.push of every status flip)', () => {

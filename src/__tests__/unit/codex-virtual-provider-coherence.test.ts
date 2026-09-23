@@ -85,67 +85,36 @@ describe('Provider-resolver virtual-provider exception list — source-level pin
   });
 });
 
-describe('Session PATCH route — runtime_pin whitelist via isRuntimeId (P1.2 fix)', () => {
-  const routeSrc = fs.readFileSync(
+describe('Session route mutation — one atomic Runtime+Provider+Model identity', () => {
+  const legacyPatchSrc = fs.readFileSync(
     path.join(repoRoot, 'app/api/chat/sessions/[id]/route.ts'),
     'utf8',
   );
-
-  it('runtime_pin validation imports isRuntimeId + RUNTIME_IDS', () => {
-    assert.match(
-      routeSrc,
-      /import\s*\{[^}]*\bisRuntimeId\b[^}]*\bRUNTIME_IDS\b[^}]*\}\s*from\s*['"]@\/lib\/runtime\/runtime-id['"]/,
-    );
-  });
-
-  it('runtime_pin validation no longer hard-codes the two-id allowlist', () => {
-    // The earlier `body.runtime_pin !== 'claude_code' && body.runtime_pin !== 'codepilot_runtime'`
-    // check rejected codex_runtime. Round 4 fix replaced it with isRuntimeId.
-    assert.doesNotMatch(
-      routeSrc,
-      /body\.runtime_pin\s*!==\s*'claude_code'\s*&&\s*body\.runtime_pin\s*!==\s*'codepilot_runtime'/,
-    );
-  });
-
-  it('runtime_pin validation accepts empty + any RuntimeId, 400s on other input', () => {
-    const validationBlock = routeSrc.match(/body\.runtime_pin[\s\S]{0,600}status:\s*400/);
-    assert.ok(validationBlock, 'must validate runtime_pin and 400 on bad input');
-    assert.match(validationBlock![0], /isRuntimeId\(/);
-    assert.match(validationBlock![0], /RUNTIME_IDS/);
-    assert.match(validationBlock![0], /''/);
-  });
-});
-
-describe('Session PATCH route — atomic coherence for codex_account + codex_runtime', () => {
-  const routeSrc = fs.readFileSync(
-    path.join(repoRoot, 'app/api/chat/sessions/[id]/route.ts'),
+  const atomicRouteSrc = fs.readFileSync(
+    path.join(repoRoot, 'app/api/chat/sessions/[id]/route/route.ts'),
+    'utf8',
+  );
+  const validationSrc = fs.readFileSync(
+    path.join(repoRoot, 'lib/runtime/route-validation.ts'),
     'utf8',
   );
 
-  it('forces runtime_pin = codex_runtime when provider_id is set to codex_account', () => {
-    // The coherence guard fires when the client PATCHes provider_id
-    // alone (model picker) and the server fixes runtime_pin so the
-    // chat send route resolves a coherent (provider, runtime) pair.
-    assert.match(
-      routeSrc,
-      /body\.provider_id\s*===\s*'codex_account'[\s\S]{0,500}updateSessionRuntime\(id,\s*'codex_runtime'\)/,
-    );
+  it('legacy PATCH refuses every split route field before writes', () => {
+    assert.match(legacyPatchSrc, /body\.runtime_pin[\s\S]*body\.provider_id[\s\S]*body\.model/);
+    assert.match(legacyPatchSrc, /ATOMIC_ROUTE_REQUIRED/);
   });
 
-  it('skips coherence force when client explicitly passes a runtime_pin', () => {
-    // Don't override an explicit client choice (e.g. a future flow
-    // that PATCHes both atomically). The guard only fires when
-    // body.runtime_pin === undefined.
-    assert.match(
-      routeSrc,
-      /body\.provider_id\s*===\s*'codex_account'\s*&&\s*body\.runtime_pin\s*===\s*undefined/,
-    );
+  it('atomic endpoint validates RuntimeId and requires route_revision CAS', () => {
+    assert.match(atomicRouteSrc, /isRuntimeId\(runtimeId\)/);
+    assert.match(atomicRouteSrc, /expected_route_revision/);
+    assert.match(atomicRouteSrc, /ROUTE_REVISION_CONFLICT/);
+    assert.match(atomicRouteSrc, /updateSessionRouteCas/);
   });
 
-  it('surfaces the coherence force-set in the response so UI can toast', () => {
-    // `coherence.forcedRuntimePin: 'codex_runtime'` on the response
-    // payload lets the composer show a small toast / inline marker
-    // instead of silently swapping the runtime under the user.
-    assert.match(routeSrc, /coherence:\s*\{\s*forcedRuntimePin:\s*coherenceForcedRuntime\s*\}/);
+  it('codex_account is accepted only with codex_runtime instead of server-side self-switching', () => {
+    assert.match(validationSrc, /route\.providerId === 'codex_account'/);
+    assert.match(validationSrc, /route\.runtimeId !== 'codex_runtime'/);
+    assert.match(validationSrc, /RUNTIME_ROUTE_INCOMPATIBLE/);
+    assert.doesNotMatch(atomicRouteSrc, /updateSessionRuntime/);
   });
 });

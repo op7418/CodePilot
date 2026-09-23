@@ -197,12 +197,12 @@ describe('Codex bridge prompt does not redefine widget semantics', () => {
     const memorySrc = readSource('src/lib/builtin-tools/memory-search.ts');
     assert.match(
       memorySrc,
-      /import\s*\{[^}]*MEMORY_SEARCH_SYSTEM_PROMPT[^}]*\}\s*from\s*'@\/lib\/memory-search-mcp'/,
-      'Native memory must re-export from memory-search-mcp.ts',
+      /export\s*\{[^}]*MEMORY_SEARCH_SYSTEM_PROMPT[^}]*\}\s*from\s*'@\/lib\/memory-service'/,
+      'Native memory must re-export the SDK-neutral memory service prompt',
     );
     assert.match(
       memorySrc,
-      /export\s+const\s+MEMORY_SEARCH_SYSTEM_PROMPT\s*=\s*CANONICAL_MEMORY_SEARCH_SYSTEM_PROMPT\s*;/,
+      /createMemoryAdapterQueryTools[\s\S]*from\s*'@\/lib\/memory-rerank'/,
     );
 
     const notificationSrc = readSource('src/lib/builtin-tools/notification.ts');
@@ -655,10 +655,17 @@ describe('Codex bridge tool surface matches the contract', () => {
     //     'unsupported' even though Native + ClaudeCode both ship
     //     post-round-8)
     const { createCodePilotBuiltinTools } = await import('@/lib/codex/proxy/builtin-bridge');
+    const os = await import('node:os');
+    const { createSession, setSetting } = await import('@/lib/db');
+    const { bindAssistantMemory } = await import('@/lib/memory-binding');
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'capability-memory-'));
+    setSetting('assistant_workspace_path', root);
+    const session = createSession('capability contract', undefined, undefined, root);
+    bindAssistantMemory(session.id);
     const bridge = createCodePilotBuiltinTools({
-      sessionId: 'contract-test',
+      sessionId: session.id,
       targetProviderId: 'prov-test',
-      workspacePath: '/tmp/contract-test-workspace',
+      workspacePath: root,
       grokVideoAvailable: true,
     });
     const mounted = new Set(Object.keys(bridge.tools));
@@ -671,5 +678,6 @@ describe('Codex bridge tool surface matches the contract', () => {
         );
       }
     }
+    fs.rmSync(root, { recursive: true, force: true });
   });
 });

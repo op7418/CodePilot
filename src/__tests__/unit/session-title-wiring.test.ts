@@ -67,11 +67,11 @@ describe('chat route — fallback trigger conditions', () => {
     // An autoTrigger turn is an invisible system trigger (onboarding /
     // heartbeat). If it could name the chat, the user would see a title they
     // never typed. The write must sit after `if (!autoTrigger) {` and before
-    // that block closes at the model-resolution comment.
+    // that block closes at the committed-route comment.
     const guardIdx = chatRoute.indexOf('if (!autoTrigger) {\n      if (files && files.length > 0)');
     assert.ok(guardIdx > 0, 'expected the !autoTrigger persistence branch');
-    const modelIdx = chatRoute.indexOf('// Determine model:');
-    assert.ok(modelIdx > guardIdx, 'expected the model-resolution block after it');
+    const modelIdx = chatRoute.indexOf('// Runtime + provider + model was committed atomically before execution.');
+    assert.ok(modelIdx > guardIdx, 'expected the committed-route block after it');
     const branch = chatRoute.slice(guardIdx, modelIdx);
     assert.match(branch, /deriveConversationTitle/, 'the fallback title must be derived inside !autoTrigger');
     assert.match(branch, /expectOrigin: \['placeholder'\]/);
@@ -89,7 +89,8 @@ describe('chat route — fallback trigger conditions', () => {
 
 describe('import route — origin', () => {
   it('records import origin so semantic generation never renames a foreign transcript', () => {
-    assert.match(importRoute, /'import',\s*\n\s*\);/);
+    assert.match(importRoute, /'import',\s*\n\s*\{[\s\S]*runtimeId:\s*'claude_code'/);
+    assert.match(importRoute, /source:\s*'legacy_runtime_ref'/);
   });
 });
 

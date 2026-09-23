@@ -82,6 +82,8 @@ interface OpenRouterSearchDialogProps {
   onOpenChange: (open: boolean) => void;
   providerId: string;
   providerName: string;
+  /** Reveal the server-reported conflict rows, including hidden models. */
+  onReviewModels: (modelIds: string[]) => void;
   /** Called after a mutation response that may have changed catalog rows
    *  (including a typed conflict after merge), so the parent can refetch. */
   onModelAdded?: () => void;
@@ -143,6 +145,7 @@ export function OpenRouterSearchDialog({
   onOpenChange,
   providerId,
   providerName,
+  onReviewModels,
   onModelAdded,
   onManualFallback,
 }: OpenRouterSearchDialogProps) {
@@ -152,6 +155,7 @@ export function OpenRouterSearchDialog({
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [query, setQuery] = useState("");
   const [addingId, setAddingId] = useState<string | null>(null);
+  const reviewingModels = useRef(false);
 
   // Phase 1 Step 2 收敛 round 3 (2026-05-06): the OpenRouter section in
   // the Models page no longer has its own refresh / validate button.
@@ -280,7 +284,14 @@ export function OpenRouterSearchDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-0 overflow-hidden">
+      <DialogContent
+        className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-0 overflow-hidden"
+        onCloseAutoFocus={(event) => {
+          // The parent moves focus to the actual model row. Do not restore
+          // focus to the Add button and scroll back away from that row.
+          if (reviewingModels.current) event.preventDefault();
+        }}
+      >
         <DialogHeader className="shrink-0 px-6 pt-6 pb-4">
           {/* Phase 1 Step 2 收敛 round 6 (2026-05-06): title generalized
               from OpenRouter-specific "从 OpenRouter 搜索模型" to a
@@ -440,7 +451,10 @@ export function OpenRouterSearchDialog({
                             variant="outline"
                             size="sm"
                             className="h-7 px-2.5 text-xs"
-                            onClick={() => onOpenChange(false)}
+                            onClick={() => {
+                              reviewingModels.current = true;
+                              onReviewModels(candidate.conflictModelIds ?? []);
+                            }}
                           >
                             {t("provider.search.openrouter.reviewModels" as TranslationKey)}
                           </Button>

@@ -58,7 +58,6 @@ import {
 } from "@/components/ui/tabs";
 import {
   ArrowClockwise,
-  ArrowsClockwise,
   CaretDown,
   CheckCircle,
   Circle,
@@ -71,6 +70,7 @@ import {
 import { SaveButton } from "@/components/ui/save-button";
 import { CodePilotIcon } from "@/components/ui/semantic-icon";
 import { useClaudeStatus } from "@/hooks/useClaudeStatus";
+import { useCliMaintenance } from "@/hooks/useCliMaintenance";
 import { useTranslation } from "@/hooks/useTranslation";
 import {
   resolveLegacyRuntimeForDisplay,
@@ -94,6 +94,7 @@ import {
   RuntimeCapabilityList,
   codexAccountHeaderNote,
 } from "@/components/settings/RuntimeCapabilityList";
+import { CliMaintenanceRow } from "@/components/settings/CliMaintenanceRow";
 import type { CapabilityMatrixCell } from "@/lib/harness/capability-matrix";
 
 // ---------------------------------------------------------------------------
@@ -422,8 +423,8 @@ export interface RuntimePanelProps {
 
 export function RuntimePanel(props: RuntimePanelProps = {}) {
   const { capabilityCells } = props;
-  const { t } = useTranslation();
-  const isZh = t("nav.chats") === "对话";
+  const { locale, t } = useTranslation();
+  const isZh = locale === "zh";
   // Settings is route-level split — jumping to Models must router.push the
   // route path, not just write to window.location.hash (which would only
   // mutate the URL fragment without switching pages on /settings/runtime).
@@ -442,8 +443,16 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
   const [cliEnabled, setCliEnabled] = useState(true);
 
   // ── Claude Code status (subprocess detection) ──
-  const { status: claudeStatus, refresh: refreshStatus, invalidateAndRefresh } = useClaudeStatus();
-  const [upgrading, setUpgrading] = useState(false);
+  const { status: claudeStatus, invalidateAndRefresh } = useClaudeStatus();
+  const {
+    snapshots: cliMaintenanceSnapshots,
+    supported: cliMaintenanceSupported,
+    check: checkCliMaintenance,
+    update: updateCliMaintenance,
+    cancel: cancelCliMaintenance,
+  } = useCliMaintenance();
+  const claudeMaintenance = cliMaintenanceSnapshots.claude;
+  const codexMaintenance = cliMaintenanceSnapshots.codex;
 
   // ── Codex Runtime status (app-server detection) ──
   // Phase 5 Phase 6 IA correction (2026-05-14) — Codex Runtime joins
@@ -876,18 +885,16 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
 
   // ── Claude Code 引擎 install / upgrade ──
   const handleUpgrade = async () => {
-    if (!claudeStatus?.installType) return;
-    setUpgrading(true);
-    try {
-      const res = await fetch("/api/claude-upgrade", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ installType: claudeStatus.installType }),
-      });
-      const data = await res.json();
-      if (data.success) await invalidateAndRefresh();
-    } finally {
-      setUpgrading(false);
+    const result = await updateCliMaintenance("claude");
+    if (result?.phase === "succeeded" || result?.phase === "unchanged") {
+      await invalidateAndRefresh();
+    }
+  };
+
+  const handleCodexUpgrade = async () => {
+    const result = await updateCliMaintenance("codex");
+    if (result?.phase === "succeeded" || result?.phase === "unchanged") {
+      await refreshCodexStatus();
     }
   };
 
@@ -976,7 +983,7 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
 
   // ── Derived state ──
   const connected = claudeStatus?.connected ?? false;
-  const updateAvailable = claudeStatus?.updateAvailable ?? false;
+  const updateAvailable = claudeMaintenance.updateAvailability === "update_available";
   const hasWarnings = !!claudeStatus?.warnings && claudeStatus.warnings.length > 0;
 
   /**
@@ -1548,58 +1555,25 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
       <RuntimeCard name="Claude Code" state={claudeCodeStatus.state} isZh={isZh}>
         <RuntimeStatusExplanation info={claudeCodeStatus} isZh={isZh} />
 
-        {/* CLI install / version / upgrade row */}
-        <div className="rounded-md bg-muted/40 px-3.5 divide-y divide-border/50">
-          <div className="py-2.5 flex items-center justify-between gap-3">
-            <span className="text-[11px] text-muted-foreground shrink-0">
-              {isZh ? "CLI 状态" : "CLI status"}
-            </span>
-            <div className="flex items-center gap-2">
-              {connected ? (
-                <>
-                  <CheckCircle size={14} className="text-status-success-foreground" />
-                  <span className="text-xs text-muted-foreground">
-                    v{claudeStatus?.version}
-                  </span>
-                  {updateAvailable && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      className="h-6 text-xs gap-1"
-                      onClick={handleUpgrade}
-                      disabled={upgrading}
-                    >
-                      {upgrading ? (
-                        <SpinnerGap size={12} className="animate-spin" />
-                      ) : (
-                        <ArrowsClockwise size={12} />
-                      )}
-                      {t("cli.update")}
-                    </Button>
-                  )}
-                </>
-              ) : (
-                <>
-                  <XCircle size={14} className="text-status-error-foreground" />
-                  <span className="text-xs text-muted-foreground">
-                    {isZh ? "未安装" : "Not installed"}
-                  </span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-6 text-xs gap-1"
-                    onClick={() => setInstallWizardOpen(true)}
-                  >
-                    {t("cli.install")}
-                  </Button>
-                </>
-              )}
-              <Button variant="ghost" size="sm" className="h-6 w-6 p-0" onClick={refreshStatus}>
-                <ArrowClockwise size={12} />
-              </Button>
-            </div>
-          </div>
-        </div>
+        <CliMaintenanceRow
+          snapshot={claudeMaintenance.installed || !connected
+            ? claudeMaintenance
+            : { ...claudeMaintenance, installed: true, currentVersion: claudeStatus?.version ?? null }}
+          supported={cliMaintenanceSupported}
+          onCheck={() => void checkCliMaintenance("claude")}
+          onUpdate={() => void handleUpgrade()}
+          onCancel={() => void cancelCliMaintenance("claude")}
+          missingAction={(
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-6 text-xs gap-1"
+              onClick={() => setInstallWizardOpen(true)}
+            >
+              {t("cli.install")}
+            </Button>
+          )}
+        />
 
         {/* Warnings (only when present) */}
         {hasWarnings && (
@@ -1808,6 +1782,14 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
            login + models live. Doesn't duplicate that data here. */}
       <RuntimeCard name="Codex" state={codexRuntimeStatus.state} isZh={isZh}>
         <RuntimeStatusExplanation info={codexRuntimeStatus} isZh={isZh} />
+
+        <CliMaintenanceRow
+          snapshot={codexMaintenance}
+          supported={cliMaintenanceSupported}
+          onCheck={() => void checkCliMaintenance("codex")}
+          onUpdate={() => void handleCodexUpgrade()}
+          onCancel={() => void cancelCliMaintenance("codex")}
+        />
 
         {/* App-server status row */}
         <div className="rounded-md bg-muted/40 px-3.5 divide-y divide-border/50">

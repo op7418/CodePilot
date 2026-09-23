@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import Link from 'next/link';
-import Image from 'next/image';
+import { BrandLogo } from '@/components/BrandLogo';
 import { Github } from 'lucide-react';
 
 export function ScrollNav({ locale }: { locale: string }) {
@@ -40,31 +40,25 @@ export function ScrollNav({ locale }: { locale: string }) {
         background: 'linear-gradient(to bottom, var(--color-background) 0%, transparent 100%)',
       }}
     >
-      <div className="mx-auto flex h-14 items-center justify-between px-6 lg:px-10">
+      <div className="mx-auto flex h-14 items-center justify-between gap-3 px-4 sm:px-6 lg:px-10">
         {/* Left: Logo + Name */}
         <Link
           href={`${prefix}/`}
-          className="flex items-center gap-2"
+          className="flex shrink-0 items-center gap-2"
         >
-          <Image
-            src="/logo.png"
-            alt="CodePilot"
-            width={28}
-            height={28}
-            className="h-7 w-7"
-          />
+          <BrandLogo className="h-7 w-7" />
           <span className="text-[15px] font-bold text-foreground">
             CodePilot
           </span>
         </Link>
 
         {/* Right: Links + Download pill */}
-        <div className="flex items-center gap-5">
+        <div className="flex shrink-0 items-center gap-3 whitespace-nowrap sm:gap-5">
           <Link
             href={`${prefix}/docs`}
             className="text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
-            Docs
+            {locale === 'zh' ? '文档' : 'Docs'}
           </Link>
 
           {/* Language switcher */}
@@ -83,7 +77,7 @@ export function ScrollNav({ locale }: { locale: string }) {
             className="flex items-center gap-1.5 text-sm text-muted-foreground transition-colors hover:text-foreground"
           >
             <Github className="h-4 w-4" />
-            {stars && <span>{stars}</span>}
+            {stars && <span className="hidden sm:inline">{stars}</span>}
           </a>
 
           {/* Download pill button */}

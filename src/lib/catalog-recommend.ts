@@ -1,3 +1,4 @@
+import { TOKENDANCE_FEATURED_MODEL_IDS } from './tokendance';
 /**
  * catalog-recommend — "should this model be enabled by default" decision.
  *
@@ -82,6 +83,12 @@ export function isRecommendedModel(
 ): boolean {
   if (!modelId) return false;
   const id = modelId.toLowerCase();
+
+  // Protocol discovery filters the candidates; product defaults select only
+  // the six featured models. Manual choices remain protected by apply.
+  if (preset?.key === 'tokendance' || preset?.key === 'tokendance-anthropic') {
+    return (TOKENDANCE_FEATURED_MODEL_IDS as readonly string[]).includes(modelId);
+  }
 
   // (1) Blacklist always wins.
   for (const re of BLACKLIST_PATTERNS) {

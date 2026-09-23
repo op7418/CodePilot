@@ -317,9 +317,13 @@ test('utility failures emit one sanitized Sentry event per generation', () => {
   assert.ok(start >= 0 && end > start);
   assert.match(server, /let childFailureReported = false/);
   assert.match(server, /childFailureReported\s*\|\|\s*!electronTelemetry\.enabled/);
-  assert.match(server, /Sentry\.captureEvent\(buildUtilityProcessFailureEvent\(/);
+  assert.match(server, /const event = buildUtilityProcessFailureEvent\(/);
+  assert.match(server, /if \(!event\) return/);
+  assert.match(server, /Sentry\.captureEvent\(event\)/);
   assert.match(server, /reportUtilityFailureOnce\(childFailureReason\)/);
   assert.match(server, /reportUtilityFailureOnce\([\s\S]*'unexpected_exit'/);
+  assert.doesNotMatch(server, /expectedLifecycleExit/);
+  assert.match(server, /serverLifecyclePhase === 'running'\) \{/);
   assert.match(server, /void report/);
   assert.doesNotMatch(
     server.slice(server.indexOf('const reportUtilityFailureOnce'), server.indexOf("child.stdout?.on('data'")),

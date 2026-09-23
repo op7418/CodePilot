@@ -342,7 +342,8 @@ function deriveSourceFile(cap: CapabilityContract): string {
     case 'widget':
       return 'src/lib/widget-guidelines.ts';
     case 'memory':
-      return 'src/lib/memory-search-mcp.ts';
+    case 'memory_write':
+      return 'src/lib/memory-service.ts';
     case 'tasks_and_notify':
     case 'assistant_buddy':
       return 'src/lib/notification-mcp.ts';
@@ -364,6 +365,8 @@ function deriveSourceExport(cap: CapabilityContract): string {
       return 'WIDGET_SYSTEM_PROMPT';
     case 'memory':
       return 'MEMORY_SEARCH_SYSTEM_PROMPT';
+    case 'memory_write':
+      return 'MEMORY_WRITE_SYSTEM_PROMPT';
     case 'tasks_and_notify':
     case 'assistant_buddy':
       return 'NOTIFICATION_MCP_SYSTEM_PROMPT';
@@ -595,14 +598,14 @@ export function compileContext(input: CompilerInput): CompiledContext {
     codex_proxy?: CodexProxyHints;
   } = {};
   if (input.runtimeId === 'claude_code') {
-    const mcpServerNames = enabled
+    const mcpServerNames = [...new Set(enabled
       .map((c) => {
         const e = c.exposure.claudecode_sdk;
         return e.kind === 'mcp_server'
           ? mcpServerForCapability(c.id)
           : null;
       })
-      .filter((s): s is string => !!s);
+      .filter((s): s is string => !!s))];
     runtimeHintsBuilder.claudecode_sdk = {
       mcpServerNames,
       allowedToolNames: toolDescriptors.map((t) => t.name),
@@ -612,7 +615,7 @@ export function compileContext(input: CompilerInput): CompiledContext {
       toolSetKeys: toolDescriptors.map((t) => t.name),
     };
   } else if (input.runtimeId === 'codex_runtime') {
-    const builtinToolNames = new Set(toolDescriptors.map((t) => t.name));
+    const builtinToolNames = new Set(toolDescriptors.filter(t => t.exposureKind === 'bridge_executable').map(t => t.name));
     runtimeHintsBuilder.codex_proxy = {
       builtinToolNames,
       stopWhen: builtinToolNames.size > 0 ? 'stepCountIs' : 'never',
@@ -692,6 +695,7 @@ function mcpServerForCapability(id: string): string | null {
     case 'widget':
       return 'codepilot-widget';
     case 'memory':
+    case 'memory_write':
       return 'codepilot-memory';
     case 'tasks_and_notify':
     case 'assistant_buddy':

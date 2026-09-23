@@ -14,7 +14,9 @@ import { cn } from "@/lib/utils";
 import { Warning } from "@/components/ui/icon";
 
 import { useTranslation } from "@/hooks/useTranslation";
+import { cliMaintenanceErrorCopy, useCliMaintenance } from "@/hooks/useCliMaintenance";
 import { InstallWizard } from "@/components/layout/InstallWizard";
+import { useRouter } from "next/navigation";
 
 interface ClaudeInstallInfo {
   path: string;
@@ -25,9 +27,6 @@ interface ClaudeInstallInfo {
 interface ClaudeStatus {
   connected: boolean;
   version: string | null;
-  latestVersion?: string | null;
-  updateAvailable?: boolean;
-  manualUpdateChannel?: boolean;
   binaryPath?: string | null;
   installType?: string | null;
   otherInstalls?: ClaudeInstallInfo[];
@@ -65,11 +64,17 @@ function getUninstallAdvice(type: string): string | null {
 
 export function ConnectionStatus() {
   const { t } = useTranslation();
+  const router = useRouter();
+  const {
+    snapshots: cliMaintenanceSnapshots,
+    supported: cliMaintenanceSupported,
+    update: updateCliMaintenance,
+    cancel: cancelCliMaintenance,
+  } = useCliMaintenance();
+  const claudeMaintenance = cliMaintenanceSnapshots.claude;
   const [status, setStatus] = useState<ClaudeStatus | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [wizardOpen, setWizardOpen] = useState(false);
-  const [upgrading, setUpgrading] = useState(false);
-  const [upgradeResult, setUpgradeResult] = useState<{ success: boolean; output: string; error?: string } | null>(null);
   const [installingGit, setInstallingGit] = useState(false);
   const [gitInstallResult, setGitInstallResult] = useState<{ success: boolean; error?: string } | null>(null);
 
@@ -188,36 +193,32 @@ export function ConnectionStatus() {
   }, [checkStatus]);
 
   const handleUpgrade = useCallback(async () => {
-    if (!status?.installType) return;
-    setUpgrading(true);
-    setUpgradeResult(null);
-    try {
-      const res = await fetch('/api/claude-upgrade', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ installType: status.installType }),
-      });
-      const data = await res.json();
-      setUpgradeResult(data);
-      if (data.success) {
-        // Invalidate cache and refresh status
-        try { await fetch('/api/claude-status/invalidate', { method: 'POST' }); } catch { /* best-effort */ }
-        stableCountRef.current = 0;
-        checkStatus();
-      }
-    } catch (err) {
-      setUpgradeResult({ success: false, output: '', error: String(err) });
-    } finally {
-      setUpgrading(false);
+    const result = await updateCliMaintenance('claude');
+    if (result?.phase === 'succeeded' || result?.phase === 'unchanged') {
+      try { await fetch('/api/claude-status/invalidate', { method: 'POST' }); } catch { /* best-effort */ }
+      stableCountRef.current = 0;
+      checkStatus();
     }
-  }, [status?.installType, checkStatus]);
+  }, [checkStatus, updateCliMaintenance]);
 
   const connected = status?.connected ?? false;
   const hasConflicts = (status?.otherInstalls?.length ?? 0) > 0;
   const missingGit = status?.missingGit ?? false;
-  const updateAvailable = status?.updateAvailable ?? false;
-  const manualUpdateChannel = status?.manualUpdateChannel ?? false;
-  const showUpgrade = updateAvailable || manualUpdateChannel;
+  const updateAvailable = claudeMaintenance.updateAvailability === 'update_available';
+  const manualUpdateChannel = claudeMaintenance.updateAvailability === 'manual_check'
+    || claudeMaintenance.updateAvailability === 'managed_auto';
+  const upgradeRunning = claudeMaintenance.phase === 'queued' || claudeMaintenance.phase === 'running';
+  const showUpgrade = cliMaintenanceSupported && claudeMaintenance.installed && (
+    updateAvailable
+    || manualUpdateChannel
+    || upgradeRunning
+    || claudeMaintenance.phase === 'unchanged'
+    || claudeMaintenance.phase === 'error'
+  );
+  const maintenanceMessage = cliMaintenanceErrorCopy(claudeMaintenance.errorCode, t);
+  const maintenanceChannel = claudeMaintenance.installChannel === 'unknown'
+    ? status?.installType ?? 'unknown'
+    : claudeMaintenance.installChannel;
   const hasWarnings = hasConflicts || missingGit || updateAvailable;
 
   return (
@@ -300,10 +301,13 @@ export function ConnectionStatus() {
                     {updateAvailable ? t('connection.updateAvailable') : t('connection.active')}
                   </p>
                   <p className="text-xs text-muted-foreground">
-                    {updateAvailable && status?.latestVersion
-                      ? t('connection.versionCompare', { current: extractVersion(status?.version ?? ''), latest: extractVersion(status.latestVersion) })
-                      : t('connection.version', { version: status?.version ?? '' })}
-                    {status?.installType && ` (${INSTALL_TYPE_LABELS[status.installType] || status.installType})`}
+                    {updateAvailable && claudeMaintenance.latestVersion
+                      ? t('connection.versionCompare', {
+                          current: extractVersion(claudeMaintenance.currentVersion ?? status?.version ?? ''),
+                          latest: extractVersion(claudeMaintenance.latestVersion),
+                        })
+                      : t('connection.version', { version: claudeMaintenance.currentVersion ?? status?.version ?? '' })}
+                    {` (${INSTALL_TYPE_LABELS[maintenanceChannel] || maintenanceChannel})`}
                   </p>
                   {status?.binaryPath && (
                     <p className="text-xs text-muted-foreground font-mono">{status.binaryPath}</p>
@@ -319,26 +323,27 @@ export function ConnectionStatus() {
                       {t('connection.manualUpdateHint')}
                     </p>
                   )}
-                  {upgradeResult ? (
-                    <div className={cn(
-                      "rounded-lg px-4 py-3 text-xs",
-                      upgradeResult.success ? "bg-status-success-muted text-status-success-foreground" : "bg-status-error-muted text-status-error-foreground"
-                    )}>
-                      <p className="font-medium">
-                        {upgradeResult.success ? t('connection.upgradeSuccess') : t('connection.upgradeFailed')}
-                      </p>
-                      {!upgradeResult.success && upgradeResult.output && (
-                        <pre className="mt-1 whitespace-pre-wrap text-muted-foreground">{upgradeResult.output}</pre>
-                      )}
+                  {maintenanceMessage && (
+                    <div className="rounded-lg bg-status-warning-muted px-4 py-3 text-xs text-status-warning-foreground" role="status">
+                      {maintenanceMessage}
                     </div>
-                  ) : (
+                  )}
+                  {upgradeRunning ? (
                     <Button
-                      onClick={handleUpgrade}
-                      disabled={upgrading}
+                      onClick={() => void cancelCliMaintenance('claude')}
                       className="w-full"
                       size="sm"
+                      variant="outline"
                     >
-                      {upgrading ? t('connection.upgrading') : t(updateAvailable ? 'connection.upgradeButton' : 'connection.checkUpgrade')}
+                      {t('cliMaintenance.connection.cancelUpdate')}
+                    </Button>
+                  ) : claudeMaintenance.canOneClickUpdate ? (
+                    <Button onClick={() => void handleUpgrade()} className="w-full" size="sm">
+                      {t(updateAvailable ? 'connection.upgradeButton' : 'connection.checkUpgrade')}
+                    </Button>
+                  ) : (
+                    <Button onClick={() => router.push('/settings/runtime')} className="w-full" size="sm" variant="outline">
+                      {t('cliMaintenance.connection.reviewOptions')}
                     </Button>
                   )}
                 </div>

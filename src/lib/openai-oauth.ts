@@ -4,7 +4,7 @@
  * Implements the Codex CLI OAuth flow for ChatGPT Plus/Pro users.
  * Based on CraftAgent's verified implementation.
  *
- * Flow: PKCE auth → code exchange → id_token → RFC 8693 token exchange → OpenAI API Key
+ * Flow: PKCE auth → code exchange → OAuth bearer for ChatGPT Codex Responses.
  */
 
 import { randomBytes, createHash } from 'node:crypto';
@@ -36,10 +36,12 @@ export interface PreparedFlow {
 export interface JwtClaims {
   email?: string;
   chatgpt_account_id?: string;
+  chatgpt_compute_residency?: string;
   chatgpt_plan_type?: string;
   organizations?: Array<{ id: string }>;
   'https://api.openai.com/auth'?: {
     chatgpt_account_id?: string;
+    chatgpt_compute_residency?: string;
     chatgpt_plan_type?: string;
   };
 }
@@ -172,7 +174,7 @@ export async function exchangeCodeForTokens(
         idToken: data.id_token,
         accessToken: data.access_token,
         refreshToken: data.refresh_token,
-        expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
+        expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
       };
     }
 
@@ -202,6 +204,23 @@ export async function exchangeCodeForTokens(
 
 // ── Refresh Tokens ─────────────────────────────────────────────
 
+/** Only explicit grant revocation invalidates saved credentials. */
+export class OpenAIOAuthTokenError extends Error {
+  constructor(public readonly status: number, public readonly code?: string) {
+    super(`OpenAI token refresh failed (${status})`);
+    this.name = 'OpenAIOAuthTokenError';
+  }
+  get permanent(): boolean {
+    return this.status < 500 && ['invalid_grant', 'token_revoked', 'refresh_token_reused', 'refresh_token_expired', 'refresh_token_invalidated'].includes(this.code || '');
+  }
+}
+
+export function extractComputeResidency(accessToken: string): string | undefined {
+  const claims = parseIdTokenClaims(accessToken);
+  const value = claims['https://api.openai.com/auth']?.chatgpt_compute_residency ?? claims.chatgpt_compute_residency;
+  return typeof value === 'string' && /^[a-zA-Z0-9_-]{1,64}$/.test(value) && value !== 'no_constraint' ? value : undefined;
+}
+
 export async function refreshTokens(refreshToken: string): Promise<OAuthTokens> {
   const params = new URLSearchParams({
     grant_type: 'refresh_token',
@@ -211,6 +230,7 @@ export async function refreshTokens(refreshToken: string): Promise<OAuthTokens> 
 
   const response = await fetch(TOKEN_URL, {
     method: 'POST',
+    signal: AbortSignal.timeout(10_000),
     headers: {
       'Content-Type': 'application/x-www-form-urlencoded',
       Accept: 'application/json',
@@ -219,13 +239,8 @@ export async function refreshTokens(refreshToken: string): Promise<OAuthTokens> 
   });
 
   if (!response.ok) {
-    const text = await response.text();
-    let msg: string;
-    try {
-      const j = JSON.parse(text);
-      msg = j.error_description || j.error || text;
-    } catch { msg = text; }
-    throw new Error(`Token refresh failed: ${response.status} - ${msg}`);
+    const data = await response.json().catch(() => ({})) as { error?: string | { code?: string } };
+    throw new OpenAIOAuthTokenError(response.status, typeof data.error === 'string' ? data.error : data.error?.code);
   }
 
   const data = await response.json() as {
@@ -239,7 +254,7 @@ export async function refreshTokens(refreshToken: string): Promise<OAuthTokens> 
     idToken: data.id_token,
     accessToken: data.access_token,
     refreshToken: data.refresh_token || refreshToken,
-    expiresAt: data.expires_in ? Date.now() + data.expires_in * 1000 : undefined,
+    expiresAt: Date.now() + (data.expires_in ?? 3600) * 1000,
   };
 }
 

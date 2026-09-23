@@ -40,7 +40,7 @@
 | 16 | AI 输出的本地路径不得进入通用 `shell.openPath`。`/api/files/inspect` 只接受绝对路径 + `sessionId` 或固定 `home` scope，由服务端推导根并返回 canonical `realPath`；主进程在 OS 调用前再次 realpath/stat。目录只能 `showItemInFolder`，bundle 目录拒绝；文件只允许 workspace `.html/.htm` 走专用 open IPC | `local-path-security` + DevOutput / PreviewPanel / DiffSummary + inspect route + main IPC |
 | 17 | `/api/files/open` fallback 不得拼 shell 字符串；可执行文件固定、路径只能作为单个 argv，`shell: false`，且 scope/realpath/bundle 规则与主进程一致 | files/open route + tests |
 | 18 | 默认助理路径 IPC 无输入，只返回 `path.join(app.getPath('documents'), 'CodePilot', 'Assistant')`；不得演变成 Renderer 可控的通用路径 resolver | `default-assistant-home.ts` + main/preload |
-| 19 | `electron-native` 只有 Main 一个 consumer，visible/hidden/tray 不切 owner；Renderer 只能 claim `renderer-toast` | native delivery service + route policy |
+| 19 | `electron-native` 只有 Main 一个 consumer，visible/hidden/tray 不切 owner；所有新 notification event 无论 priority 都只创建 native delivery，Renderer 不再挂载 delivery consumer，claim/ack HTTP 面也只接受 Electron Main 的 `electron-native`。`renderer-toast` 仅保留为历史审计/迁移 literal；Settings 测试动作走独立 same-origin policy | notification manager + claim policy + native delivery service + AppShell |
 | 20 | native delivery 只有收到 `show` event 才 ack delivered；共同 throw/unsupported/timeout 收口 error，Windows 额外监听 `failed`，macOS/Linux 不等待不存在的事件 | `notification-lifecycle.ts` |
 | 21 | 提示音服从系统 policy：macOS 使用 `sound:'default'` 且 `silent:false`，Windows/Linux 使用平台默认且不自播放音频；最终能力必须由对应 packaged smoke 证明 | native options builder + release smoke |
 | 22 | 已 show 的 Notification 对象在 click/close 前由有界 retention 保活；点击在 Renderer ready 前进入有界队列，ready handshake 后按 event id 幂等投递。action 只能解析为应用内 route 或已验证的 task/session fallback | `notification-lifecycle.ts` + `notification-click-queue.ts` + main/preload/hooks |
@@ -54,13 +54,14 @@
 | 30 | descendant lifecycle 消息只接受当前 utility generation，register/unregister 必须精确匹配 PID + start identity + role + basename。live、PID 复用或更深树不可验证时 fail-closed 停在错误页；不得仅凭 PID/basename自动 kill | lifecycle contract + registry |
 | 31 | Utility fatal report 原文不得写日志或复制诊断；只允许 reason、退出码、heap/RSS/private/host memory 等纯数值。恢复页 IPC 只接受当前 data: recovery renderer | Main + preload + recovery tests |
 | 32 | blocked（ownership 不可证明）状态**不得提供任何可成功调用的 relaunch 入口**：descendant registry 是 per-Main 内存态，relaunch 后为空，会绕过 single-owner 门禁。blocked 页只渲染「退出应用」；Main restart handler 必须显式拒绝 blocked，quit handler 必须反向限定只接受 blocked，source-pin 断言状态门禁位于 `app.relaunch()` 前。给 blocked 加回自动/一键重开前必须先落地跨 relaunch 的持久化 registry 重验证（tech-debt #85） | `server-recovery-page.ts` + Main IPC + recovery tests |
-| 33 | packaged Next utility 的运行期 fatal/error/unexpected exit 在 stable opt-in telemetry 中每个 generation 最多捕获一次；只传稳定枚举、平台定义的有界整数退出码与 utility/host memory 数值。负 POSIX/launch-failure sentinel 不得被当作无效内存指标丢弃；Electron diagnostic report 原文必须在 Main 边界丢弃，不得进入日志、Sentry 或恢复页 | `utility-process-failure.ts` + Main + telemetry/recovery tests |
+| 33 | packaged Next utility 的运行期 fatal/error/unexpected exit 在 stable opt-in telemetry 中每个 generation 最多捕获一次；只传稳定枚举、平台定义的有界整数退出码与 utility/host memory 数值。负 POSIX/launch-failure sentinel 不得被当作无效内存指标丢弃。已知 Windows logoff/OS teardown 状态是 expected lifecycle，因此不上报；但只凭退出码不能证明整个 app 正在 teardown，只要 Main 尚未进入独立的 `isQuitting` 生命周期门禁，仍走既有 bounded recovery。其他 unexpected exit 按低基数 exit class 分组，精确 code 不进 fingerprint。Electron diagnostic report 原文必须在 Main 边界丢弃，不得进入日志、Sentry 或恢复页 | `utility-process-failure.ts` + Main + telemetry/recovery tests |
 | 34 | stable/preview macOS distributable 必须是 Developer ID Application 签名且 `TeamIdentifier` 精确匹配发布配置；证书打包步骤使用 `CSC_LINK` 时必须允许 electron-builder 发现并选择导入的身份，除非同时配置了显式 identity。缺证书、ad-hoc、Team ID 不一致、最终 bundle deep/strict 失败都必须阻断上传。最终 `codesign` inspect/deep verify 自身必须有进程级硬超时，不能只依赖 CI step timeout；ad-hoc 只允许显式本地包，不能作为发布证据 | `after-sign.js` + `verify-macos-developer-id.mjs` + workflows |
 | 35 | packaged recovery smoke 跳过 provider Safe Storage 只允许 exact flag + packaged app + canonical realpath 位于 `os.tmpdir()/codepilot-packaged-recovery-*`；flag 不得传给 Next/Agent child。真实 userData、dev mode、symlink/不存在路径和近似 flag 全部 fail closed | `provider-secret-startup-policy.ts` + Main + recovery smoke/tests |
 | 36 | 数据库启动在分配 stable port 前失败时，“再试一次”仍必须能重新启动 utility，IPC 返回真实 accepted 而非乐观 `true`。migration/runtime 原始错误只允许以有界、路径/凭据脱敏的 marker 写本地日志并进入“复制诊断”；不得把动态根因塞进低基数 startup code 或 Sentry message | `electron/main.ts` + `database-recovery.ts` + recovery tests |
 | 37 | DB health marker 是已完成的启动分类，Main 必须绕过通用 30 秒 wait 立即进入离线页。Main 与 utility 共用同一个 data-dir resolver；fresh-start 后文件重现时只暴露 fixed-path、trusted recovery-renderer IPC，让用户明确保留当前库或在旧备份重新校验后继续，Renderer 不得提交数据库路径 | Main + preload + recovery page/tests |
 | 38 | Browser guest 只能使用 Main 为 canonical 64-hex workspace id 签发的 `persist:codepilot-browser-*` partition；`will-attach-webview` 必须核对已签发 partition 与允许 URL、删除 preload，并强制 `sandbox/contextIsolation/webSecurity=true`、Node/subframe Node/Worker Node/nested webview/insecure content=false。Preload 不得暴露 Main WebContents/Session/CDP/通用 execute bridge；DOM `<webview>` 的 host 控制面按下文残余风险处理 | `browser-surface-security.ts` + Main/Preload + BrowserPanel |
 | 39 | Browser 顶层导航只允许 HTTPS、loopback HTTP 和 exact `about:blank`；remote HTTP、credentials、file/data/javascript/未知 scheme fail closed。guest permission check/request 默认全部拒绝，download 当前全部阻断并显示诚实 UI；popup 只能转受控 tab，不能创建未管理窗口 | `browser-url-policy.ts` + Main handlers + BrowserPanel |
+| 40 | CLI maintenance 与 app updater install 必须竞争同一个 Main-owned lifecycle latch；latch 对同 owner 也不可重入，CLI duplicate guard + starting 占位 + acquire 必须在首个 await 前同步完成。utility recovery fork 前注入 active provider+opaque lease id，正常 Renderer/后台任务恢复前完成 lease reconcile。普通 quit 在 CLI update active 时必须等待或走取消→进程树清理→post-verify；详见 `CliMaintenance.md` / `Updater.md` UP-06 | `cli-maintenance.ts` + `install-lifecycle-coordinator.ts` + Main quit/recovery |
 
 ## 关键文件 + 责任
 
@@ -88,6 +89,7 @@
 | `electron/server-supervisor.ts` | crash window、有限 backoff、safe-mode ownership 与健康重置 |
 | `electron/server-descendant-registry.ts` + `src/lib/server-lifecycle-contract.ts` | generation/identity 校验与 single-owner restart gate |
 | `electron/server-recovery-page.ts` | 不依赖 Next 的本地化错误面与 CSP |
+| `electron/cli-maintenance.ts` + `electron/install-lifecycle-coordinator.ts` | CLI update owner、utility recovery lease bootstrap 与 app updater/quit 排他生命周期 |
 | `src/lib/macos-keychain-guard.ts` + `resources/macos-keychain-guard/security` | default-keychain 只读探测、Claude credential 非交互降级与 packaged shim |
 
 ## 改动检查表
@@ -106,7 +108,7 @@
 - [ ] 改 HTML thumbnail IPC/preview route 时运行 `electron-main-security`，覆盖 canonical token、包含性 token、编码分隔符、同源 scope、超时释放与外部请求拒绝
 - [ ] 改聊天本地链接或系统路径消费方时覆盖：HTTP(S)、相对路径、工作区文件/目录、外部确认、symlink escape、`.app/.workflow` bundle、`.command` 非 HTML 与 Electron 错误字符串
 - [ ] Renderer 不得新增通用 `openPath(path)` bridge；目录意图使用 scoped `revealPath`，HTML 使用 scoped `openHtmlFile`
-- [ ] 改 native notification 时验证 Main 单 owner、visible/hidden 不切 owner、server restart stale claim 可恢复
+- [ ] 改 native notification 时验证 Main 单 owner、visible/hidden 不切 owner、server restart stale claim 可恢复，且 Renderer 没有重新挂载 notification delivery poll
 - [ ] 文案把 delivered 描述为“系统已接受”，不写“用户已读”
 - [ ] notification click 覆盖 before-ready、reload 和 duplicate event；队列必须有上限
 - [ ] 已 show notification 的 JS 对象在 click/close/TTL 前保持引用，retention 必须有数量与时间上限
@@ -118,6 +120,7 @@
 - [ ] 最终 artifact verifier 的每次 `codesign` 调用都有显式 timeout + kill signal；超时必须 fail closed，不能进入 checksum/upload
 - [ ] recovery smoke 的 Safe Storage bypass 必须保留 packaged + canonical temp userData 双门禁，并覆盖 symlink/真实 userData 反例；flag 不得进入 child env
 - [ ] 改外链导航时两个入口（`setWindowOpenHandler` / `will-navigate`）都走 `openExternalSafely`；拒绝 Promise 与失败 dialog 自身拒绝均必须被消费，日志/提示不得回显目标 URL 或 OS error。
+- [ ] 改 utility fork/recovery、app quit 或 updater install 时运行 `cli-maintenance-security`；确认 recovery bootstrap lease 先于 Runtime 恢复、CLI/app updater 同 latch、取消后等 cleanup+post-verify。
 - [ ] 改 packaged server lifecycle 时覆盖 intentional quit、单次/连续 crash、health-before-reload、poll pause/resume、stable port、safe-mode env 与 descendant fail-closed。
 - [ ] 运行期 crash recovery 的发布证据必须来自 packaged app；Node source-pin/单测只能证明状态机和接线，不能标 `Smoke passed`。
 - [ ] 改数据库启动恢复时覆盖 stable port 尚未赋值的 retry；IPC 必须返回实际结果。复制诊断只含脱敏 startup marker，不得包含 home、绝对路径、URL、token 或原始环境。
@@ -159,12 +162,13 @@
 | HTML thumbnail canonical scope、外联阻断与 deadline queue | `src/__tests__/unit/electron-main-security.test.ts` |
 | Browser partition、URL policy、attach hardening 与 preload capability shape | `browser-surface-security.test.ts` + `electron-main-security.test.ts` |
 | 聊天本地路径分类、canonical inspect、bundle/协议拦截与窄系统能力 | `local-link-detector.test.ts` + `local-path-navigation.test.ts` + `markdown-contract.test.ts` + `electron-main-security.test.ts` + `asset-library-ui.test.ts` |
-| 默认助理 fixed-path、native lifecycle、点击队列与 Main 单 owner | `default-assistant-bootstrap.test.ts` + `electron-notification-lifecycle.test.ts` + `bg-poller-channel-parity.test.ts` + `bridge-delivery-visibility.test.ts` |
+| 默认助理 fixed-path、native lifecycle、点击队列、全 priority native 与 Main 单 owner | `default-assistant-bootstrap.test.ts` + `electron-notification-lifecycle.test.ts` + `bg-poller-channel-parity.test.ts` + `bridge-delivery-visibility.test.ts` + `interactive-chat-notifications.test.ts` |
 | HTML preview 本机路径限制、UNC/device token 拒绝 | `html-preview-url.test.ts` + `html-preview-route.test.ts` |
 | macOS default-keychain 探测、Claude credential shim、safeStorage 前置门禁、packaged resource | `macos-keychain-guard.test.ts` + `provider-secret-electron-contract.test.ts` + `electron-packaging-hygiene.test.ts` |
 | 外链默认应用失败、反馈失败与隐私日志边界 | `electron-external-navigation.test.ts` + `electron-main-security.test.ts` |
 | utility supervisor、offline page、safe mode、descendant identity、poll/reload 顺序 | `electron-server-recovery.test.ts` + `scripts/smoke-packaged-server-recovery.mjs` |
 | 数据库启动前 retry、marker 快速失败、fresh-start conflict 与 migration/runtime 脱敏诊断 | `electron-server-recovery.test.ts` + `database-integrity-recovery.test.ts` |
+| CLI maintenance 窄 IPC、utility recovery bootstrap、进程树 finalizer、app updater/quit latch | `cli-maintenance-contract.test.ts` + `cli-maintenance-runner.test.ts` + `cli-maintenance-security.test.ts` |
 
 ## 设计决策日志
 
@@ -188,6 +192,11 @@
 - 2026-08-12 — 第二台 Mac 的 `codepilot Safe Storage` 授权框与本机 `SecItemCopyMatching` 阻塞揭示 stable/preview CI 也在静默产出 ad-hoc 包。macOS distributable 改为 Developer ID + exact Team ID fail-closed，并在最终产物后置复核；本地 recovery smoke 只能在 canonical 临时 userData 隔离跳过 Safe Storage。
 - 2026-08-24 — DB migration/runtime 错误可以发生在 `serverPort` 赋值前；旧 retry 因 `!serverPort` 早退却向 Renderer 返回成功。Main 现在为初次启动失败提供独立重试路径并返回真实结果；原始根因只经共享 sanitizer 形成有界本地 marker，供日志与复制诊断使用，不改变低基数恢复分类。
 - 2026-08-24 — `/api/health` 的 DB marker 改为立即失败；恢复路径与 utility 统一使用 `CLAUDE_GUI_DATA_DIR` resolver。fresh-start 后出现 DB 时 Main 不自动删除，而以 trusted、无路径参数的 IPC 提供“保留当前库 / 校验旧备份后继续空库”。
+- 2026-08-28 — CLI maintenance child 改由 Main 持有，并与 app updater/quit 共用 lifecycle latch。utility recovery fork 前注入 provider lease bootstrap，healthy 后立即 reconcile，避免 heartbeat 间隔内新 Runtime 抢跑；详细执行合同集中在 `CliMaintenance.md`。
+- 2026-08-28 — Round 2 并发审查确认 owner label 不能代表单次 acquire：latch 改为严格非重入，CLI 在任何 active-work/target/latest await 前同步占 starting slot 与 latch，避免双安装、activeOperation 覆盖和提前 release。
+- 2026-08-28 — 用户明确右下角 notification event 不再作为产品通知面。所有 priority 统一创建 `electron-native` delivery，AppShell 移除 Renderer consumer；交互任务完成与审批请求由服务端 collector 写 durable event，点击回原会话。普通按钮反馈/错误提示仍可使用 toast，它们不是 Notification Manager delivery。
+- 2026-08-29 — follow-up review 后关闭遗留 `renderer-toast` claim/ack HTTP 能力；Settings 测试通知保留独立 same-origin Renderer 边界，不再把历史 channel 当作调用方身份。
+- 2026-08-27 — 生产样本证明 utility unexpected-exit Issue 是异质集合，不支持统一归为 OOM。Main 现把 `0x40010004` / `0xC000026B` 识别为 Windows teardown 并保持 zero telemetry；Claude 复审指出外部终止也可能复用相同 code，因此退出码不再单独关闭恢复，app 未 quit 时仍走既有 bounded recovery。其余退出保留 generation one-shot 并按稳定 exit class 分组。
 - 2026-08-24 — 本轮 tag/prerelease 发布范围收窄为 macOS。Windows/Linux 原生构建 job 保留作手工 artifact 验证，但 `CODEPILOT_OFFICIAL_UPDATE_BUILD=0` 且 central Release 明确排除其资产。
 - 2026-08-24 — 用户随后澄清 stable 仍需全平台分发：tag 恢复 Windows/Linux 手动安装包，保持 `CODEPILOT_OFFICIAL_UPDATE_BUILD=0`；preview 与原生 updater 仍只有 macOS。
 - 2026-08-26 — 用户明确 Windows 自动更新不申请 Microsoft/Azure/PFX 签名。stable Windows 构建启用 official provenance并发布 unsigned NSIS metadata/blockmap；Linux 继续 provenance=0。Windows 必须以 UI 明示、GitHub immutable/ruleset/Action SHA 发布门禁和真实 RC 升级 smoke 补偿缺失的 publisher identity。

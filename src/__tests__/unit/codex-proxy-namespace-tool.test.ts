@@ -28,6 +28,9 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
+import { createSession, setSetting } from '@/lib/db';
+import { bindAssistantMemory } from '@/lib/memory-binding';
 import { parseResponsesRequest } from '@/lib/codex/proxy/parse-request';
 import { createCodePilotBuiltinTools } from '@/lib/codex/proxy/builtin-bridge';
 import {
@@ -350,9 +353,14 @@ describe('createCodePilotBuiltinTools — bridge mounts independent of incoming 
     // sessionId + workspacePath + targetProviderId. This test pins
     // that decoupling so a future "rewrite parse-request" change
     // that accidentally couples the two surfaces fires here.
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'namespace-memory-'));
+    setSetting('assistant_workspace_path', root);
+    const session = createSession('namespace memory', undefined, undefined, root);
+    bindAssistantMemory(session.id);
+    try {
     const bridge = createCodePilotBuiltinTools({
-      sessionId: 'chat-glm-1',
-      workspacePath: '/Users/me/proj',
+      sessionId: session.id,
+      workspacePath: root,
       targetProviderId: 'prov-glm-turbo',
     });
     assert.ok(bridge.tools.codepilot_generate_image, 'bridge image tool must mount regardless of incoming Codex tools[]');
@@ -370,5 +378,6 @@ describe('createCodePilotBuiltinTools — bridge mounts independent of incoming 
     // by unified-adapter mergeToolSets behaviour; just confirm the
     // bridge still owns its slot.
     assert.equal(bridge.toolNames.has('codepilot_generate_image'), true);
+    } finally { fs.rmSync(root, { recursive: true, force: true }); }
   });
 });

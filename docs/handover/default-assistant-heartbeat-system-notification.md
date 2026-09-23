@@ -53,9 +53,11 @@ notification event + per-channel delivery
   → delivered(OS accepted) or retry/error
 ```
 
-Renderer 只能 claim `renderer-toast`，Electron Main 始终拥有 `electron-native`，不随窗口 visible/hidden 切换。claim 用 additive owner/time/attempt/backoff columns，现有 delivery status 枚举不变；stale lease 可恢复，最多三次后 terminal error。当前单次 native lifecycle timeout 为 12 秒、stale claim lease 为 30 秒；调整前者时必须同步复核后者并保持 `timeout < lease`，避免同一 delivery 在首次系统回调仍未收口时被重复领取。
+所有新 Notification Manager 事件无论 priority 都只写 `electron-native`，Electron Main 始终是唯一 consumer，不随窗口 visible/hidden 切换；Renderer 不再挂 notification delivery poll，页面 toast 只负责操作反馈。claim 用 additive owner/time/attempt/backoff columns，现有 delivery status 枚举不变；stale lease 可恢复，最多三次后 terminal error。当前单次 native lifecycle timeout 为 12 秒、stale claim lease 为 30 秒；调整前者时必须同步复核后者并保持 `timeout < lease`，避免同一 delivery 在首次系统回调仍未收口时被重复领取。
 
-旧版本曾把页面通知 payload 放在进程内队列，却把 delivery 长期留为 `queued`。durable consumer 首次上线若直接领取，会把数月前的测试通知当成新提醒重放。启动迁移因此只在首次执行时，把超过 1 小时的 `renderer-toast` / `electron-native` 遗留行改为可审计的 `skipped`；事件与 delivery 都保留，新近通知不受影响，重复启动由 settings marker 保证 no-op。
+旧版本曾把页面通知 payload 放在进程内队列，却把 delivery 长期留为 `queued`。durable consumer 首次上线若直接领取，会把数月前的测试通知当成新提醒重放。第一层迁移只在首次执行时把超过 1 小时的遗留 queued 行改为可审计 skipped；第二层退役迁移把仍可执行且只有 renderer channel 的 queued 行原位改成 native，若同 event 已有 native peer 则只收口冗余 renderer row。两层都保留 event/delivery 审计且可重入。
+
+交互聊天的两个核心通知由服务端 `collectStreamResponse` 统一触发：`permission_request` 按 request id 去重后创建审批通知；任务完成只有 successful result、assistant terminal 已持久化、当前 lock owner 三项同时成立才创建。失败、停止、autoTrigger、stale owner 不通知完成。锁屏文案仅含 bounded 会话名和 tool name，不包含 tool input、路径或模型正文；点击 action 回到 `/chat/<sessionId>`。
 
 所有平台以 Electron `show` event 作为 OS accepted；共同处理 throw、unsupported 和 12 秒 timeout，Windows 额外处理 `failed`。Electron 40 的 macOS unsigned dev 可能触发 `show` 却不进入 Notification Center，因此 Main 在 `!app.isPackaged` 时以稳定错误码 fail-closed，设置页明确要求 signed CodePilot package；不再把 dev 结果写成 delivered。macOS options 使用 `silent:false + sound:'default'`，Windows/Linux 服从平台默认。代码和单测不替代 signed/installed packaged 声音证据。
 

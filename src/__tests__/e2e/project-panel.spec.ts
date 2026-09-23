@@ -7,6 +7,7 @@ import {
   goToSettings,
   goToPlugins,
   waitForPageReady,
+  deleteTestSession,
 } from '../helpers';
 
 /**
@@ -147,9 +148,9 @@ test.describe('Workspace Sidebar — unified project surfaces', () => {
     await expect(previewTab).toHaveAttribute('aria-selected', 'true');
 
     await shell.getByRole('button', { name: /Add surface|添加模块/i }).click();
-    await page.getByRole('menuitem', { name: /Widget|看板/i }).click();
+    await page.getByRole('menuitem', { name: /Dashboard|Widget|看板/i }).click();
 
-    const widgetTab = shell.getByRole('tab', { name: /Widget|看板/i });
+    const widgetTab = shell.getByRole('tab', { name: /Dashboard|Widget|看板/i });
     await expect(widgetTab).toHaveAttribute('aria-selected', 'true');
     await expect(shell.locator('[data-primary-kind="widget"]')).toBeVisible();
     await expect(shell.getByLabel('Inspector')).toHaveCount(0);
@@ -159,7 +160,7 @@ test.describe('Workspace Sidebar — unified project surfaces', () => {
     await expect(previewTab).toHaveAttribute('aria-selected', 'true');
     await expect(shell.getByLabel('Inspector')).toBeVisible();
     await expect(shell.locator('[data-inspector-back]')).toHaveCount(0);
-    await expect(shell.getByText(/←\s*(Widget|看板)/i)).toHaveCount(0);
+    await expect(shell.getByText(/←\s*(Dashboard|Widget|看板)/i)).toHaveCount(0);
 
     await widgetTab.click();
     await expect(widgetTab).toHaveAttribute('aria-selected', 'true');
@@ -204,12 +205,14 @@ test.describe('Workspace Sidebar — unified project surfaces', () => {
 
   test('offers explicit Git initialization only for a real non-repository workspace', async ({ page }) => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'codepilot-sidebar-init-git-'));
+    let sessionId: string | undefined;
     try {
       const response = await page.request.post('/api/chat/sessions', {
         data: { title: 'E2E Initialize Git', working_directory: workspace },
       });
       expect(response.ok()).toBeTruthy();
       const payload = await response.json() as { session: { id: string } };
+      sessionId = payload.session.id;
       // Suppress the legacy default-panel one-shot so this workspace exercises
       // the no-pin launcher rather than auto-activating Files.
       await page.goto('/chat');
@@ -235,18 +238,21 @@ test.describe('Workspace Sidebar — unified project surfaces', () => {
       }).toBe(true);
       await expect(shell.locator('[data-primary-kind="git"]')).toBeVisible();
     } finally {
+      await deleteTestSession(page, sessionId);
       await fs.rm(workspace, { recursive: true, force: true });
     }
   });
 
   test('unpin keeps a module open, while its own tab close hides it without clearing the pin', async ({ page }) => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'codepilot-sidebar-tab-close-'));
+    let sessionId: string | undefined;
     try {
       const response = await page.request.post('/api/chat/sessions', {
         data: { title: 'E2E Sidebar Tab Close', working_directory: workspace },
       });
       expect(response.ok()).toBeTruthy();
       const payload = await response.json() as { session: { id: string } };
+      sessionId = payload.session.id;
       const identityResponse = await page.request.get(
         `/api/workspace/identity?sessionId=${encodeURIComponent(payload.session.id)}`,
       );
@@ -293,18 +299,21 @@ test.describe('Workspace Sidebar — unified project surfaces', () => {
       await expect(shell.getByRole('tab', { name: /Files|文件/i })).toBeVisible();
       await expect(shell.getByRole('button', { name: /Unpin this surface|取消固定此模块/i })).toBeVisible();
     } finally {
+      await deleteTestSession(page, sessionId);
       await fs.rm(workspace, { recursive: true, force: true });
     }
   });
 
   test('reload preserves the collapsed shell and the thread active Primary', async ({ page }) => {
     const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'codepilot-sidebar-hydrate-'));
+    let sessionId: string | undefined;
     try {
       const response = await page.request.post('/api/chat/sessions', {
         data: { title: 'E2E Sidebar Hydration', working_directory: workspace },
       });
       expect(response.ok()).toBeTruthy();
       const payload = await response.json() as { session: { id: string } };
+      sessionId = payload.session.id;
       const identityResponse = await page.request.get(
         `/api/workspace/identity?sessionId=${encodeURIComponent(payload.session.id)}`,
       );
@@ -348,6 +357,7 @@ test.describe('Workspace Sidebar — unified project surfaces', () => {
       await waitForPageReady(page);
       await expect(shell).toBeHidden();
     } finally {
+      await deleteTestSession(page, sessionId);
       await fs.rm(workspace, { recursive: true, force: true });
     }
   });

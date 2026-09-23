@@ -51,6 +51,10 @@ export function resolveStatusNoticeKeys(
   const plural = typeof params?.count === 'number' && params.count > 1 ? 'other' : 'one';
 
   switch (`${code}:${reason}`) {
+    case 'GEMINI_OPTIONS_ADJUSTED:model-contract':
+      return { titleKey: 'chat.notice.geminiOptions.title', messageKey: 'chat.notice.geminiOptions.message' };
+    case 'NATIVE_OUTPUT_TRUNCATED:length':
+      return { titleKey: 'chat.notice.outputTruncated.title', messageKey: 'chat.notice.outputTruncated.message' };
     case 'SAMPLING_PARAMS_IGNORED:model-rejects':
       return {
         titleKey: 'chat.notice.samplingIgnored.title',

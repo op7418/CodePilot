@@ -1,3 +1,4 @@
+import { getSessionMemoryWorkspace, canWriteSessionMemory } from '@/lib/memory-binding';
 import { query } from '@anthropic-ai/claude-agent-sdk';
 import type {
   SDKAssistantMessage,
@@ -20,7 +21,7 @@ import { pickModelUsage } from './sdk-model-usage';
 import { registerPendingPermission, buildPermissionResolvedEvent } from './permission-registry';
 import { registerConversation, unregisterConversation } from './conversation-registry';
 import { captureCapabilities, isCacheFresh, setCachedPlugins } from './agent-sdk-capabilities';
-import { normalizeMessageContent, microCompactMessage } from './message-normalizer';
+import { buildFallbackContext } from './fallback-context';
 import { roughTokenEstimate } from './context-estimator';
 import {
   getSetting,
@@ -36,6 +37,7 @@ import { sanitizeClaudeModelOptions } from './claude-model-options';
 import { buildSamplingIgnoredNotice } from './anthropic-sampling-notice';
 import { buildEffortAdjustmentNotice } from './anthropic-effort-adjustment-notice';
 import { findClaudeBinary, invalidateClaudePathCache } from './platform';
+import { assertCliProviderLaunchAllowed } from './cli-maintenance-lease';
 import { notifyPermissionRequest, notifyGeneric } from './telegram-bot';
 import { classifyError, formatClassifiedError, isSessionStateResultError } from './error-classifier';
 import { resolveWorkingDirectory } from './working-directory';
@@ -310,8 +312,12 @@ function extractTokenUsage(
   const base: TokenUsage = {
     input_tokens: msg.usage.input_tokens,
     output_tokens: msg.usage.output_tokens,
-    cache_read_input_tokens: msg.usage.cache_read_input_tokens ?? 0,
-    cache_creation_input_tokens: msg.usage.cache_creation_input_tokens ?? 0,
+    ...(msg.usage.cache_read_input_tokens !== undefined
+      ? { cache_read_input_tokens: msg.usage.cache_read_input_tokens }
+      : {}),
+    ...(msg.usage.cache_creation_input_tokens !== undefined
+      ? { cache_creation_input_tokens: msg.usage.cache_creation_input_tokens }
+      : {}),
     cost_usd: 'total_cost_usd' in msg ? msg.total_cost_usd : undefined,
   };
   // Pull contextWindow / maxOutputTokens straight from the SDK when available.
@@ -379,78 +385,6 @@ function getUploadedFilePaths(files: FileAttachment[], workDir: string): string[
     }
   }
   return paths;
-}
-
-// Message normalization is in message-normalizer.ts (shared with context-compressor.ts).
-// Imported dynamically in buildFallbackContext to avoid circular deps at module level.
-
-/**
- * Build fallback context from conversation history with token-budget awareness.
- *
- * Instead of a fixed message count, walks backward from the newest message
- * and includes as many as fit within the token budget. Optionally prepends
- * a session summary as a context skeleton for the full conversation.
- */
-function buildFallbackContext(params: {
-  prompt: string;
-  history?: Array<{ role: 'user' | 'assistant'; content: string }>;
-  sessionSummary?: string;
-  tokenBudget?: number;
-}): string {
-  const { prompt, history, sessionSummary, tokenBudget } = params;
-  if (!history || history.length === 0) {
-    if (sessionSummary) {
-      return `<session-summary>\n${sessionSummary}\n</session-summary>\n\n${prompt}`;
-    }
-    return prompt;
-  }
-
-  // Normalize + microcompact: strip metadata, summarize tool blocks, truncate old messages
-  const normalized = history.map((msg, i) => ({
-    role: msg.role,
-    content: microCompactMessage(
-      msg.role,
-      normalizeMessageContent(msg.role, msg.content),
-      history.length - 1 - i, // ageFromEnd: 0 = newest
-    ),
-  }));
-
-  // Select messages within token budget (walk backward from newest).
-  // Floor at 10K tokens so even extreme sessions keep some recent context.
-  const effectiveBudget = tokenBudget != null ? Math.max(tokenBudget, 10000) : undefined;
-  let selected: typeof normalized;
-  if (effectiveBudget) {
-    selected = [];
-    let accumulated = 0;
-    for (let i = normalized.length - 1; i >= 0; i--) {
-      const msgTokens = roughTokenEstimate(normalized[i].content) + 10; // role label overhead
-      if (accumulated + msgTokens > effectiveBudget) break;
-      selected.unshift(normalized[i]);
-      accumulated += msgTokens;
-    }
-  } else {
-    selected = normalized;
-  }
-
-  // Build the output
-  const lines: string[] = [];
-
-  if (sessionSummary) {
-    lines.push('<session-summary>');
-    lines.push(sessionSummary);
-    lines.push('</session-summary>');
-    lines.push('');
-  }
-
-  lines.push('<conversation_history>');
-  lines.push('(This is a summary of earlier conversation turns for context. <prior-tool-call .../> and <prior-reasoning>...</prior-reasoning> are metadata markers describing what already happened — they are NOT assistant output format. Do not reproduce these tags. To call a tool, emit a real tool_use block; do not write tool calls as prose or as these markers.)');
-  for (const msg of selected) {
-    lines.push(`${msg.role === 'user' ? 'Human' : 'Assistant'}: ${msg.content}`);
-  }
-  lines.push('</conversation_history>');
-  lines.push('');
-  lines.push(prompt);
-  return lines.join('\n');
 }
 
 export interface GenerateTextViaSdkParams {
@@ -650,6 +584,7 @@ export async function generateTextViaSdk(params: GenerateTextViaSdkParams): Prom
       }
     }
 
+    assertCliProviderLaunchAllowed('claude');
     const conversation = query({
       prompt: params.prompt,
       options: queryOptions,
@@ -923,6 +858,7 @@ export function streamClaude(options: ClaudeStreamOptions): ReadableStream<strin
       files: options.files,
       conversationHistory: options.conversationHistory,
       sessionSummary: options.sessionSummary,
+      sessionSummaryBoundaryRowid: options.sessionSummaryBoundaryRowid,
       fallbackTokenBudget: options.fallbackTokenBudget,
       toolTimeoutSeconds: options.toolTimeoutSeconds,
       outputFormat: options.outputFormat,
@@ -1033,6 +969,7 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
         : 'claude_code_ready';
       const subagentModelCompatible = (candidate: typeof resolved.availableModels[number]) => {
         const compatibility = getModelCompat({
+          providerBaseUrl: resolved.provider?.base_url,
           modelId: candidate.modelId,
           upstreamModelId: candidate.upstreamModelId,
           providerCompat: subagentProviderCompat,
@@ -1047,6 +984,7 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
         availableModels: resolved.availableModels.filter(subagentModelCompatible),
         roleModels: resolved.roleModels,
         providerCompatible: !resolved.provider || getModelCompat({
+          providerBaseUrl: resolved.provider?.base_url,
           modelId: model || resolved.model || 'inherit',
           upstreamModelId: resolved.upstreamModel,
           providerCompat: subagentProviderCompat,
@@ -1382,14 +1320,15 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
         // Memory MCP: always registered in assistant mode for memory search/retrieval.
         // Unlike other MCPs which are keyword-gated, memory search is a core assistant capability.
         {
-          const assistantWorkspacePath = getSetting('assistant_workspace_path');
-          if (assistantWorkspacePath && resolvedWorkingDirectory.path === assistantWorkspacePath) {
+          const memoryWorkspace = getSessionMemoryWorkspace(sessionId, resolvedWorkingDirectory.path);
+          if (memoryWorkspace) {
             const { createMemorySearchMcpServer } = await import('@/lib/memory-search-mcp');
             queryOptions.mcpServers = {
               ...(queryOptions.mcpServers || {}),
-              'codepilot-memory': createMemorySearchMcpServer(assistantWorkspacePath),
+              'codepilot-memory': createMemorySearchMcpServer(memoryWorkspace, { access: isHeartbeatMode || permissionMode === 'plan' ? 'read' : 'all', sourceSessionId: sessionId, resolvedProvider: resolved, authorizeWrite: () => !isHeartbeatMode && permissionMode !== 'plan' && canWriteSessionMemory(sessionId, memoryWorkspace) }),
             };
             enabledCapabilities.add('memory');
+            if (!isHeartbeatMode && permissionMode !== 'plan') enabledCapabilities.add('memory_write');
           }
         }
 
@@ -2193,6 +2132,7 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
         // Try to start the conversation. If resuming a previous session fails
         // (e.g. stale/corrupt session file, CLI version mismatch), automatically
         // fall back to starting a fresh conversation without resume.
+        assertCliProviderLaunchAllowed('claude');
         let conversation = query({
           prompt: finalPrompt,
           options: queryOptions,
@@ -2243,6 +2183,7 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
             }));
             // Remove resume and try again as a fresh conversation with history context
             delete queryOptions.resume;
+            assertCliProviderLaunchAllowed('claude');
             conversation = query({
               prompt: buildFinalPrompt(true),
               options: queryOptions,
@@ -2898,7 +2839,7 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
             controller.enqueue(formatSSE({ type: 'status', data: JSON.stringify({ notification: true, message: 'context_compressing_retry' }) }));
 
             const { compressConversation, resolveReactiveCompactBoundaryRowid } = await import('./context-compressor');
-            const { updateSessionSummary: updateSummary, getSessionSummary } = await import('@/lib/db');
+            const { commitSessionCompaction, getSessionSummary } = await import('@/lib/db');
             const compResult = await compressConversation({
               sessionId,
               messages: conversationHistory,
@@ -2928,7 +2869,18 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
               history: conversationHistory,
               existingBoundaryRowid: existingBoundary,
             });
-            updateSummary(sessionId, compResult.summary, reactiveBoundaryRowid);
+            commitSessionCompaction({
+              sessionId,
+              summary: compResult.summary,
+              boundaryRowid: reactiveBoundaryRowid,
+              trigger: 'reactive',
+              messagesCompressed: compResult.messagesCompressed,
+              estimatedTokensSaved: compResult.estimatedTokensSaved,
+              auxiliaryProviderId: compResult.auxiliaryProviderId,
+              auxiliaryModelId: compResult.auxiliaryModelId,
+              auxiliaryRouteSource: compResult.auxiliaryRouteSource,
+              recreatedUnderlyingSession: true,
+            });
             options.sessionSummary = compResult.summary;
             // Recalculate fallback budget with new summary size
             const newSummaryTokens = roughTokenEstimate(compResult.summary);
@@ -2972,6 +2924,7 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
               retryOptions.systemPrompt = { type: 'preset', preset: 'claude_code', append: systemPrompt };
             }
 
+            assertCliProviderLaunchAllowed('claude');
             const retryConversation = query({ prompt: retryPrompt, options: retryOptions });
 
             // Forward retry stream events (simplified — covers the critical path)
@@ -3175,6 +3128,9 @@ export function streamClaudeSdk(options: ClaudeStreamOptions): ReadableStream<st
                     data: JSON.stringify(buildContextCompressedStatus({
                       messagesCompressed: compResult.messagesCompressed,
                       tokensSaved: compResult.estimatedTokensSaved,
+                      trigger: 'reactive',
+                      sourceBoundaryRowid: reactiveBoundaryRowid,
+                      recreatedUnderlyingSession: true,
                     })),
                   }));
                   break;
@@ -3280,6 +3236,11 @@ export async function testProviderConnection(config: {
   providerName?: string;
   providerMeta?: { apiKeyUrl?: string; docsUrl?: string; pricingUrl?: string };
 }): Promise<ConnectionTestResult> {
+  const { isTokenDanceBaseUrl } = await import('./tokendance');
+  if (isTokenDanceBaseUrl(config.baseUrl)) {
+    const { testTokenDanceConnection } = await import('./tokendance-fetch');
+    return testTokenDanceConnection(config);
+  }
   const { getPreset, findPresetForLegacy } = await import('./provider-catalog');
 
   // Look up preset for default model
@@ -3323,6 +3284,10 @@ export async function testProviderConnection(config: {
   }
   if (config.protocol === 'xai') {
     return testXaiConnection(config);
+  }
+  if (config.protocol === 'google') {
+    const { testGoogleConnection } = await import('./google-connection-test');
+    return testGoogleConnection({ ...config, modelName: model });
   }
 
   // Reject third-party / custom Anthropic providers without a base URL.

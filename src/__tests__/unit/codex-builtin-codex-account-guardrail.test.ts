@@ -106,7 +106,7 @@ describe('Codex Account guardrails — thread params layer (mirror of codex-prox
     );
     assert.match(
       runtimeSource,
-      /'thread\/resume',[\s\S]*threadId:\s*existingRef\.token,[\s\S]*\.\.\.threadParams/,
+      /'thread\/resume',[\s\S]*threadId,[\s\S]*\.\.\.threadParams/,
       'resume must omit the start-only dynamicTools field',
     );
     assert.match(

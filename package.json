@@ -1,6 +1,6 @@
 {
   "name": "codepilot",
-  "version": "0.67.10",
+  "version": "0.67.17",
   "private": true,
   "license": "BUSL-1.1",
   "workspaces": [
@@ -23,9 +23,9 @@
     "typecheck": "tsc --noEmit",
     "test:unit": "node scripts/run-node-tests.mjs unit",
     "test:harness-boundary": "node scripts/check-harness-adapter-boundary.mjs --check-canonical",
-    "test:smoke": "npx playwright test --grep @smoke",
-    "test:e2e": "npx playwright test",
-    "test:visual": "npx playwright test --grep @visual",
+    "test:smoke": "node scripts/run-playwright.mjs --grep @smoke",
+    "test:e2e": "node scripts/run-playwright.mjs",
+    "test:visual": "node scripts/run-playwright.mjs --grep @visual",
     "test:sdk-poc": "node scripts/run-node-tests.mjs sdk-poc",
     "smoke:mcp-poc": "tsx scripts/smoke-ai-sdk7-phase4-mcp-poc.ts",
     "test": "npm run typecheck && npm run test:harness-boundary && npm run test:unit",
@@ -119,6 +119,7 @@
     "react-syntax-highlighter": "^16.1.0",
     "recharts": "^3.7.0",
     "rehype-raw": "^7.0.0",
+    "rehype-sanitize": "^6.0.0",
     "remark-gfm": "^4.0.1",
     "shiki": "^3.22.0",
     "streamdown": "2.1.0",

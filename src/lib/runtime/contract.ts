@@ -137,6 +137,7 @@ export type RuntimeRunEvent =
   | (RuntimeRunEventBase & {
       type: 'usage_updated';
       inputTokens?: number;
+      cachedInputTokens?: number;
       outputTokens?: number;
       contextWindow?: number;
     })

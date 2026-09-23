@@ -78,12 +78,17 @@ describe('buildCodexTurnInput (#632 / Phase 2 #3)', () => {
 describe('codex/runtime.ts wires buildCodexTurnInput into turn/start (no text-only regression)', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', '..', 'lib/codex/runtime.ts'), 'utf8');
 
-  it('turn/start input is built via buildCodexTurnInput(options.prompt, ...)', () => {
+  it('turn/start receives context-aware input with the current attachments', () => {
     assert.match(
       src,
-      /input:\s*buildCodexTurnInput\(options\.prompt,/,
-      'turn/start must build its input via buildCodexTurnInput so image attachments are included',
+      /startCodexTurnWithContext\(\{[\s\S]{0,150}prompt: options\.prompt,[\s\S]{0,100}files: turnFiles/,
+      'context-aware turn input must receive both the prompt and current attachments',
     );
+    const continuation = fs.readFileSync(path.join(__dirname, '..', '..', 'lib/codex/thread-continuation.ts'), 'utf8');
+    assert.match(continuation, /buildCodexTurnInput\(input\.prompt, input\.files\)/);
+    assert.match(continuation, /await buildCodexContinuationInput\(input\)/);
+    assert.match(continuation, /input\.startTurn\(blocks\)/);
+    assert.match(src, /startTurn: \(input\) => client\.request[\s\S]{0,120}'turn\/start',[\s\S]{0,80}input,/);
   });
 
   it('the old text-only hardcoded input is gone', () => {
