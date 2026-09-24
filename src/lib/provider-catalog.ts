@@ -768,6 +768,38 @@ export const VENDOR_PRESETS: VendorPreset[] = [
     },
   },
 
+  // ── Atlas Cloud ──
+  {
+    key: 'atlascloud',
+    name: 'Atlas Cloud',
+    description: 'Atlas Cloud OpenAI-compatible chat API (CodePilot / Codex runtimes)',
+    descriptionZh: 'Atlas Cloud OpenAI 兼容聊天 API（用于 CodePilot / Codex 运行时）',
+    protocol: 'openai-compatible',
+    authStyle: 'api_key',
+    baseUrl: 'https://api.atlascloud.ai/v1',
+    defaultEnvOverrides: {},
+    defaultModels: [
+      { modelId: 'qwen/qwen3.5-flash', displayName: 'Qwen3.5 Flash' },
+      {
+        modelId: 'deepseek-ai/deepseek-v4-pro',
+        displayName: 'DeepSeek V4 Pro',
+        role: 'reasoning',
+        capabilities: { reasoning: true },
+      },
+    ],
+    defaultRoleModels: {
+      default: 'qwen/qwen3.5-flash',
+      reasoning: 'deepseek-ai/deepseek-v4-pro',
+    },
+    fields: ['api_key'],
+    iconKey: 'server',
+    meta: {
+      apiKeyUrl: 'https://www.atlascloud.ai/console/api-keys',
+      docsUrl: 'https://api.atlascloud.ai/v1',
+      billingModel: 'pay_as_you_go',
+    },
+  },
+
   // ── xAI official Responses API ──
   // Keep this branded and separate from the generic OpenAI-compatible preset:
   // Grok 4.6's supported product path is /v1/responses via @ai-sdk/xai.
