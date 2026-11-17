@@ -54,6 +54,43 @@ Once an MCP server is connected, its tools automatically become available to Cla
 
 You can view the specific tool list for each server on the MCP page.
 
+## Example: look up public sources with Parallel
+
+This optional example adds web search through the existing HTTP MCP settings. You need a working chat provider in CodePilot. Parallel's `web_search` and `web_fetch` tools can be used without a Parallel API key at lower rate limits; see [Parallel MCP setup](https://docs.parallel.ai/integrations/mcp/quickstart) for authentication and current limits.
+
+### Add the server
+
+1. Open **Plugins**, select **MCP**, and click **Add MCP server** (older versions have a separate MCP page).
+2. Set **Name** to `parallel` and the transport to **HTTP**.
+3. Set **URL** to the value below. Leave **Headers (JSON)** and **Environment Variables** as `{}` for anonymous access, then save.
+
+```text
+https://mcp.parallel.ai/mcp
+```
+
+Alternatively, set the name to `parallel` and paste this single-server configuration into the add-server dialog's JSON editor:
+
+```json
+{
+  "type": "http",
+  "url": "https://mcp.parallel.ai/mcp"
+}
+```
+
+### Try it in chat
+
+Start a new conversation in **Code** mode with **Request approval** permissions and manually enter this public library documentation question:
+
+```text
+Use Parallel's web_search to find the official React documentation explaining when useEffect cleanup runs. Summarize it and include the exact source URL from the result as a Markdown link. Search public library documentation only.
+```
+
+If a tool permission prompt appears, review the search arguments and approve that call. Check that the conversation shows a Parallel `web_search` tool call and that the answer includes a clickable source link. Open the link to verify it supports the answer; a connected server alone does not verify a cited response. Search results can vary.
+
+If the tool is missing, check that `parallel` is enabled and start a new conversation in **Code** mode. CodePilot Runtime's **Plan** mode excludes external MCP tools. If Parallel returns a rate-limit or connection error, retry later; an answer produced without a successful lookup is not a verified search result.
+
+When finished, disable `parallel` in the server list, quit and reopen CodePilot, then start a new conversation. CodePilot Runtime can retain an existing MCP connection until the app restarts. Your chat provider's own credentials and usage still apply.
+
 ## Popular MCP Servers
 
 | Server | Purpose |

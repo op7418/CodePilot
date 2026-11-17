@@ -54,6 +54,43 @@ MCP 服务器连接后，它提供的工具会自动对 Claude 可用。Claude �
 
 你可以在 MCP 页面查看每个服务器提供的具体工具列表。
 
+## 示例：使用 Parallel 查询公开来源
+
+本示例通过现有的 HTTP MCP 设置按需添加网页搜索。请先在 CodePilot 中配置可用的聊天服务商。Parallel 的 `web_search` 和 `web_fetch` 工具无需 Parallel API 密钥即可在较低速率限制下使用；认证方式和当前限制见 [Parallel MCP setup](https://docs.parallel.ai/integrations/mcp/quickstart)。
+
+### 添加服务器
+
+1. 打开 **插件**，选择 **MCP**，点击 **添加 MCP 服务**（旧版本有独立的 MCP 页面）。
+2. 将 **名称** 设为 `parallel`，传输类型选择 **HTTP**。
+3. 将 **URL** 设为下方的值。匿名访问时，**请求头（JSON）** 和 **环境变量** 均保留为 `{}`，然后保存。
+
+```text
+https://mcp.parallel.ai/mcp
+```
+
+也可以将名称设为 `parallel`，在添加服务器对话框的 JSON 编辑器中粘贴以下单个服务器配置：
+
+```json
+{
+  "type": "http",
+  "url": "https://mcp.parallel.ai/mcp"
+}
+```
+
+### 在聊天中试用
+
+新建对话，选择 **代码** 模式和 **请求批准** 权限，然后手动输入以下公开库文档问题：
+
+```text
+使用 Parallel 的 web_search 查找解释 useEffect 清理函数何时运行的 React 官方文档。总结说明，并以 Markdown 链接附上结果中的完整来源 URL。只搜索公开库文档。
+```
+
+如果出现工具权限提示，请检查搜索参数并批准本次调用。确认对话中出现 Parallel 的 `web_search` 工具调用，且回答包含可点击的来源链接。打开链接，核对来源是否支持回答；仅显示服务器已连接并不能验证带引用的回答。搜索结果可能变化。
+
+如果工具未出现，请确认已启用 `parallel`，然后新建 **代码** 模式的对话。CodePilot Runtime 的 **计划** 模式不提供外部 MCP 工具。如果 Parallel 返回速率限制或连接错误，请稍后重试；没有成功查询就生成的回答不能视为已验证的搜索结果。
+
+使用完毕后，在服务器列表中禁用 `parallel`，退出并重新打开 CodePilot，再新建对话。CodePilot Runtime 可能保留已有的 MCP 连接，直到应用重启。聊天服务商本身的凭据要求和用量计费仍然适用。
+
 ## 常用 MCP 服务器
 
 | 服务器 | 用途 |
