@@ -1,6 +1,7 @@
 import { NextRequest } from 'next/server';
 import fs from 'fs/promises';
 import path from 'path';
+import { assertRealPathInBase, FileIOError } from '@/lib/files';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -19,9 +20,25 @@ const MIME_TYPES: Record<string, string> = {
   '.csv': 'text/csv',
 };
 
+const ALLOWED_DIR_NAMES = new Set(['.codepilot-uploads', '.codepilot-media', '.codepilot-images']);
+
 /**
- * Serve files from .codepilot-uploads/ directories.
- * Only allows reading from paths that contain '.codepilot-uploads/' to prevent directory traversal.
+ * Upload directories live under each session's working directory, so there is
+ * no single base to anchor on. The innermost allowed directory segment (never
+ * the file name itself) becomes the base for the realpath containment check.
+ */
+function findAllowedBase(resolved: string): string | null {
+  const segments = resolved.split(path.sep);
+  for (let i = segments.length - 2; i >= 0; i--) {
+    if (ALLOWED_DIR_NAMES.has(segments[i])) {
+      return segments.slice(0, i + 1).join(path.sep) || path.sep;
+    }
+  }
+  return null;
+}
+
+/**
+ * Serve files from .codepilot-uploads/, .codepilot-media/ and .codepilot-images/ directories.
  */
 export async function GET(request: NextRequest) {
   const filePath = request.nextUrl.searchParams.get('path');
@@ -33,10 +50,9 @@ export async function GET(request: NextRequest) {
     });
   }
 
-  // Security: only allow files within known .codepilot-* directories
   const resolved = path.resolve(filePath);
-  const allowedDirs = ['.codepilot-uploads', '.codepilot-media', '.codepilot-images'];
-  if (!allowedDirs.some(dir => resolved.includes(dir))) {
+  const base = findAllowedBase(resolved);
+  if (!base) {
     return new Response(JSON.stringify({ error: 'Access denied' }), {
       status: 403,
       headers: { 'Content-Type': 'application/json' },
@@ -44,10 +60,11 @@ export async function GET(request: NextRequest) {
   }
 
   try {
-    await fs.access(resolved);
-  } catch {
-    return new Response(JSON.stringify({ error: 'File not found' }), {
-      status: 404,
+    await assertRealPathInBase(resolved, base);
+  } catch (err) {
+    const notFound = err instanceof FileIOError && err.code === 'not_found';
+    return new Response(JSON.stringify({ error: notFound ? 'File not found' : 'Access denied' }), {
+      status: notFound ? 404 : 403,
       headers: { 'Content-Type': 'application/json' },
     });
   }

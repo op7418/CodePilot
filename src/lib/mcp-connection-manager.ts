@@ -7,18 +7,58 @@
  */
 
 import type { MCPServerConfig } from '@/types';
+import type { Transport } from '@modelcontextprotocol/sdk/shared/transport.js';
 
 // Lazy-load MCP SDK to avoid import errors when not used
 let Client: typeof import('@modelcontextprotocol/sdk/client/index.js').Client;
 let StdioClientTransport: typeof import('@modelcontextprotocol/sdk/client/stdio.js').StdioClientTransport;
 
+type McpClient = InstanceType<typeof Client>;
+
+/**
+ * agent-loop syncs on every turn; without a cooldown a broken server would be
+ * respawned once per message.
+ */
+export const MCP_FAILED_RETRY_COOLDOWN_MS = 60_000;
+
 interface McpConnection {
   name: string;
   config: MCPServerConfig;
-  client: InstanceType<typeof Client> | null;
+  configKey: string;
+  client: McpClient | null;
   tools: McpToolDefinition[];
   status: 'connected' | 'connecting' | 'failed' | 'disabled';
   error?: string;
+  failedAt?: number;
+}
+
+interface McpTestOverrides {
+  createClient?: (name: string) => McpClient;
+  createTransport?: (config: MCPServerConfig) => Promise<Transport>;
+  now?: () => number;
+}
+
+let testOverrides: McpTestOverrides = {};
+
+export function __setMcpConnectionTestOverridesForTests(overrides: McpTestOverrides): void {
+  testOverrides = overrides;
+}
+
+function now(): number {
+  return testOverrides.now ? testOverrides.now() : Date.now();
+}
+
+function stableSerialize(value: unknown): string {
+  if (Array.isArray(value)) {
+    return `[${value.map(stableSerialize).join(',')}]`;
+  }
+  if (value && typeof value === 'object') {
+    const entries = Object.entries(value as Record<string, unknown>)
+      .filter(([, v]) => v !== undefined)
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${stableSerialize(v)}`).join(',')}}`;
+  }
+  return JSON.stringify(value) ?? 'null';
 }
 
 export interface McpToolDefinition {
@@ -40,51 +80,73 @@ const connections = new Map<string, McpConnection>();
 
 /**
  * Sync the connection pool with desired configurations.
- * Connects new servers, disconnects removed ones.
+ * Connects new servers, disconnects removed ones, reconnects servers whose
+ * config changed, and retries failed servers only after the cooldown.
  */
 export async function syncMcpConnections(
   desiredConfigs: Record<string, MCPServerConfig>,
 ): Promise<void> {
   const desiredNames = new Set(Object.keys(desiredConfigs));
 
-  // Disconnect servers that are no longer in config
-  for (const [name, conn] of connections) {
+  for (const name of [...connections.keys()]) {
     if (!desiredNames.has(name)) {
       await disconnectServer(name);
     }
   }
 
-  // Connect new or updated servers
   for (const [name, config] of Object.entries(desiredConfigs)) {
     const existing = connections.get(name);
-    if (!existing || existing.status === 'failed') {
+    if (!existing) {
+      await connectServer(name, config);
+      continue;
+    }
+    if (existing.configKey !== stableSerialize(config)) {
+      await disconnectServer(name);
+      await connectServer(name, config);
+      continue;
+    }
+    if (
+      existing.status === 'failed'
+      && now() - (existing.failedAt ?? 0) >= MCP_FAILED_RETRY_COOLDOWN_MS
+    ) {
       await connectServer(name, config);
     }
   }
 }
 
 /**
- * Connect to a single MCP server.
+ * Connect to a single MCP server. Not subject to the failure cooldown, so
+ * user-initiated reconnects always attempt a fresh connection.
  */
 export async function connectServer(name: string, config: MCPServerConfig): Promise<void> {
+  const previous = connections.get(name);
+  if (previous?.client) {
+    try { await previous.client.close(); } catch { /* ignore */ }
+  }
+
   const conn: McpConnection = {
     name,
     config,
+    configKey: stableSerialize(config),
     client: null,
     tools: [],
     status: 'connecting',
   };
   connections.set(name, conn);
 
+  let client: McpClient | null = null;
+  let transport: Transport | null = null;
   try {
-    // Lazy-load MCP SDK
-    if (!Client) {
-      const clientModule = await import('@modelcontextprotocol/sdk/client/index.js');
-      Client = clientModule.Client;
+    if (testOverrides.createClient) {
+      client = testOverrides.createClient(name);
+    } else {
+      if (!Client) {
+        const clientModule = await import('@modelcontextprotocol/sdk/client/index.js');
+        Client = clientModule.Client;
+      }
+      client = new Client({ name: `codepilot-${name}`, version: '1.0.0' });
     }
-
-    const client = new Client({ name: `codepilot-${name}`, version: '1.0.0' });
-    const transport = await createTransport(config);
+    transport = await (testOverrides.createTransport ?? createTransport)(config);
 
     await client.connect(transport);
     conn.client = client;
@@ -101,9 +163,16 @@ export async function connectServer(name: string, config: MCPServerConfig): Prom
 
     conn.status = 'connected';
   } catch (err) {
+    conn.client = null;
+    conn.tools = [];
     conn.status = 'failed';
+    conn.failedAt = now();
     conn.error = err instanceof Error ? err.message : String(err);
     console.warn(`[MCP] Failed to connect to ${name}:`, conn.error);
+    // A stdio transport may already have spawned the server process.
+    if (transport) {
+      try { await transport.close(); } catch { /* ignore */ }
+    }
   }
 }
 

@@ -38,7 +38,8 @@
 | 10 | heartbeat row 对 exact source 全库至多一条；迁移先重关联 run/event 再合并 duplicate 并建 partial UNIQUE index | DB migration |
 | 11 | runner 在创建 session 和调用 Provider 前重读 desired；disabled/mismatch 以 `skipped_reconcile_drift` 收口，0 Provider、0 notification | agent task runner |
 | 12 | empty checklist 以 `skipped_empty` 收口；只有 exact `HEARTBEAT_OK` silent。普通 `/api/chat` 不能伪造 heartbeat turn | heartbeat classifier + provider policy gate |
-| 13 | 手动“立即检查”和 scheduler due 使用同一 row lock/run path；竞争只能有一个执行者 | `runScheduledTaskNow` |
+| 13 | 手动“立即检查”和 scheduler due 使用同一 row lock/run path；竞争只能有一个执行者 | `runScheduledTaskNow` / `dispatchDueTasks`（共用 `startLockedRun`） |
+| 13a | 轮询和启动补跑同一时刻最多发出 `MAX_CONCURRENT_SCHEDULED_RUNS`（2）个持久任务，其余保持到期状态留给下一轮；手动“立即检查”不受此上限 | `dispatchDueTasks` |
 | 14 | UI 必须分别显示 desired、actual、last run、last meaningful alert 与 native delivery；禁止从 `lastHeartbeatDate` 推断健康 | workspace summary + Settings |
 | 15 | 测试系统通知写真实 event/delivery，但不调用模型、不创建聊天/记忆；“delivered”只表示 OS 接受，不表示用户已读。macOS unsigned dev Electron 必须 fail-closed 并提示使用 signed package，不能用 `show` 事件伪装可见 | notification test route + Main preflight + UI copy |
 | 16 | Settings 只展示当前持久化助理路径，不把聊天历史目录伪装成可随手切换的 Select；更换路径必须先解释身份/记忆/心跳来源切换与 no-delete/no-auto-migrate 后果，再打开系统目录选择，选中后仍走目标目录 inspect 门禁 | AssistantWorkspaceSection + WorkspaceConfirmDialogs |
@@ -103,6 +104,7 @@
 | Bootstrap、CAS、no-touch、canonical + managed mirrors | `default-assistant-bootstrap.test.ts`, `setting-compare-and-set.test.ts`, `assistant-workspace.test.ts` |
 | Rules effective owner | `assistant-rules-effective-owner.test.ts` |
 | Reconcile、unique、cadence、disabled/empty gate | `heartbeat-reconcile.test.ts`, `heartbeat-trigger-discipline.test.ts`, `scheduler-trigger-unification.test.ts` |
+| 调度并发上限（13a） | `scheduler-reminder-and-recovery.test.ts` |
 | Claim/retry、route trust、退役 renderer HTTP 拒绝、Main lifecycle/click | `notification-delivery-claim.test.ts`, `notification-claim-policy.test.ts`, `notification-test-route.test.ts`, `electron-notification-lifecycle.test.ts` |
 | Test notification purity | `notification-test-route.test.ts` |
 | 全 priority native、legacy renderer queued 迁移、交互任务完成/审批/stale owner | `bridge-delivery-visibility.test.ts`, `notification-channel-retirement.test.ts`, `interactive-chat-notifications.test.ts`, `bg-poller-channel-parity.test.ts` |

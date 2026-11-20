@@ -186,6 +186,52 @@ describe('scheduler — runScheduledTaskNow concurrency', () => {
   });
 });
 
+describe('scheduler — dispatch concurrency cap', () => {
+  it('starts at most MAX_CONCURRENT_SCHEDULED_RUNS due tasks per dispatch and leaves the rest due', async () => {
+    const db = await import('../../lib/db');
+    const { dispatchDueTasks, MAX_CONCURRENT_SCHEDULED_RUNS } = await import('../../lib/task-scheduler');
+    const created = [0, 1, 2, 3].map((i) => {
+      const past = new Date(Date.now() - (10 - i) * 1000).toISOString();
+      return db.createScheduledTask({
+        name: `Reminder ${i}`,
+        prompt: `Reminder ${i}`,
+        kind: 'reminder',
+        schedule_type: 'once',
+        schedule_value: past,
+        next_run: past,
+        consecutive_errors: 0,
+        status: 'active',
+        priority: 'low',
+        notify_on_complete: 1,
+        permanent: 0,
+      });
+    });
+
+    const firstRound = await dispatchDueTasks(db.getDueTasks());
+    assert.equal(MAX_CONCURRENT_SCHEDULED_RUNS, 2);
+    assert.deepEqual(firstRound, [created[0].id, created[1].id], 'oldest due tasks get the slots first');
+    for (const queued of created.slice(2)) {
+      assert.equal(db.listTaskRunLogs(queued.id).length, 0, 'tasks beyond the cap must not start this round');
+    }
+
+    const waitForCompletion = async (ids: string[]) => {
+      for (let i = 0; i < 50; i++) {
+        if (ids.every((id) => db.getScheduledTask(id)?.status === 'completed')) return;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      assert.fail('dispatched tasks did not complete');
+    };
+    await waitForCompletion(firstRound);
+
+    const due = db.getDueTasks().map((t) => t.id).sort();
+    assert.deepEqual(due, created.slice(2).map((t) => t.id).sort(), 'queued tasks stay due for the next poll');
+
+    const secondRound = await dispatchDueTasks(db.getDueTasks());
+    assert.deepEqual(secondRound, [created[2].id, created[3].id]);
+    await waitForCompletion(secondRound);
+  });
+});
+
 describe('scheduler — stale running recovery', () => {
   it('does not start or touch runtime state during the Next production build phase', async () => {
     const previousPhase = process.env.NEXT_PHASE;

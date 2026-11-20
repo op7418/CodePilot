@@ -17,6 +17,8 @@ const GLOBAL_KEY = '__codepilot_scheduler__';
 const TIMERS_KEY = '__codepilot_scheduler_timers__';
 const BACKOFF_DELAYS = [30000, 60000, 300000, 900000]; // 30s, 1m, 5m, 15m
 const MAX_CONSECUTIVE_ERRORS = 10;
+const IN_FLIGHT_KEY = '__codepilot_scheduler_in_flight__';
+export const MAX_CONCURRENT_SCHEDULED_RUNS = 2;
 const RECURRING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // ── Session-only tasks (in-memory, not persisted) ────────────────
@@ -71,15 +73,9 @@ export function ensureSchedulerRunning(): void {
   const intervalId = setInterval(async () => {
     try {
       const { getDueTasks } = await import('@/lib/db');
-      const dueTasks = getDueTasks();
-      for (const task of dueTasks) {
-        // Use the same atomic row lock as the manual "Run now" endpoint.
-        // A poll/manual race therefore produces one execution and one
-        // already_running result instead of two model calls.
-        runScheduledTaskNow(task.id).catch(err =>
-          console.error(`[scheduler] Task ${task.id} (${task.name}) failed:`, err)
-        );
-      }
+      // Uses the same atomic row lock as the manual "Run now" endpoint, so a
+      // poll/manual race produces one execution instead of two model calls.
+      await dispatchDueTasks(getDueTasks());
 
       // Check session-only tasks too
       const sessionTasks = getSessionTasks();
@@ -579,14 +575,19 @@ async function executeDueTask(
  * The poll loop and startup missed-task recovery call this same entry point;
  * all durable task triggers therefore share the same row lifecycle.
  */
-export async function runScheduledTaskNow(taskId: string): Promise<
+export async function runScheduledTaskNow(taskId: string): Promise<RunNowResult> {
+  return (await startLockedRun(taskId)).result;
+}
+
+type RunNowResult =
   | { status: 'running'; runId: string }
   | { status: 'already_running'; runId: string | null }
-  | { status: 'not_found' }
-> {
+  | { status: 'not_found' };
+
+async function startLockedRun(taskId: string): Promise<{ result: RunNowResult; execution?: Promise<void> }> {
   const { getScheduledTask, getDb } = await import('@/lib/db');
   const task = getScheduledTask(taskId);
-  if (!task) return { status: 'not_found' };
+  if (!task) return { result: { status: 'not_found' } };
 
   // Row-level lock. The UPDATE only matches when last_status isn't
   // already 'running' — concurrent invocations get back changes=0 and
@@ -605,7 +606,7 @@ export async function runScheduledTaskNow(taskId: string): Promise<
     const { listTaskRunLogs } = await import('@/lib/db');
     const recent = listTaskRunLogs(taskId, 1);
     const inflight = recent[0]?.status === 'running' ? recent[0].id : null;
-    return { status: 'already_running', runId: inflight };
+    return { result: { status: 'already_running', runId: inflight } };
   }
 
   const { insertTaskRunLog } = await import('@/lib/db');
@@ -613,11 +614,49 @@ export async function runScheduledTaskNow(taskId: string): Promise<
 
   // Fire-and-forget; caller (API) returns the runId immediately so the
   // UI can pivot to "running" without blocking on the actual work.
-  executeDueTask(task, false, runId).catch((err) => {
+  const execution = executeDueTask(task, false, runId).catch((err) => {
     console.error(`[scheduler] runScheduledTaskNow(${taskId}) post-handler error:`, err);
   });
 
-  return { status: 'running', runId };
+  return { result: { status: 'running', runId }, execution };
+}
+
+function scheduledInFlight(): Set<string> {
+  const g = globalThis as Record<string, unknown>;
+  if (!g[IN_FLIGHT_KEY]) g[IN_FLIGHT_KEY] = new Set<string>();
+  return g[IN_FLIGHT_KEY] as Set<string>;
+}
+
+/**
+ * Start due durable tasks from the poll loop or missed-task recovery, at most
+ * MAX_CONCURRENT_SCHEDULED_RUNS at a time. Tasks that don't get a slot keep
+ * their past-due next_run and are picked up by a later poll. Manual "Run now"
+ * bypasses this cap.
+ */
+export async function dispatchDueTasks(tasks: ScheduledTask[]): Promise<string[]> {
+  const inFlight = scheduledInFlight();
+  let slots = MAX_CONCURRENT_SCHEDULED_RUNS - inFlight.size;
+  const started: string[] = [];
+  const ordered = [...tasks].sort(
+    (a, b) => new Date(a.next_run).getTime() - new Date(b.next_run).getTime(),
+  );
+  for (const task of ordered) {
+    if (slots <= 0) break;
+    if (inFlight.has(task.id)) continue;
+    let execution: Promise<void> | undefined;
+    try {
+      ({ execution } = await startLockedRun(task.id));
+    } catch (err) {
+      console.error(`[scheduler] Task ${task.id} (${task.name}) failed to start:`, err);
+      continue;
+    }
+    if (!execution) continue;
+    slots--;
+    inFlight.add(task.id);
+    started.push(task.id);
+    void execution.finally(() => inFlight.delete(task.id));
+  }
+  return started;
 }
 
 /**
@@ -836,13 +875,11 @@ async function handleMissedTasks(): Promise<void> {
       'normal',
       { taskId: task.id, sessionId: task.session_id },
     ).catch(() => { /* best effort */ });
-
-    // Execute through the canonical lock-aware entry point so startup recovery
-    // cannot race a manual run into a duplicate execution.
-    runScheduledTaskNow(task.id).catch(err =>
-      console.error(`[scheduler] Missed task ${task.id} execution failed:`, err)
-    );
   }
+
+  // Lock-aware and capped like the poll loop; tasks beyond the cap stay due
+  // and run on subsequent polls.
+  await dispatchDueTasks(missedOnce);
 }
 
 /**
