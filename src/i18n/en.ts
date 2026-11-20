@@ -2601,6 +2601,22 @@ const en = {
   'cliTools.installPrefillPost': 'After installing, also run:',
   'cliTools.installPrefillAuthNote': 'Note: This tool requires login or auth configuration after installation. Please guide me through the setup after installing.',
   'cliTools.addToolPrefill': 'I want to install a new CLI tool and add it to my tool library.\nTool name: \nInstall command (e.g. brew install xxx): ',
+
+  // Feature Announcement Dialog
+  'announcement.title': 'New: Independent Agent Engine + OpenAI Support',
+  'announcement.description': 'This update includes architectural changes',
+  'announcement.issuesBefore': 'Report issues on ',
+  'announcement.issuesAfter': '.',
+  'announcement.intro': 'CodePilot can now run independently without the Claude Code CLI.',
+  'announcement.aiSdkEngineTitle': 'AI SDK engine',
+  'announcement.aiSdkEngineDesc': ' — no CLI needed, works with all configured providers',
+  'announcement.claudeCodeEngineTitle': 'Claude Code engine',
+  'announcement.claudeCodeEngineDesc': ' — driven by CLI for full command-line capabilities',
+  'announcement.oauthBefore': 'Also supports ',
+  'announcement.oauthHighlight': 'OpenAI OAuth login',
+  'announcement.oauthAfter': ' — ChatGPT Plus/Pro users can sign in under Providers to use GPT-5.5 and more.',
+  'announcement.goToSettings': 'Go to Settings',
+  'announcement.gotIt': 'Got it',
 } as const;
 
 export type TranslationKey = keyof typeof en;

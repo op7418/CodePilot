@@ -2572,6 +2572,22 @@ const zh: Record<TranslationKey, string> = {
   'cliTools.installPrefillPost': '安装后还需要执行：',
   'cliTools.installPrefillAuthNote': '注意：这个工具安装后需要登录或配置认证才能使用，请安装完成后引导我完成认证设置。',
   'cliTools.addToolPrefill': '我想安装一个新的 CLI 工具并添加到工具库。\n工具名称：\n安装命令（如 brew install xxx）：',
+
+  // Feature Announcement Dialog
+  'announcement.title': '新功能：独立 Agent 引擎 + OpenAI 支持',
+  'announcement.description': '本次更新带来了底层架构变更',
+  'announcement.issuesBefore': '如遇问题请到 ',
+  'announcement.issuesAfter': ' 反馈。',
+  'announcement.intro': 'CodePilot 现在可以脱离 Claude Code CLI 独立运行了。',
+  'announcement.aiSdkEngineTitle': 'AI SDK 引擎',
+  'announcement.aiSdkEngineDesc': ' — 无需安装 CLI，支持所有已配置的服务商',
+  'announcement.claudeCodeEngineTitle': 'Claude Code 引擎',
+  'announcement.claudeCodeEngineDesc': ' — 通过 CLI 驱动，获得完整的命令行能力',
+  'announcement.oauthBefore': '同时支持 ',
+  'announcement.oauthHighlight': 'OpenAI 授权登录',
+  'announcement.oauthAfter': '，ChatGPT Plus/Pro 用户可在服务商设置中登录后直接使用 GPT-5.5 等模型。',
+  'announcement.goToSettings': '前往设置',
+  'announcement.gotIt': '知道了',
 };
 
 export default zh;
