@@ -21,7 +21,7 @@
 | WP2 | 依赖：lock 同步、漏洞修复、删无用依赖 | Opus | 完成（mac universal 包未在本机验证） |
 | WP3 | Node 与 Electron 大版本升级 | Opus | 待开始 |
 | WP4 | 第二轮死代码：路由、IPC、模块、`资料/` | Gemini | 完成（`资料/` 按用户决定暂不取消跟踪） |
-| WP5 | GitHub 模板与工作流的过时口径 | Gemini | 待开始 |
+| WP5 | GitHub 模板与工作流的过时口径 | Gemini | 完成 |
 | WP6 | 永久跳过的 E2E 用例 | Gemini | 待开始 |
 | WP7 | 设置页内联中英文迁到 i18n 字典 | Gemini | 待开始 |
 | WP8 | `docs/research/` 与 `docs/guardrails/` 按新标准分流 | Opus | 完成（`v0.56.x-stability-trust` 留待所有者决定） |
@@ -175,3 +175,4 @@
   - `src/lib/plugin-discovery.ts` 在删除 `api/plugins` 两路由后已无剩余调用方，未在本计划模块清单内，暂未删除，记录待后续处理。
   - `src/i18n/{en,zh}.ts` 在保护全部 15 个动态前缀（含计划所列 5 个及全仓扫描确认的其余 10 个）后删除 479 个零引用孤儿键。
   - `src/__tests__/helpers.ts` 删除未使用的旧别名及指向 `svg.lucide-user`/`svg.lucide-bot` 的 `userAvatar`/`assistantAvatar`，并将仍在 `skills.spec.ts` 中调用的 `skillDeleteButton` 选择器从失效的 `svg.lucide-trash-2` 改为 `[class*="cursor-pointer"] button:has(svg)`。
+- 2026-11-20：WP5 完成。清理 `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.yml`、`PULL_REQUEST_TEMPLATE.md`、`TRIAGE.md` 中过时的 `v0.56.x` 冻结期口径（保留 P0/P1 分级与复现信息要求）；`issue-intake.yml` 与 `stale-needs-repro.yml` 去掉硬编码的 `v0.56.2+`；`release-blocker-check.yml` 将写死的 `v0.56.x Stability / Trust` milestone 改为必填 `workflow_dispatch` 输入 `milestone`（经 `env.TARGET_MILESTONE` 传入，保持 fail-closed）；`preview-release.yml` 去掉 `from the refactor branch` 和 `0.54.x` 过时说明。所有 workflow action 保持 40 位 commit SHA。已有 GitHub 标签名未改动（含历史版本号前缀的标签：`v0.57+ parking-lot`，留待仓库所有者决定是否重命名）。

@@ -5,8 +5,8 @@ body:
   - type: markdown
     attributes:
       value: |
-        **注意：v0.56.x 暂停新功能**，专注稳定性与信任。功能建议会被收集到 `v0.57+ parking-lot`，在稳定性 blocker 关闭后再评估——这不代表拒绝，只是排序。
-        _v0.56.x pauses new features; requests are parked under `v0.57+ parking-lot` and revisited after stability blockers close._
+        欢迎提出功能建议或改进想法。请先描述实际遇到的问题与使用场景，便于评估优先级与设计方案。
+        _Feature requests and improvement ideas are welcome. Please describe the underlying problem and use case first so we can prioritize and design cleanly._
   - type: textarea
     id: problem
     attributes:

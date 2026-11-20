@@ -1,6 +1,6 @@
 name: Stale — needs-repro / needs-confirmation
 
-# 保守的 stale 流程（Phase 7B / v0.56.x-stability-trust）：
+# 保守的 stale 流程：
 # 只处理"等用户补信息 / 等确认"的 issue；明确排除所有 P0/P1 高风险，
 # 也不碰 feature（v0.57+ parking-lot 不在 any-of-labels 里）。
 # 节奏：14 天无更新 → 自动评论提醒；再 14 天无回应 → 自动关闭（带说明，可重开）。
@@ -34,7 +34,7 @@ jobs:
           stale-issue-message: |
             这个 issue 因为缺少复现信息 / 等待确认，已经 14 天没有更新。
 
-            如果问题仍然存在，请在最新版本（v0.56.2 及以上）上补充：**版本号、操作系统、运行时 / 服务商、复现步骤或日志**。
+            如果问题仍然存在，请在**最新版本**上补充：**版本号、操作系统、运行时 / 服务商、复现步骤或日志**。
 
             再过 14 天若仍无回应，会自动关闭——这不是否认问题，关闭后随时可以用新信息重新打开。
           close-issue-message: |

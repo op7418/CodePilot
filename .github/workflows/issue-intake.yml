@@ -1,6 +1,6 @@
 name: Issue intake — 新 issue 自动分流
 
-# Phase 7B (v0.56.x-stability-trust)：分流新建/编辑的 issue，并在作者补充后摘 needs-repro + stale。
+# 自动分流新建/编辑的 issue，并在作者补充后摘 needs-repro + stale。
 #   - 功能模板(enhancement) → v0.57+ parking-lot（feature_request.yml 已自带，此处冗余兜底）
 #   - 影响面勾选"数据丢失"/"崩溃中断" → 对应 P0 label
 #   - bug 缺复现(version/os/provider/steps 占位 或 无 form 结构) → needs-repro + 一次性评论
@@ -84,7 +84,7 @@ jobs:
                 body: [
                   '感谢反馈！这个 issue 似乎缺少必要的复现信息，已标记 `needs-repro`。',
                   '',
-                  '请用 **issue 模板**、在最新版 **v0.56.2+** 上补齐：**版本号、操作系统、Runtime、Provider / 模型、复现步骤、日志 / session id**（请脱敏，不要包含 API key）。',
+                  '请用 **issue 模板**、在**最新版本**上补齐：**版本号、操作系统、Runtime、Provider / 模型、复现步骤、日志 / session id**（请脱敏，不要包含 API key）。',
                   '',
                   '**直接在本 issue 下回复补充即可** —— 补全后会自动取消 `needs-repro` 标记、进入正常排队；长期无回应会按 stale 流程提醒、最终关闭（关闭后随时可重新打开）。',
                 ].join('\n'),

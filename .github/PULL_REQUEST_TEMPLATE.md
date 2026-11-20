@@ -1,5 +1,5 @@
 <!--
-v0.56.x 处于 Stability / Trust 阶段：优先合 P0/P1 bug 修复，功能 PR 暂缓（进 v0.57+ parking-lot）。
+P0/P1 bug 修复 PR 优先评审与合并。
 每个合入的 PR 必须有测试，或明确说明为什么不需要。
 -->
 

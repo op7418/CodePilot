@@ -1,8 +1,5 @@
 blank_issues_enabled: false
 contact_links:
-  - name: "v0.56.x Stability / Trust 说明"
-    url: "https://github.com/op7418/CodePilot/blob/main/docs/exec-plans/active/v0.56.x-stability-trust.md"
-    about: "当前版本聚焦稳定性与信任（对话中断/恢复、上下文、文件引用、安装更新、诊断、CI），新功能暂缓。先读这里了解优先级。"
   - name: "提问 / 讨论 / Questions & discussion"
     url: "https://github.com/op7418/CodePilot/discussions"
     about: "使用问题、配置咨询、想法讨论请走 Discussions，不要开 issue。"

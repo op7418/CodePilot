@@ -5,14 +5,14 @@ body:
   - type: markdown
     attributes:
       value: |
-        **v0.56.x 正处于 Stability / Trust 阶段**：优先修复对话中断/恢复、上下文、文件引用安全、安装更新、诊断与 CI 门禁；新功能暂缓。请尽量提供可复现信息——缺版本/平台/runtime/日志的反馈会被打上 `needs-repro` 并延后处理。
-        _v0.56.x is a Stability / Trust line — please provide repro details; reports missing version/OS/runtime/logs get `needs-repro`._
+        请尽量提供完整的可复现信息，方便快速定位问题——缺版本/平台/runtime/日志的反馈会被打上 `needs-repro` 并延后处理。
+        _Please provide reproducible details; reports missing version, OS, runtime, or repro steps get labeled `needs-repro`._
   - type: input
     id: version
     attributes:
       label: "CodePilot 版本 / Version"
-      description: "见 设置 / About，例如 0.56.0"
-      placeholder: "0.56.0"
+      description: "见 设置 / About，例如 0.67.17"
+      placeholder: "0.67.17"
     validations:
       required: true
   - type: input
