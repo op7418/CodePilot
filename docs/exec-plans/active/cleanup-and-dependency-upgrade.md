@@ -23,7 +23,7 @@
 | WP4 | 第二轮死代码：路由、IPC、模块、`资料/` | Gemini | 完成（`资料/` 按用户决定暂不取消跟踪） |
 | WP5 | GitHub 模板与工作流的过时口径 | Gemini | 完成 |
 | WP6 | 永久跳过的 E2E 用例 | Gemini | 完成（`visual-regression.spec.ts` 因基线截图未入库保持 skip） |
-| WP7 | 设置页内联中英文迁到 i18n 字典 | Gemini | 待开始 |
+| WP7 | 设置页内联中英文迁到 i18n 字典 | Gemini | 完成 |
 | WP8 | `docs/research/` 与 `docs/guardrails/` 按新标准分流 | Opus | 完成（`v0.56.x-stability-trust` 留待所有者决定） |
 
 ## 本机环境注意
@@ -185,3 +185,9 @@
   - `mention-ui.spec.ts`：补齐 provider fixture 与 `/api/files/raw` 路由拦截，修复并取消 skip 两个 `@mention` 集成用例。
   - `visual-regression.spec.ts`：保留 `test.describe.skip`（因跨平台截图基线目录已 `.gitignore`，不入库，取消 skip 会导致干净检出环境下 `test:e2e` 必然失败）。
   - 验证：修改的 7 个 E2E 文件共 49 个用例 `npm run test:e2e` 全部通过（49 passed, 0 skipped）；全量 `npm run test:e2e` 另有 7 个无关历史用例失败（`foundation-refresh-capability` U6 因 `CODEX_DISABLED=1`、`context-chips-send-clear` 2 条缺默认 provider、`chat-save-warning` 1 条并行 locale 竞争、`global-search-modes` 1 条、`model-identity-conflict` 2 条超时），未改动这些文件，记录在汇报中。
+- 2026-11-21：WP7 完成。按单文件单 commit 将 `src/components/` 中全部 18 个含硬编码内联双语文案的组件迁入 `src/i18n/{en,zh}.ts`（共新增 499 对键，英文/中文键集合与 `{param}` 占位符 100% 一致，所有文案内容逐字保持不变）：`ModelsSection`、`RuntimePanel`、`ProviderManager`、`HealthSection`、`OverviewSection`、`PresetConnectDialog`、`CodexQuotaWidget`、`OverviewHeatmap`、`ProviderCard`、`RuntimeCapabilityList`、`CodexAccountModelsBlock`、`TasksSection`、`OverviewGettingStartedBar`、`CliToolExtraDetailDialog`、`CliToolDetailDialog`、`CliToolsManager`、`FeatureAnnouncementDialog`、`RunCockpitPopoverContent`。与计划的出入和保留项：
+  - 计划中写 `161` 处 `isZh ? '中文' : 'English'`，实际全仓 `src/components/` 共含 503 处 `isZh ?`（包含模板字符串、多行三元以及读取外部数据对象的非字面量双语字段）；其中 `CliToolCard.tsx`（2 处）仅读取 `autoDescription.zh/en` 和 `tool.summaryZh/En`，不含硬编码内联文案，故未修改。
+  - 其余保留的 `isZh ?` / `locale === 'zh' ?` 均为非字面量数据对（`preset.descriptionZh/description`、`preset.meta.notesZh/notes`、`structured.*.zh/en`、`ep.promptZh/En`、`CODEX_ACCOUNT_HEADER_NOTE.zh/en`、`desc.zh/en`）、BCP-47 日期 locale 参数（`"zh-CN"` / `"en-US"`）、文档链接路径切换，或 `ModelsSection.tsx` 中英文复数差值数字参数。
+  - 5 个组件（`ModelsSection`、`RuntimePanel`、`OverviewHeatmap`、`PresetConnectDialog`、`TasksSection`）存在既有 React 19 ESLint 规则报错（`react-hooks/set-state-in-effect` / `react-hooks/preserve-manual-memoization`），为通过 pre-commit 按仓库既有惯例（同 `useOverviewData.ts` / `McpServerDetailDialog.tsx`）添加了定向 `eslint-disable-next-line` / `eslint-disable` 注释，未改业务逻辑。
+  - 同步更新了 5 个直接正则断言组件源码中英文字面量的源码钉单测（`codex-phase-6-wiring.test.ts`、`codex-binary-discovery.test.ts`、`codex-windows-recovery.test.ts`、`pin-incomplete-ui.test.ts`、`xai-oauth-ui.test.ts`），改为同时断言组件内的 i18n 键引用与 `src/i18n/{en,zh}.ts` 中的精确原文。
+  - 发现但按“文案一字不改”原则未改动：`HealthSection.tsx` 原英文/中文均为 `"执行引擎 / CLI"`（已原样迁入 `health.runtime.title`）；`UsageStatsSection.tsx` 仍有一处未涉及内联文案的 `t('nav.chats') === '对话'`（仅传给 `<OverviewHeatmap isZh={isZh} />`）。
