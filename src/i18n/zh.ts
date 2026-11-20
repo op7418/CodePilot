@@ -2546,6 +2546,14 @@ const zh: Record<TranslationKey, string> = {
   'runtime.capabilities.dialogDesc': '这里只展示 CodePilot 提供的内置 Harness 能力。引擎自身的原生工具（例如 Codex 的 plugins / shell、ClaudeCode 的 hooks）由对应引擎管理，不在此列。',
   'runtime.capabilities.builtInHeading': 'CodePilot 内置能力',
   'runtime.capabilities.userExtensionsHeading': '用户自定义',
+
+  // Settings — Codex Account Models Block
+  'models.codexAccount.title': 'Codex 账户',
+  'models.codexAccount.badge': '仅 Codex',
+  'models.codexAccount.countOne': '{count} 个模型',
+  'models.codexAccount.countMany': '{count} 个模型',
+  'models.codexAccount.manageAccount': '管理账户',
+  'models.codexAccount.desc': 'Codex 账户模型由 ChatGPT 套餐承担，无需 API Key；只在「执行引擎 → Codex」下可用。模型列表由 Codex 自动维护，无需在这里启用/隐藏。',
 };
 
 export default zh;

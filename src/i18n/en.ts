@@ -2575,6 +2575,14 @@ const en = {
   'runtime.capabilities.dialogDesc': 'This list only covers CodePilot’s built-in Harness capabilities. Each engine’s own native tools (Codex plugins / shell, ClaudeCode hooks, etc.) are managed by that engine and not shown here.',
   'runtime.capabilities.builtInHeading': 'Built-in capabilities',
   'runtime.capabilities.userExtensionsHeading': 'User extensions',
+
+  // Settings — Codex Account Models Block
+  'models.codexAccount.title': 'Codex Account',
+  'models.codexAccount.badge': 'Codex only',
+  'models.codexAccount.countOne': '{count} model',
+  'models.codexAccount.countMany': '{count} models',
+  'models.codexAccount.manageAccount': 'Manage account',
+  'models.codexAccount.desc': 'Codex Account models are covered by your ChatGPT plan — no API key required. They run only under Settings → Runtime → Codex. The list is maintained by Codex; nothing to toggle here.',
 } as const;
 
 export type TranslationKey = keyof typeof en;

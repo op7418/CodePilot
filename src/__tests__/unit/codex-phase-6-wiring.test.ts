@@ -409,11 +409,16 @@ describe('Models page — Codex Account read-only block (IA correction)', () => 
       path.join(repoRoot, 'components/settings/CodexAccountModelsBlock.tsx'),
       'utf8',
     );
-    assert.match(blockSrc, /仅 Codex/);
-    assert.match(blockSrc, /Codex only/);
+    const enSrc = fs.readFileSync(path.join(repoRoot, 'i18n/en.ts'), 'utf8');
+    const zhSrc = fs.readFileSync(path.join(repoRoot, 'i18n/zh.ts'), 'utf8');
+    assert.match(blockSrc, /models\.codexAccount\.badge/);
+    assert.match(zhSrc, /'models\.codexAccount\.badge':\s*'仅 Codex'/);
+    assert.match(enSrc, /'models\.codexAccount\.badge':\s*'Codex only'/);
     // Regression guard against re-bolting the suffix.
     assert.doesNotMatch(blockSrc, /仅 Codex Runtime/);
     assert.doesNotMatch(blockSrc, /Codex Runtime only/);
+    assert.doesNotMatch(zhSrc, /'models\.codexAccount\.badge':\s*'仅 Codex Runtime'/);
+    assert.doesNotMatch(enSrc, /'models\.codexAccount\.badge':\s*'Codex Runtime only'/);
   });
 
   it('block is read-only (no enable/disable Switch, no edit display name)', () => {

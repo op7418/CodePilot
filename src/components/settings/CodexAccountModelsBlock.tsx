@@ -27,13 +27,16 @@ import { Button } from "@/components/ui/button";
 import { ArrowSquareOut } from "@/components/ui/icon";
 import { CodePilotIcon } from "@/components/ui/semantic-icon";
 import { cn } from "@/lib/utils";
+import { useTranslation } from "@/hooks/useTranslation";
 import type { ProviderModelGroup } from "@/types";
 
 interface CodexAccountModelsBlockProps {
-  isZh: boolean;
+  isZh?: boolean;
 }
 
-export function CodexAccountModelsBlock({ isZh }: CodexAccountModelsBlockProps) {
+export function CodexAccountModelsBlock(_props: CodexAccountModelsBlockProps) {
+  void _props;
+  const { t } = useTranslation();
   const [group, setGroup] = useState<ProviderModelGroup | null>(null);
   const [loaded, setLoaded] = useState(false);
 
@@ -70,7 +73,7 @@ export function CodexAccountModelsBlock({ isZh }: CodexAccountModelsBlockProps) 
           <div className="flex items-center gap-2 flex-wrap">
             <CodePilotIcon name="model" size="md" className="text-muted-foreground shrink-0" aria-hidden />
             <h3 id="codex-account-models-heading" className="text-sm font-semibold leading-tight">
-              {isZh ? "Codex 账户" : "Codex Account"}
+              {t("models.codexAccount.title")}
             </h3>
             <span
               className={cn(
@@ -78,25 +81,23 @@ export function CodexAccountModelsBlock({ isZh }: CodexAccountModelsBlockProps) 
                 "bg-status-warning-muted text-status-warning-foreground",
               )}
             >
-              {isZh ? "仅 Codex" : "Codex only"}
+              {t("models.codexAccount.badge")}
             </span>
             <span className="text-[11px] text-muted-foreground">
-              {isZh
-                ? `${group.models.length} 个模型`
-                : `${group.models.length} model${group.models.length === 1 ? "" : "s"}`}
+              {group.models.length === 1
+                ? t("models.codexAccount.countOne", { count: group.models.length })
+                : t("models.codexAccount.countMany", { count: group.models.length })}
             </span>
           </div>
           <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" asChild>
             <a href="/settings/providers">
               <ArrowSquareOut size={12} />
-              {isZh ? "管理账户" : "Manage account"}
+              {t("models.codexAccount.manageAccount")}
             </a>
           </Button>
         </div>
         <p className="text-[11px] text-muted-foreground leading-relaxed">
-          {isZh
-            ? "Codex 账户模型由 ChatGPT 套餐承担，无需 API Key；只在「执行引擎 → Codex」下可用。模型列表由 Codex 自动维护，无需在这里启用/隐藏。"
-            : "Codex Account models are covered by your ChatGPT plan — no API key required. They run only under Settings → Runtime → Codex. The list is maintained by Codex; nothing to toggle here."}
+          {t("models.codexAccount.desc")}
         </p>
         <ul className="flex flex-col divide-y divide-border/40 rounded-md bg-muted/30 px-3.5">
           {group.models.map((m) => (
