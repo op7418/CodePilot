@@ -67,7 +67,6 @@ const SEVERITY_ICON: Record<Severity, React.ReactNode> = {
 
 export function HealthSection() {
   const { t } = useTranslation();
-  const isZh = t("nav.chats") === "对话";
   const state = useOverviewData();
   const { status: claudeStatus } = useClaudeStatus();
   // Settings is route-level split — cross-section CTAs must router.push
@@ -95,7 +94,7 @@ export function HealthSection() {
           </p>
         </div>
         <div className="rounded-lg border border-dashed border-border/50 bg-card/50 p-10 text-center">
-          <p className="text-xs text-muted-foreground">{isZh ? "加载中…" : "Loading…"}</p>
+          <p className="text-xs text-muted-foreground">{t("health.loading")}</p>
         </div>
       </div>
     );
@@ -110,30 +109,28 @@ export function HealthSection() {
       return {
         id: "providers",
         icon: <Plug size={16} />,
-        title: isZh ? "服务商连接" : "Provider connectivity",
+        title: t("health.providers.title"),
         severity: "error",
-        reason: isZh ? "尚未配置任何 provider" : "No providers configured",
-        impact: isZh
-          ? "chat 无法发送 — 需要至少添加一个 provider"
-          : "Chat cannot start without a connected provider",
-        ctaLabel: isZh ? "去 Providers" : "Open Providers",
+        reason: t("health.providers.noneReason"),
+        impact: t("health.providers.noneImpact"),
+        ctaLabel: t("health.providers.noneCta"),
         ctaOnClick: () => navToSection("providers"),
       };
     }
     return {
       id: "providers",
       icon: <Plug size={16} />,
-      title: isZh ? "服务商连接" : "Provider connectivity",
+      title: t("health.providers.title"),
       severity: "ok",
-      reason: isZh
-        ? `已配置 ${count} 个 provider`
-        : `${count} provider${count === 1 ? "" : "s"} configured`,
+      reason: count === 1
+        ? t("health.providers.configuredOne", { count })
+        : t("health.providers.configuredMany", { count }),
       // Phase 2C.6 follow-up: the CTA was "运行诊断" but it just
       // navigated to #providers (Provider Doctor lives behind a
       // separate button there). Renaming to match the actual destination
       // — the doctor flow is no longer the headline action since
       // health/issue-filing is now log-driven, not auto-diagnose-driven.
-      ctaLabel: isZh ? "查看 Providers" : "Open Providers",
+      ctaLabel: t("health.providers.okCta"),
       ctaOnClick: () => navToSection("providers"),
     };
   })());
@@ -148,15 +145,11 @@ export function HealthSection() {
       return {
         id: "runtime",
         icon: <CodePilotIcon name="runtime" size="md" />,
-        title: isZh ? "执行引擎 / CLI" : "执行引擎 / CLI",
+        title: t("health.runtime.title"),
         severity: "warn",
-        reason: isZh
-          ? "Claude Code CLI 已禁用，运行时已降级到 CodePilot"
-          : "Claude Code CLI disabled — runtime fell back to CodePilot",
-        impact: isZh
-          ? "仅 CodePilot 兼容的服务商/模型可执行"
-          : "Only CodePilot-compatible providers/models will run",
-        ctaLabel: isZh ? "去执行引擎" : "Open Runtime",
+        reason: t("health.runtime.cliDisabledReason"),
+        impact: t("health.runtime.cliDisabledImpact"),
+        ctaLabel: t("health.runtime.cta"),
         ctaOnClick: () => navToSection("runtime"),
       };
     }
@@ -164,15 +157,11 @@ export function HealthSection() {
       return {
         id: "runtime",
         icon: <CodePilotIcon name="runtime" size="md" />,
-        title: isZh ? "执行引擎 / CLI" : "执行引擎 / CLI",
+        title: t("health.runtime.title"),
         severity: "error",
-        reason: isZh
-          ? "Claude Code CLI 未检测到，运行时已降级"
-          : "Claude Code CLI not detected — runtime fell back",
-        impact: isZh
-          ? "新会话使用 CodePilot，但 Claude Code 专属能力不可用"
-          : "New chats use CodePilot; Claude Code-only features are unavailable",
-        ctaLabel: isZh ? "去执行引擎" : "Open Runtime",
+        reason: t("health.runtime.cliMissingReason"),
+        impact: t("health.runtime.cliMissingImpact"),
+        ctaLabel: t("health.runtime.cta"),
         ctaOnClick: () => navToSection("runtime"),
       };
     }
@@ -180,24 +169,24 @@ export function HealthSection() {
       return {
         id: "runtime",
         icon: <CodePilotIcon name="runtime" size="md" />,
-        title: isZh ? "执行引擎 / CLI" : "执行引擎 / CLI",
+        title: t("health.runtime.title"),
         severity: "warn",
-        reason: isZh
-          ? `Claude Code 报告 ${warnCount} 条兼容性提示`
-          : `Claude Code reports ${warnCount} compatibility warning${warnCount === 1 ? "" : "s"}`,
-        ctaLabel: isZh ? "去执行引擎" : "Open Runtime",
+        reason: warnCount === 1
+          ? t("health.runtime.warningsOne", { count: warnCount })
+          : t("health.runtime.warningsMany", { count: warnCount }),
+        ctaLabel: t("health.runtime.cta"),
         ctaOnClick: () => navToSection("runtime"),
       };
     }
     return {
       id: "runtime",
       icon: <CodePilotIcon name="runtime" size="md" strokeWidth={2} />,
-      title: isZh ? "执行引擎 / CLI" : "执行引擎 / CLI",
+      title: t("health.runtime.title"),
       severity: "ok",
       reason: state.agentRuntime === "claude-code-sdk"
-        ? (isZh ? "Claude Code 已就绪" : "Claude Code ready")
-        : (isZh ? "CodePilot 已就绪" : "CodePilot ready"),
-      ctaLabel: isZh ? "去执行引擎" : "Open Runtime",
+        ? t("health.runtime.claudeReady")
+        : t("health.runtime.codepilotReady"),
+      ctaLabel: t("health.runtime.cta"),
       ctaOnClick: () => navToSection("runtime"),
     };
   })());
@@ -208,15 +197,11 @@ export function HealthSection() {
       return {
         id: "default-model",
         icon: <CodePilotIcon name="model" size="md" />,
-        title: isZh ? "默认模型有效性" : "Default model validity",
+        title: t("health.defaultModel.title"),
         severity: "error",
-        reason: isZh
-          ? "当前执行引擎 下没有可用 provider/model"
-          : "No compatible provider under current Runtime",
-        impact: isZh
-          ? "新会话进入'无兼容服务'状态，无法发送"
-          : "New chats land in the 'no compatible provider' state",
-        ctaLabel: isZh ? "去执行引擎" : "Open Runtime",
+        reason: t("health.defaultModel.noCompatReason"),
+        impact: t("health.defaultModel.noCompatImpact"),
+        ctaLabel: t("health.runtime.cta"),
         ctaOnClick: () => navToSection("runtime"),
       };
     }
@@ -231,30 +216,25 @@ export function HealthSection() {
         return {
           id: "default-model",
           icon: <CodePilotIcon name="model" size="md" />,
-          title: isZh ? "默认模型有效性" : "Default model validity",
+          title: t("health.defaultModel.title"),
           severity: "warn",
-          reason: isZh
-            ? "默认模型固定信息不完整（缺 provider 绑定）"
-            : "Pinned default is incomplete (missing provider binding)",
-          impact: isZh
-            ? "新会话会自动使用当前环境下的可用模型；到「模型」页重新固定即可"
-            : "New chats auto-use an available model; re-pin in Models to fix",
-          ctaLabel: isZh ? "去 Models" : "Open Models",
+          reason: t("health.defaultModel.pinIncompleteReason"),
+          impact: t("health.defaultModel.pinIncompleteImpact"),
+          ctaLabel: t("health.defaultModel.cta"),
           ctaOnClick: () => navToSection("models"),
         };
       }
       return {
         id: "default-model",
         icon: <CodePilotIcon name="model" size="md" />,
-        title: isZh ? "默认模型有效性" : "Default model validity",
+        title: t("health.defaultModel.title"),
         severity: "warn",
-        reason: isZh
-          ? `已固定 ${provDisplay} / ${modelDisplay} — 不在当前执行引擎的兼容范围内`
-          : `Pinned ${provDisplay} / ${modelDisplay} — not compatible with the current Runtime`,
-        impact: isZh
-          ? "新会话会自动使用当前环境下的可用模型；可去「模型」页改默认或切回 Auto"
-          : "New chats fall back to an available model; change the default in Models or revert to Auto",
-        ctaLabel: isZh ? "去 Models" : "Open Models",
+        reason: t("health.defaultModel.incompatibleReason", {
+          provider: provDisplay,
+          model: modelDisplay,
+        }),
+        impact: t("health.defaultModel.incompatibleImpact"),
+        ctaLabel: t("health.defaultModel.cta"),
         ctaOnClick: () => navToSection("models"),
       };
     }
@@ -262,24 +242,26 @@ export function HealthSection() {
       return {
         id: "default-model",
         icon: <CodePilotIcon name="model" size="md" />,
-        title: isZh ? "默认模型有效性" : "Default model validity",
+        title: t("health.defaultModel.title"),
         severity: "ok",
-        reason: isZh
-          ? `已固定 ${state.defaultProviderName ?? "?"} / ${state.defaultModelLabel ?? "?"}`
-          : `Pinned ${state.defaultProviderName ?? "?"} / ${state.defaultModelLabel ?? "?"}`,
-        ctaLabel: isZh ? "去 Models" : "Open Models",
+        reason: t("health.defaultModel.pinnedOk", {
+          provider: state.defaultProviderName ?? "?",
+          model: state.defaultModelLabel ?? "?",
+        }),
+        ctaLabel: t("health.defaultModel.cta"),
         ctaOnClick: () => navToSection("models"),
       };
     }
     return {
       id: "default-model",
       icon: <CodePilotIcon name="model" size="md" />,
-      title: isZh ? "默认模型有效性" : "Default model validity",
+      title: t("health.defaultModel.title"),
       severity: "ok",
-      reason: isZh
-        ? `Auto — 当前解析到 ${state.defaultProviderName ?? "?"} / ${state.defaultModelLabel ?? "?"}`
-        : `Auto — currently resolves to ${state.defaultProviderName ?? "?"} / ${state.defaultModelLabel ?? "?"}`,
-      ctaLabel: isZh ? "去 Models" : "Open Models",
+      reason: t("health.defaultModel.autoOk", {
+        provider: state.defaultProviderName ?? "?",
+        model: state.defaultModelLabel ?? "?",
+      }),
+      ctaLabel: t("health.defaultModel.cta"),
       ctaOnClick: () => navToSection("models"),
     };
   })());
@@ -290,12 +272,10 @@ export function HealthSection() {
       return {
         id: "models-exposure",
         icon: <CodePilotIcon name="model" size="md" />,
-        title: isZh ? "模型暴露" : "Models exposure",
+        title: t("health.modelsExposure.title"),
         severity: "ok",
-        reason: isZh
-          ? "尚未配置 provider — 详见上方"
-          : "No providers configured yet — see above",
-        ctaLabel: isZh ? "去 Models" : "Open Models",
+        reason: t("health.modelsExposure.noProvidersReason"),
+        ctaLabel: t("health.defaultModel.cta"),
         ctaOnClick: () => navToSection("models"),
       };
     }
@@ -303,32 +283,31 @@ export function HealthSection() {
       return {
         id: "models-exposure",
         icon: <CodePilotIcon name="model" size="md" />,
-        title: isZh ? "模型暴露" : "Models exposure",
+        title: t("health.modelsExposure.title"),
         severity: "error",
-        reason: isZh
-          ? "已接入 provider，但没有任何模型对 picker 可见"
-          : "Providers connected, but no models visible to the picker",
-        impact: isZh
-          ? "chat picker 为空，无法选择模型"
-          : "Chat picker is empty",
-        ctaLabel: isZh ? "去 Models" : "Open Models",
+        reason: t("health.modelsExposure.noneVisibleReason"),
+        impact: t("health.modelsExposure.noneVisibleImpact"),
+        ctaLabel: t("health.defaultModel.cta"),
         ctaOnClick: () => navToSection("models"),
       };
     }
     const manualNote = (state.modelsManualEnabled > 0 || state.modelsManualHidden > 0)
-      ? (isZh
-          ? `（手动启用 ${state.modelsManualEnabled} · 手动隐藏 ${state.modelsManualHidden}）`
-          : ` (${state.modelsManualEnabled} manual on · ${state.modelsManualHidden} manual off)`)
+      ? t("health.modelsExposure.manualNote", {
+          enabled: state.modelsManualEnabled,
+          hidden: state.modelsManualHidden,
+        })
       : "";
     return {
       id: "models-exposure",
       icon: <CodePilotIcon name="model" size="md" />,
-      title: isZh ? "模型暴露" : "Models exposure",
+      title: t("health.modelsExposure.title"),
       severity: "ok",
-      reason: isZh
-        ? `${state.modelsEnabled} / ${state.modelsTotal} 个模型已对 picker 暴露${manualNote}`
-        : `${state.modelsEnabled} of ${state.modelsTotal} models exposed to picker${manualNote}`,
-      ctaLabel: isZh ? "去 Models" : "Open Models",
+      reason: t("health.modelsExposure.exposedReason", {
+        enabled: state.modelsEnabled,
+        total: state.modelsTotal,
+        manualNote,
+      }),
+      ctaLabel: t("health.defaultModel.cta"),
       ctaOnClick: () => navToSection("models"),
     };
   })());
@@ -339,25 +318,23 @@ export function HealthSection() {
       return {
         id: "workspace",
         icon: <UserCircle size={16} />,
-        title: isZh ? "助理工作空间" : "Assistant workspace",
+        title: t("health.workspace.title"),
         severity: "ok",
         reason: state.workspaceName
-          ? (isZh ? `已配置：${state.workspaceName}` : `Configured: ${state.workspaceName}`)
-          : (isZh ? "已配置工作空间" : "Workspace configured"),
-        ctaLabel: isZh ? "去助理" : "Open Assistant",
+          ? t("health.workspace.configuredNamed", { name: state.workspaceName })
+          : t("health.workspace.configured"),
+        ctaLabel: t("health.workspace.cta"),
         ctaOnClick: () => navToSection("assistant"),
       };
     }
     return {
       id: "workspace",
       icon: <UserCircle size={16} />,
-      title: isZh ? "助理工作空间" : "Assistant workspace",
+      title: t("health.workspace.title"),
       severity: "warn",
-      reason: isZh ? "尚未配置助理工作空间" : "Assistant workspace not configured",
-      impact: isZh
-        ? "助理无法在本地目录上协作"
-        : "Assistant cannot collaborate on local files",
-      ctaLabel: isZh ? "去助理" : "Open Assistant",
+      reason: t("health.workspace.notConfiguredReason"),
+      impact: t("health.workspace.notConfiguredImpact"),
+      ctaLabel: t("health.workspace.cta"),
       ctaOnClick: () => navToSection("assistant"),
     };
   })());
@@ -371,10 +348,10 @@ export function HealthSection() {
 
   const overallTone =
     overallSeverity === "ok"
-      ? (isZh ? "一切正常" : "All systems healthy")
+      ? t("health.overall.ok")
       : overallSeverity === "warn"
-        ? (isZh ? "存在 1 项以上提示" : "One or more warnings")
-        : (isZh ? "存在阻塞问题" : "Blocking issues detected");
+        ? t("health.overall.warn")
+        : t("health.overall.error");
 
   return (
     <div className="max-w-4xl mx-auto space-y-8">
@@ -414,12 +391,10 @@ export function HealthSection() {
           <Info size={16} className="text-foreground/60 shrink-0 mt-0.5" />
           <div className="min-w-0">
             <h3 className="text-sm font-medium">
-              {isZh ? "需要进一步排查？" : "Need to investigate further?"}
+              {t("health.investigate.title")}
             </h3>
             <p className="text-sm text-muted-foreground mt-1.5 leading-relaxed">
-              {isZh
-                ? "如果上方状态没有解释你遇到的问题，去 关于 页面导出诊断包，里面包含运行日志、provider 解析链与连接探测结果，便于本地排查或随 issue 一起反馈。"
-                : "If the rows above don't explain what you're seeing, head to About to export a diagnostic bundle — it includes runtime logs, the provider-resolution chain, and probe results for local investigation or issue filing."}
+              {t("health.investigate.desc")}
             </p>
           </div>
         </div>
@@ -429,7 +404,7 @@ export function HealthSection() {
           className="shrink-0 gap-1.5"
           onClick={() => navToSection("about")}
         >
-          {isZh ? "去 About" : "Open About"}
+          {t("health.investigate.cta")}
           <CaretRight size={12} weight="bold" />
         </Button>
       </div>

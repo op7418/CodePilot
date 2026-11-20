@@ -25,11 +25,19 @@ describe('#27 pin-incomplete UI differentiation (source-pin)', () => {
 
   it('HealthSection 分支 pin-incomplete，且不再 error/阻断/"not executable"', () => {
     const src = read('components/settings/HealthSection.tsx');
+    const enSrc = read('i18n/en.ts');
+    const zhSrc = read('i18n/zh.ts');
     assert.match(src, /defaultInvalidReason\s*===\s*"pin-incomplete"/);
-    assert.match(src, /固定信息不完整|incomplete \(missing provider/);
+    assert.match(src, /health\.defaultModel\.pinIncompleteReason/);
+    assert.match(zhSrc, /'health\.defaultModel\.pinIncompleteReason':[\s\S]{0,120}固定信息不完整/);
+    assert.match(enSrc, /'health\.defaultModel\.pinIncompleteReason':[\s\S]{0,120}incomplete \(missing provider/);
     // 旧的吓人/误导文案必须移除（invalid-default 分支不再用）
     assert.doesNotMatch(src, /not executable under current Runtime/);
     assert.doesNotMatch(src, /新消息会被阻断/);
+    const enHealthBlock = enSrc.slice(enSrc.indexOf('// Settings — Health'));
+    const zhHealthBlock = zhSrc.slice(zhSrc.indexOf('// Settings — Health'));
+    assert.doesNotMatch(enHealthBlock, /not executable under current Runtime/);
+    assert.doesNotMatch(zhHealthBlock, /新消息会被阻断/);
   });
 
   it('RuntimePanel banner 分支 invalidDefault.reason === pin-incomplete', () => {
