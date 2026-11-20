@@ -2589,6 +2589,9 @@ const en = {
   'tasks.noHistory': 'No execution history yet',
   'tasks.openSession': 'Open session',
   'tasks.noDeliveries': 'No delivery rows',
+
+  // Settings — Overview Getting Started Bar
+  'overview.allSet': '✓ All set',
 } as const;
 
 export type TranslationKey = keyof typeof en;

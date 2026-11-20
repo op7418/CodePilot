@@ -26,11 +26,10 @@ export interface ChecklistItem {
 
 export function OverviewGettingStartedBar({
   items,
-  isZh,
   t,
 }: {
   items: ChecklistItem[];
-  isZh: boolean;
+  isZh?: boolean;
   t: (key: TranslationKey, vars?: Record<string, string | number>) => string;
 }) {
   const total = items.length;
@@ -100,7 +99,7 @@ export function OverviewGettingStartedBar({
       {/* Optional footer when all done — but the bar is hidden in that case */}
       {done === total && (
         <div className="px-4 py-2.5 text-[11px] text-status-success-foreground bg-status-success-muted/30">
-          {isZh ? "✓ 全部就绪" : "✓ All set"}
+          {t("overview.allSet")}
         </div>
       )}
     </div>

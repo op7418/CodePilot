@@ -2560,6 +2560,9 @@ const zh: Record<TranslationKey, string> = {
   'tasks.noHistory': '暂无执行记录',
   'tasks.openSession': '打开执行会话',
   'tasks.noDeliveries': '无通知通道记录',
+
+  // Settings — Overview Getting Started Bar
+  'overview.allSet': '✓ 全部就绪',
 };
 
 export default zh;
