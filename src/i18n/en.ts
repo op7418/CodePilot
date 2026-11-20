@@ -2546,6 +2546,17 @@ const en = {
   'overview.heatmap.less': 'Less',
   'overview.heatmap.more': 'More',
   'overview.heatmap.daysUnit': 'days',
+
+  // Settings — Provider Card
+  'provider.card.statusAvailable': 'Available',
+  'provider.card.statusNeedsConfig': 'Needs config',
+  'provider.card.statusError': 'Error',
+  'provider.card.statusUnknown': 'Not checked',
+  'provider.card.edit': 'Edit',
+  'provider.card.disconnect': 'Disconnect',
+  'provider.card.moreActions': 'More actions',
+  'provider.card.diagnose': 'Diagnose',
+  'provider.card.syncToClaudeCode': 'Sync to Claude Code',
 } as const;
 
 export type TranslationKey = keyof typeof en;

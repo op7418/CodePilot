@@ -2517,6 +2517,17 @@ const zh: Record<TranslationKey, string> = {
   'overview.heatmap.less': '少',
   'overview.heatmap.more': '多',
   'overview.heatmap.daysUnit': '天',
+
+  // Settings — Provider Card
+  'provider.card.statusAvailable': '可用',
+  'provider.card.statusNeedsConfig': '需配置',
+  'provider.card.statusError': '异常',
+  'provider.card.statusUnknown': '未诊断',
+  'provider.card.edit': '编辑',
+  'provider.card.disconnect': '断开',
+  'provider.card.moreActions': '更多操作',
+  'provider.card.diagnose': '诊断',
+  'provider.card.syncToClaudeCode': '同步到 Claude Code',
 };
 
 export default zh;

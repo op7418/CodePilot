@@ -17,6 +17,8 @@ import {
 } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 import { compatLabel, compatDotColor, compatTooltip } from "@/lib/runtime-compat";
+import { useTranslation } from "@/hooks/useTranslation";
+import type { TranslationKey } from "@/i18n";
 
 /**
  * Provider Card v3 — compact pattern.
@@ -87,18 +89,11 @@ const STATUS_TONE: Record<ProviderCardStatus, string> = {
   unknown: "bg-muted text-muted-foreground",
 };
 
-const STATUS_LABEL_ZH: Record<ProviderCardStatus, string> = {
-  available: "可用",
-  "needs-config": "需配置",
-  error: "异常",
-  unknown: "未诊断",
-};
-
-const STATUS_LABEL_EN: Record<ProviderCardStatus, string> = {
-  available: "Available",
-  "needs-config": "Needs config",
-  error: "Error",
-  unknown: "Not checked",
+const STATUS_LABEL_KEY: Record<ProviderCardStatus, TranslationKey> = {
+  available: "provider.card.statusAvailable",
+  "needs-config": "provider.card.statusNeedsConfig",
+  error: "provider.card.statusError",
+  unknown: "provider.card.statusUnknown",
 };
 
 export function ProviderCard({
@@ -111,10 +106,10 @@ export function ProviderCard({
   onDiagnose,
   onSyncToClaudeCode,
 }: ProviderCardProps) {
+  const { t } = useTranslation();
   const [menuOpen, setMenuOpen] = useState(false);
 
-  const statusLabel =
-    data.statusLabel ?? (isZh ? STATUS_LABEL_ZH[data.status] : STATUS_LABEL_EN[data.status]);
+  const statusLabel = data.statusLabel ?? t(STATUS_LABEL_KEY[data.status]);
 
   const hasKebabActions = !!(onDiagnose || onSyncToClaudeCode);
 
@@ -142,7 +137,7 @@ export function ProviderCard({
                   onClick={onEdit}
                   className="h-8 px-2.5 text-xs text-muted-foreground hover:text-foreground"
                 >
-                  {isZh ? "编辑" : "Edit"}
+                  {t("provider.card.edit")}
                 </Button>
               )}
               {onDelete && (
@@ -152,7 +147,7 @@ export function ProviderCard({
                   onClick={onDelete}
                   className="h-8 px-2.5 text-xs text-muted-foreground hover:text-destructive"
                 >
-                  {isZh ? "断开" : "Disconnect"}
+                  {t("provider.card.disconnect")}
                 </Button>
               )}
               {hasKebabActions && (
@@ -162,8 +157,8 @@ export function ProviderCard({
                       variant="ghost"
                       size="icon-sm"
                       className="text-muted-foreground hover:text-foreground"
-                      aria-label={isZh ? '更多操作' : 'More actions'}
-                      title={isZh ? '更多操作' : 'More actions'}
+                      aria-label={t("provider.card.moreActions")}
+                      title={t("provider.card.moreActions")}
                     >
                       <DotsThree size={16} weight="bold" />
                     </Button>
@@ -172,12 +167,12 @@ export function ProviderCard({
                     {onDiagnose && (
                       <DropdownMenuItem onClick={onDiagnose}>
                         <CodePilotIcon name="diagnose" size="sm" aria-hidden />
-                        <span>{isZh ? "诊断" : "Diagnose"}</span>
+                        <span>{t("provider.card.diagnose")}</span>
                       </DropdownMenuItem>
                     )}
                     {onSyncToClaudeCode && (
                       <DropdownMenuItem onClick={onSyncToClaudeCode}>
-                        <span>{isZh ? "同步到 Claude Code" : "Sync to Claude Code"}</span>
+                        <span>{t("provider.card.syncToClaudeCode")}</span>
                       </DropdownMenuItem>
                     )}
                   </DropdownMenuContent>
