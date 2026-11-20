@@ -34,7 +34,11 @@ describe('#27 pin-incomplete UI differentiation (source-pin)', () => {
 
   it('RuntimePanel banner 分支 invalidDefault.reason === pin-incomplete', () => {
     const src = read('components/settings/RuntimePanel.tsx');
+    const enSrc = read('i18n/en.ts');
+    const zhSrc = read('i18n/zh.ts');
     assert.match(src, /invalidDefault\.reason\s*===\s*"pin-incomplete"/);
-    assert.match(src, /固定信息不完整|Pinned default is incomplete/);
+    assert.match(src, /runtime\.invalidDefault\.pinIncompleteTitle/);
+    assert.match(zhSrc, /'runtime\.invalidDefault\.pinIncompleteTitle':\s*'默认模型固定信息不完整'/);
+    assert.match(enSrc, /'runtime\.invalidDefault\.pinIncompleteTitle':\s*'Pinned default is incomplete'/);
   });
 });

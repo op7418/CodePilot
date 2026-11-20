@@ -196,8 +196,11 @@ describe('RuntimePanel — three-engine picker (IA correction)', () => {
       'the refresh button must POST so same-path upgrades clear resolver/version/failure caches',
     );
     assert.match(panelSrc, /["']binary["']\s+in\s+codexAvailability/);
-    assert.match(panelSrc, /CLI 来源/);
-    assert.match(panelSrc, /CLI source/);
+    assert.match(panelSrc, /runtime\.codexDetail\.cliSource/);
+    const enSrc = fs.readFileSync(path.join(repoRoot, 'i18n/en.ts'), 'utf8');
+    const zhSrc = fs.readFileSync(path.join(repoRoot, 'i18n/zh.ts'), 'utf8');
+    assert.match(zhSrc, /'runtime\.codexDetail\.cliSource':\s*'CLI 来源'/);
+    assert.match(enSrc, /'runtime\.codexDetail\.cliSource':\s*'CLI source'/);
   });
 });
 

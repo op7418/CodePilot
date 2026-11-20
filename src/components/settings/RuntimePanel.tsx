@@ -125,28 +125,22 @@ interface RuntimeStatusInfo {
   recovery?: string; // omitted when no recovery is needed
 }
 
-function codexCliInstallRecovery(isZh: boolean, isWindowsElectron: boolean): string {
+function codexCliInstallRecovery(
+  t: (key: TranslationKey) => string,
+  isWindowsElectron: boolean,
+): string {
   if (isWindowsElectron) {
-    return isZh
-      ? "在 PowerShell 运行 `irm https://chatgpt.com/codex/install.ps1 | iex` 安装独立 CLI，或设置 CODEX_BIN 后刷新"
-      : "Run `irm https://chatgpt.com/codex/install.ps1 | iex` in PowerShell, or set CODEX_BIN, then refresh";
+    return t("runtime.codexInstallRecoveryWin");
   }
-  return isZh
-    ? "按 Codex 官方文档安装适用于当前平台的 CLI，或设置 CODEX_BIN 指向自定义路径后刷新"
-    : "Install the Codex CLI using the official instructions for this platform, or set CODEX_BIN to a custom binary, then refresh";
+  return t("runtime.codexInstallRecoveryOther");
 }
 
 // ---------------------------------------------------------------------------
 // Status pill (mirrors design.md "Status pill — provider runtime state")
 // ---------------------------------------------------------------------------
 
-function RuntimeStatusPill({
-  state,
-  isZh,
-}: {
-  state: RuntimeState;
-  isZh: boolean;
-}) {
+function RuntimeStatusPill({ state }: { state: RuntimeState }) {
+  const { t } = useTranslation();
   const tone: Record<RuntimeState, string> = {
     selected: "bg-status-success-muted text-status-success-foreground",
     available: "bg-muted text-muted-foreground",
@@ -161,12 +155,12 @@ function RuntimeStatusPill({
     blocked: "bg-status-error-foreground",
     disabled: "bg-muted-foreground",
   };
-  const label: Record<RuntimeState, [string, string]> = {
-    selected: ["当前默认", "Current default"],
-    available: ["可用", "Available"],
-    degraded: ["可用但有提示", "Available with warnings"],
-    blocked: ["不可用", "Blocked"],
-    disabled: ["已关闭", "Disabled"],
+  const labelKey: Record<RuntimeState, TranslationKey> = {
+    selected: "runtime.status.selected",
+    available: "runtime.status.available",
+    degraded: "runtime.status.degraded",
+    blocked: "runtime.status.blocked",
+    disabled: "runtime.status.disabled",
   };
   return (
     <span
@@ -176,7 +170,7 @@ function RuntimeStatusPill({
       )}
     >
       <span className={cn("size-1.5 rounded-full", dot[state])} />
-      {isZh ? label[state][0] : label[state][1]}
+      {t(labelKey[state])}
     </span>
   );
 }
@@ -186,13 +180,14 @@ function RuntimeStatusPill({
 // has content. Reason is mandatory; impact/recovery are conditional.
 // ---------------------------------------------------------------------------
 
-function RuntimeStatusExplanation({ info, isZh }: { info: RuntimeStatusInfo; isZh: boolean }) {
+function RuntimeStatusExplanation({ info }: { info: RuntimeStatusInfo }) {
+  const { t } = useTranslation();
   const rows: { label: string; value: string }[] = [
-    { label: isZh ? "原因" : "Reason", value: info.reason },
-    { label: isZh ? "影响" : "Impact", value: info.impact },
+    { label: t("runtime.explanation.reason"), value: info.reason },
+    { label: t("runtime.explanation.impact"), value: info.impact },
   ];
   if (info.recovery) {
-    rows.push({ label: isZh ? "怎么恢复" : "Recovery", value: info.recovery });
+    rows.push({ label: t("runtime.explanation.recovery"), value: info.recovery });
   }
   return (
     <div className="rounded-md bg-muted/40 px-3.5 divide-y divide-border/50">
@@ -214,19 +209,17 @@ function RuntimeStatusExplanation({ info, isZh }: { info: RuntimeStatusInfo; isZ
 function RuntimeCard({
   name,
   state,
-  isZh,
   children,
 }: {
   name: string;
   state: RuntimeState;
-  isZh: boolean;
   children: React.ReactNode;
 }) {
   return (
     <div className="rounded-lg bg-card border border-border/50 p-5 flex flex-col gap-4">
       <div className="flex items-center gap-2 flex-wrap">
         <h3 className="text-sm font-semibold leading-tight">{name}</h3>
-        <RuntimeStatusPill state={state} isZh={isZh} />
+        <RuntimeStatusPill state={state} />
       </div>
       {children}
     </div>
@@ -250,7 +243,6 @@ function EnginePickerCard({
   pitch,
   statusKind,
   statusText,
-  isZh,
   icon,
   trigger,
 }: {
@@ -263,7 +255,6 @@ function EnginePickerCard({
   /** `ok` → success-tone status row; `warning` → warning-tone (e.g. CLI not installed). */
   statusKind: "ok" | "warning";
   statusText: string;
-  isZh: boolean;
   icon: React.ReactNode;
   /** Phase 5e review round 7 (2026-05-18 user feedback) — the
    *  "view capabilities" trigger lives INSIDE the engine card. We
@@ -468,10 +459,12 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
   const [codexRecoveryMethod, setCodexRecoveryMethod] = useState<"npm" | "standalone_script" | null>(null);
   const [isWindowsElectron, setIsWindowsElectron] = useState(false);
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setIsWindowsElectron(window.electronAPI?.versions.platform === "win32");
   }, []);
   useEffect(() => {
     let cancelled = false;
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     setCodexStatusLoading(true);
     (async () => {
       try {
@@ -764,6 +757,7 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchAll();
   }, [fetchAll]);
 
@@ -1029,56 +1023,34 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
     if (!connected) {
       return {
         state: "blocked",
-        reason: isZh
-          ? "未检测到 Claude Code CLI（或 OAuth 登录已过期）"
-          : "Claude Code CLI not detected (or OAuth login has expired)",
-        impact: isZh
-          ? "无法用 Claude Code 内核跑会话；选用后会自动回退到 CodePilot"
-          : "Sessions cannot run on Claude Code; selecting it falls back to CodePilot",
-        recovery: isZh
-          ? "下方点「安装」启动一键安装向导，或先在系统终端 `claude /login` 完成授权"
-          : "Click Install below to launch the wizard, or run `claude /login` in a terminal",
+        reason: t("runtime.claude.blockedReason"),
+        impact: t("runtime.claude.blockedImpact"),
+        recovery: t("runtime.claude.blockedRecovery"),
       };
     }
     if (hasWarnings) {
       return {
         state: "degraded",
-        reason: isZh
-          ? "Claude Code 已安装但有兼容性提示（详见下方警告列表）"
-          : "Claude Code is installed but reports compatibility warnings (see below)",
-        impact: isZh
-          ? "可以运行，但部分功能行为可能与新版本不一致；建议升级"
-          : "Sessions still run, but some behavior may diverge from the latest version. Upgrade recommended.",
+        reason: t("runtime.claude.degradedReason"),
+        impact: t("runtime.claude.degradedImpact"),
         recovery: updateAvailable
-          ? isZh
-            ? "下方点「升级」一键更新到最新版本"
-            : "Click Upgrade below to update to the latest version"
-          : isZh
-            ? "在系统终端运行 `claude --version` 检查版本与 SDK 兼容性"
-            : "Run `claude --version` in a terminal to check the version against SDK compatibility",
+          ? t("runtime.claude.degradedRecoveryUpgrade")
+          : t("runtime.claude.degradedRecoveryCheck"),
       };
     }
     if (effectiveRuntime === "claude-code-sdk") {
       return {
         state: "selected",
-        reason: isZh
-          ? "Claude Code 已安装并被设为默认引擎"
-          : "Claude Code is installed and set as the default engine",
-        impact: isZh
-          ? "新会话默认走 Claude Code 内核，使用 ~/.claude/settings.json 中的环境与权限"
-          : "New chats run on the Claude Code engine, honoring ~/.claude/settings.json",
+        reason: t("runtime.claude.selectedReason"),
+        impact: t("runtime.claude.selectedImpact"),
       };
     }
     return {
       state: "available",
-      reason: isZh
-        ? "Claude Code 已安装但未被设为默认引擎"
-        : "Claude Code is installed but isn't the default engine",
-      impact: isZh
-        ? "想切回 Claude Code 内核，把上方「默认引擎」切到 Claude Code 即可"
-        : 'Switch the "Default engine" selector above to use Claude Code',
+      reason: t("runtime.claude.availableReason"),
+      impact: t("runtime.claude.availableImpact"),
     };
-  }, [connected, hasWarnings, updateAvailable, effectiveRuntime, isZh]);
+  }, [connected, hasWarnings, updateAvailable, effectiveRuntime, t]);
 
   /**
    * Codex Runtime — Phase 5 Phase 6 IA correction (2026-05-14).
@@ -1089,51 +1061,40 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
    */
   const codexRuntimeStatus: RuntimeStatusInfo = useMemo(() => {
     const isSelected = effectiveRuntime === "codex_runtime";
-    const installRecovery = codexCliInstallRecovery(isZh, isWindowsElectron);
+    const installRecovery = codexCliInstallRecovery(t, isWindowsElectron);
     if (codexAvailability.kind === "desktop_only") {
       return {
         state: "blocked",
-        reason: isZh
-          ? "检测到 ChatGPT/Codex 桌面应用，但没有可供 CodePilot 启动的独立 Codex CLI"
-          : "The ChatGPT/Codex desktop app was found, but no standalone Codex CLI is executable by CodePilot",
-        impact: isZh
-          ? "桌面应用本身仍可使用；Codex Runtime 需要能启动 app-server 的 CLI，当前发送会失败"
-          : "The desktop app remains usable, but Codex Runtime needs a CLI that can launch app-server and sends will currently fail",
+        reason: t("runtime.codex.desktopOnlyReason"),
+        impact: t("runtime.codex.desktopOnlyImpact"),
         recovery: installRecovery,
       };
     }
     if (codexAvailability.kind === "not_installed") {
       return {
         state: "blocked",
-        reason: isZh
-          ? "未检测到可用的 Codex CLI"
-          : "No usable Codex CLI was detected",
-        impact: isZh
-          ? "Codex Runtime 整体无法启用：Codex 账户模型（gpt-5.5 等）和 CodePilot 服务商经 proxy 接入两条路径都会发送失败"
-          : "Codex Runtime is fully blocked: both Codex Account models (gpt-5.5 etc.) and CodePilot providers via the proxy will fail at send time",
+        reason: t("runtime.codex.notInstalledReason"),
+        impact: t("runtime.codex.notInstalledImpact"),
         recovery: installRecovery,
       };
     }
     if (codexAvailability.kind === "too_old") {
       return {
         state: "degraded",
-        reason: isZh
-          ? `检测到的 Codex 版本 ${codexAvailability.version} 低于最低 ${codexAvailability.minimum}`
-          : `Detected Codex ${codexAvailability.version} below required minimum ${codexAvailability.minimum}`,
-        impact: isZh
-          ? "部分能力可能不可用，建议升级 codex CLI 后再使用"
-          : "Some capabilities may be unavailable; please upgrade codex CLI",
-        recovery: isZh ? "升级 codex CLI 到最新版本" : "Upgrade codex CLI to the latest version",
+        reason: t("runtime.codex.tooOldReason", {
+          version: codexAvailability.version,
+          minimum: codexAvailability.minimum,
+        }),
+        impact: t("runtime.codex.tooOldImpact"),
+        recovery: t("runtime.codex.tooOldRecovery"),
       };
     }
     if (codexAvailability.kind === "spawn_failed") {
       return {
         state: "blocked",
-        reason: isZh ? `Codex 应用服务启动失败：${codexAvailability.reason}` : `Codex app-server spawn failed: ${codexAvailability.reason}`,
-        impact: isZh
-          ? "Codex Runtime 整体不可用（Codex 账户模型 + CodePilot 服务商经 proxy 接入都受影响）；查看终端日志获取详细错误"
-          : "Codex Runtime is fully unavailable (both Codex Account models and CodePilot providers via the proxy are blocked); check terminal logs for details",
-        recovery: isZh ? "点右上角刷新，重新扫描已安装的 CLI" : "Click refresh to rescan installed CLIs",
+        reason: t("runtime.codex.spawnFailedReason", { reason: codexAvailability.reason }),
+        impact: t("runtime.codex.spawnFailedImpact"),
+        recovery: t("runtime.codex.spawnFailedRecovery"),
       };
     }
     if (codexAvailability.kind === "installed_idle") {
@@ -1143,39 +1104,31 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
         // as "something's broken" which is the wrong frame for this
         // happy-path idle state.
         state: "available",
-        reason: isZh ? "已安装，可用" : "Installed, starts on demand",
-        impact: isZh
-          ? "Codex 应用服务会在首次发送时按需启动"
-          : "Codex app-server boots on demand when you send your first Codex message",
-        recovery: isZh ? "无需处理" : "No action needed",
+        reason: t("runtime.codex.installedIdleReason"),
+        impact: t("runtime.codex.installedIdleImpact"),
+        recovery: t("runtime.codex.installedIdleRecovery"),
       };
     }
     if (codexAvailability.kind === "ready") {
       return isSelected
         ? {
             state: "selected",
-            reason: isZh
-              ? "Codex 应用服务已就绪并被设为默认引擎"
-              : "Codex app-server is ready and set as the default engine",
-            impact: isZh
-              ? "新会话默认走 Codex：Codex 账户模型 + 已配置 CodePilot 服务商通过 provider proxy 接入（Claude Code 默认/env 模式除外）"
-              : "New chats run on Codex: Codex Account models AND configured CodePilot providers via the provider proxy (env Claude Code default is excluded)",
+            reason: t("runtime.codex.selectedReason"),
+            impact: t("runtime.codex.selectedImpact"),
           }
         : {
             state: "available",
-            reason: isZh ? "Codex 应用服务已就绪但未被设为默认" : "Codex app-server is ready but not the default engine",
-            impact: isZh
-              ? "想把 Codex 设为默认（同时启用 Codex 账户 + CodePilot 服务商 via proxy），把上方「默认引擎」切到 Codex"
-              : 'Switch the "Default engine" selector above to make Codex the default for both Codex Account models and CodePilot providers via the proxy',
+            reason: t("runtime.codex.availableReason"),
+            impact: t("runtime.codex.availableImpact"),
           };
     }
     // unknown — initial fetch still pending
     return {
       state: "available",
-      reason: isZh ? "正在检测 Codex 应用服务状态…" : "Detecting Codex app-server status…",
-      impact: isZh ? "状态会在后台轮询后刷新" : "Status updates after background polling",
+      reason: t("runtime.codex.unknownReason"),
+      impact: t("runtime.codex.unknownImpact"),
     };
-  }, [codexAvailability, effectiveRuntime, isZh, isWindowsElectron]);
+  }, [codexAvailability, effectiveRuntime, t, isWindowsElectron]);
 
   /**
    * CodePilot Runtime is bundled and always available; the only thing
@@ -1185,24 +1138,16 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
     if (effectiveRuntime === "native") {
       return {
         state: "selected",
-        reason: isZh
-          ? "CodePilot 是默认内核（无需 CLI，直连 provider API）"
-          : "CodePilot is the default engine (no CLI required, direct provider API)",
-        impact: isZh
-          ? "新会话默认用 CodePilot；工具、权限和上下文由 CodePilot 自己管理"
-          : "New chats run on CodePilot; tools, permissions, and context managed by CodePilot itself",
+        reason: t("runtime.codepilot.selectedReason"),
+        impact: t("runtime.codepilot.selectedImpact"),
       };
     }
     return {
       state: "available",
-      reason: isZh
-        ? "CodePilot 内核随应用自带，始终可用"
-        : "CodePilot ships with the app and is always available",
-      impact: isZh
-        ? "想切到 CodePilot 内核，把上方「默认引擎」切到 CodePilot 即可"
-        : 'Switch the "Default engine" selector above to use CodePilot',
+      reason: t("runtime.codepilot.availableReason"),
+      impact: t("runtime.codepilot.availableImpact"),
     };
-  }, [effectiveRuntime, isZh]);
+  }, [effectiveRuntime, t]);
 
   /**
    * Session-level resolved engine string for the read-only explainer.
@@ -1237,12 +1182,10 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
     // with the actually-resolved runtime — i.e. they picked Claude
     // Code but CLI is missing OR cli_enabled=false routes them away.
     if (agentRuntime === "claude-code-sdk" && resolvedRuntime !== "claude-code-sdk") {
-      return isZh
-        ? `${resolvedLabel}（Claude Code 不可用，自动降级）`
-        : `${resolvedLabel} (fallback — Claude Code unavailable)`;
+      return t("runtime.resolvedFallback", { label: resolvedLabel });
     }
     return resolvedLabel;
-  }, [resolvedRuntimeFromApi, effectiveRuntime, agentRuntime, isZh]);
+  }, [resolvedRuntimeFromApi, effectiveRuntime, agentRuntime, t]);
 
   if (loading) {
     return (
@@ -1259,9 +1202,7 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
       <div>
         <h2 className="text-xl font-semibold tracking-tight">{t("settings.runtime" as TranslationKey)}</h2>
         <p className="text-sm text-muted-foreground mt-1.5">
-          {isZh
-            ? "查看当前 Agent 由谁运行、为什么是这个状态、影响是什么、怎么恢复。Providers 管资产，Models 管暴露，Runtime 管运行环境。"
-            : "Inspect which runtime is currently in charge of the Agent — why it's in this state, what the impact is, and how to recover. Providers govern assets, Models govern exposure, Runtime governs environment."}
+          {t("runtime.pageDesc")}
         </p>
       </div>
 
@@ -1273,13 +1214,10 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
           AI SDK: always ready since it ships in-app). */}
       <div>
         <div className="mb-2">
-          <h3 className="text-sm font-semibold">{isZh ? "默认引擎" : "Default engine"}</h3>
+          <h3 className="text-sm font-semibold">{t("runtime.defaultEngineTitle")}</h3>
         </div>
         <p className="text-[11px] text-muted-foreground mb-3">
-          {isZh
-            ? "选择新会话默认使用哪个 Runtime。当前正在运行的回复不受影响；后续每条新消息会按"
-              + "「默认 Runtime + Provider」重新解析。"
-            : "Choose which runtime new chats use by default. Replies already streaming aren't interrupted; every subsequent message re-resolves the default runtime + provider on send."}
+          {t("runtime.defaultEngineDesc")}
         </p>
         {driftWarning && (
           // Two distinct reasons can drive this warning, with different
@@ -1299,12 +1237,8 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
             <Warning size={14} weight="fill" className="mt-0.5 shrink-0" />
             <span>
               {!cliEnabled
-                ? (isZh
-                    ? "保存的偏好是 Claude Code，但 CLI 在「设置」里被显式关闭过，运行时实际走 CodePilot。点上面任一卡片可一次写齐两边设置。"
-                    : "Stored preference is Claude Code but CLI was explicitly disabled in a previous setting, so runtime actually routes to CodePilot. Click either card above to rewrite both fields together.")
-                : (isZh
-                    ? "保存的偏好是 Claude Code，但当前没有检测到 Claude Code CLI（可能未安装或登录失效），运行时实际走 CodePilot。下方 Claude Code 卡片提供安装入口；或者改选 CodePilot 作为默认。"
-                    : "Stored preference is Claude Code but the CLI isn't currently detected (not installed or OAuth expired), so runtime actually routes to CodePilot. Use the Install button on the Claude Code card below — or pick CodePilot as your default instead.")}
+                ? t("runtime.driftCliDisabled")
+                : t("runtime.driftCliMissing")}
             </span>
           </div>
         )}
@@ -1319,19 +1253,16 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
             // on every card makes the picker read as redundant noise.
             title="Claude Code"
             icon={<Anthropic size={20} />}
-            tagline={isZh ? "Anthropic 官方 CLI" : "Anthropic official CLI"}
-            pitch={isZh
-              ? "用 Anthropic 官方 CLI 跑 Agent，完整兼容 Claude Code 生态：~/.claude/settings.json、hooks、MCP server 直接可用。"
-              : "Runs the Agent through Anthropic's official Claude Code CLI. Fully compatible with the Claude Code ecosystem — ~/.claude/settings.json, hooks, and MCP servers all work as-is."}
+            tagline={t("runtime.picker.claudeTagline")}
+            pitch={t("runtime.picker.claudePitch")}
             statusKind={connected ? "ok" : "warning"}
             // installType ("native" / "npm" / etc.) is intentionally
             // omitted here — the word "native" collides with the AI
             // SDK runtime which is internally called `native`, and the
             // install method isn't actionable for the user.
             statusText={connected
-              ? `${isZh ? "已安装" : "Installed"} v${claudeStatus?.version ?? ""}`
-              : (isZh ? "未安装 — 选用后会自动降级到 CodePilot" : "Not installed — selecting it falls back to CodePilot")}
-            isZh={isZh}
+              ? t("runtime.picker.claudeInstalled", { version: claudeStatus?.version ?? "" })
+              : t("runtime.picker.claudeNotInstalled")}
             trigger={capabilityCells && (
               <RuntimeCapabilityList
                 runtimeId="claude_code"
@@ -1347,13 +1278,10 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
             onSelect={() => handleRuntimeChange("native")}
             title="CodePilot"
             icon={<MonolithIcon size={20} />}
-            tagline={isZh ? "CodePilot 自带内核" : "CodePilot built-in"}
-            pitch={isZh
-              ? "CodePilot 直连 provider API 跑 Agent。适合多 provider、可观察、可恢复，由 CodePilot 自管上下文和权限，不依赖外部 CLI。"
-              : "CodePilot calls provider APIs directly. Built for multi-provider, observable, recoverable runs — context and permissions stay inside CodePilot, no external CLI required."}
+            tagline={t("runtime.picker.codepilotTagline")}
+            pitch={t("runtime.picker.codepilotPitch")}
             statusKind="ok"
-            statusText={isZh ? "随应用自带，始终可用" : "Bundled with the app, always available"}
-            isZh={isZh}
+            statusText={t("runtime.picker.codepilotStatus")}
             trigger={capabilityCells && (
               <RuntimeCapabilityList
                 runtimeId="codepilot_runtime"
@@ -1369,27 +1297,24 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
             onSelect={() => handleRuntimeChange("codex_runtime")}
             title="Codex"
             icon={<OpenAI size={20} />}
-            tagline={isZh ? "OpenAI Codex 应用服务" : "OpenAI Codex app-server"}
-            pitch={isZh
-              ? "通过 Codex 应用服务调用 ChatGPT 账户内置模型（gpt-5.5 等，额度走 ChatGPT 套餐），同时已配置的 CodePilot 服务商也能经 provider proxy 在 Codex 下使用（Claude Code 默认 / env 模式除外）。"
-              : "Routes through the Codex app-server for Codex Account models (gpt-5.5 etc., quota covered by your ChatGPT plan), and also serves configured CodePilot providers via the provider proxy (env Claude Code default is excluded)."}
+            tagline={t("runtime.picker.codexTagline")}
+            pitch={t("runtime.picker.codexPitch")}
             statusKind={codexConnected ? "ok" : "warning"}
             statusText={
               codexConnected
-                ? (isZh ? "已就绪" : "Ready")
+                ? t("runtime.picker.codexReady")
                 : codexAvailability.kind === "not_installed"
-                  ? (isZh ? "未安装 codex CLI — 选用后无法发送" : "codex CLI not installed — sends will fail")
+                  ? t("runtime.picker.codexNotInstalled")
                   : codexAvailability.kind === "desktop_only"
-                    ? (isZh ? "仅检测到桌面应用 — 需独立 CLI" : "Desktop app only — standalone CLI required")
+                    ? t("runtime.picker.codexDesktopOnly")
                   : codexAvailability.kind === "installed_idle"
-                    ? (isZh ? "已安装，可用" : "Installed, starts on demand")
+                    ? t("runtime.picker.codexInstalledIdle")
                   : codexAvailability.kind === "spawn_failed"
-                    ? (isZh ? "应用服务启动失败" : "App-server failed to start")
+                    ? t("runtime.picker.codexSpawnFailed")
                     : codexAvailability.kind === "too_old"
-                      ? (isZh ? "版本过旧" : "Version too old")
-                      : (isZh ? "检测中…" : "Detecting…")
+                      ? t("runtime.picker.codexTooOld")
+                      : t("runtime.picker.codexDetecting")
             }
-            isZh={isZh}
             trigger={capabilityCells && (
               <RuntimeCapabilityList
                 runtimeId="codex_runtime"
@@ -1419,20 +1344,16 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
           if they want to dig deeper. */}
       <div className="rounded-lg bg-card border border-border/50 p-5 flex flex-col gap-3">
         <h3 className="text-sm font-semibold leading-tight">
-          {isZh ? "新会话会用什么" : "What a new chat will use"}
+          {t("runtime.newChatTitle")}
         </h3>
         <p className="text-[11px] text-muted-foreground">
-          {isZh
-            ? "按当前默认设置，下一条新消息会解析为以下运行组合。每次发送前都会重新检查 Runtime、Provider 和模型兼容性 — 不持久绑定到某个会话。"
-            : "With the current defaults, your next new message resolves to the combination below. Runtime, provider, and model compatibility are re-checked on every send — nothing is pinned to a session."}
+          {t("runtime.newChatDesc")}
         </p>
         {noCompatibleProvider ? (
           <div className="rounded-md border border-status-warning-muted bg-status-warning-muted/30 px-3 py-2 text-xs text-status-warning-foreground flex items-start gap-1.5">
             <Warning size={14} weight="fill" className="mt-0.5 shrink-0" />
             <span>
-              {isZh
-                ? `当前执行引擎（${resolvedEngineLabel}）下没有可用的 provider/model。新会话会进入"无兼容服务"状态，需要先在「服务商 / 模型」里启用一个匹配 Runtime 的模型。`
-                : `No provider/model is compatible with the current runtime (${resolvedEngineLabel}). New chats land in the "no compatible provider" state until you enable a matching model in Providers / Models.`}
+              {t("runtime.noCompatible", { engine: resolvedEngineLabel })}
             </span>
           </div>
         ) : invalidDefault ? (
@@ -1453,8 +1374,8 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
               <div className="flex-1 min-w-0">
                 <p className="text-xs font-semibold text-status-warning-foreground">
                   {invalidDefault.reason === "pin-incomplete"
-                    ? (isZh ? "默认模型固定信息不完整" : "Pinned default is incomplete")
-                    : (isZh ? "默认模型在当前执行环境下不可用" : "Default model unavailable under the current engine")}
+                    ? t("runtime.invalidDefault.pinIncompleteTitle")
+                    : t("runtime.invalidDefault.unavailableTitle")}
                 </p>
                 <p className="text-[11px] text-foreground/80 mt-1 leading-relaxed">
                   {(() => {
@@ -1462,17 +1383,16 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
                     const modelDisplay = invalidDefault.modelLabel ?? invalidDefault.modelValue;
                     const pinName = provDisplay && modelDisplay
                       ? `${provDisplay} / ${modelDisplay}`
-                      : provDisplay ?? modelDisplay ?? (isZh ? '当前默认' : 'the current default');
+                      : provDisplay ?? modelDisplay ?? t("runtime.invalidDefault.currentDefault");
                     // #27: pin-incomplete = 缺 provider 绑定，模型本身可用，不是
                     // Runtime 兼容问题——别说"不在兼容范围内"误导用户。
                     if (invalidDefault.reason === "pin-incomplete") {
-                      return isZh
-                        ? `默认模型固定信息不完整（缺 provider 绑定）；新会话会自动使用当前环境下的可用模型。到「模型」页重新固定一个默认即可。`
-                        : `The pinned default is missing its provider binding. New chats auto-use an available model — re-pin a default in Models to fix.`;
+                      return t("runtime.invalidDefault.pinIncompleteDesc");
                     }
-                    return isZh
-                      ? `${pinName} 不在当前执行环境（${resolvedEngineLabel}）的兼容范围内；新会话会自动使用当前环境下的可用模型。需要固定一个新的默认时到「模型」页修改即可。`
-                      : `${pinName} isn't compatible with the current engine (${resolvedEngineLabel}). New chats fall back to an available model automatically. Pick a new default in Models when you're ready.`;
+                    return t("runtime.invalidDefault.unavailableDesc", {
+                      pinName,
+                      engine: resolvedEngineLabel,
+                    });
                   })()}
                 </p>
               </div>
@@ -1483,11 +1403,9 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
                 size="sm"
                 onClick={handlePickAnotherDefault}
                 className="text-xs"
-                title={isZh
-                  ? "去「模型」页挑一个新的固定默认"
-                  : "Open Models to pin a new default"}
+                title={t("runtime.invalidDefault.changeDefaultTitle")}
               >
-                {isZh ? "修改默认模型" : "Change default"}
+                {t("runtime.invalidDefault.changeDefault")}
               </Button>
               <Button
                 variant="ghost"
@@ -1495,12 +1413,10 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
                 onClick={handleRevertToAuto}
                 disabled={revertingToAuto}
                 className="text-xs gap-1.5"
-                title={isZh
-                  ? "切回 Auto — 不再固定到某个具体模型，每次新会话由系统按当前环境自动选"
-                  : "Revert to Auto — drop the pin and let the system pick a compatible model per chat"}
+                title={t("runtime.invalidDefault.revertToAutoTitle")}
               >
                 {revertingToAuto ? <SpinnerGap size={12} className="animate-spin" /> : null}
-                {isZh ? "改回 Auto" : "Revert to Auto"}
+                {t("runtime.invalidDefault.revertToAuto")}
               </Button>
             </div>
           </div>
@@ -1508,24 +1424,24 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
           <div className="rounded-md bg-muted/40 px-3.5 divide-y divide-border/50">
             <div className="py-2.5 flex items-center justify-between gap-3">
               <span className="text-[11px] text-muted-foreground shrink-0">
-                {isZh ? "Runtime" : "Runtime"}
+                {t("runtime.newChat.runtimeLabel")}
               </span>
               <span className="text-xs text-foreground/85 text-right">{resolvedEngineLabel}</span>
             </div>
             <div className="py-2.5 flex items-center justify-between gap-3">
               <span className="text-[11px] text-muted-foreground shrink-0">
-                {isZh ? "默认 Provider" : "Default provider"}
+                {t("runtime.newChat.defaultProvider")}
               </span>
               <span className="text-xs text-foreground/85 text-right truncate">
-                {defaultProviderName ?? (isZh ? "未配置" : "Not configured")}
+                {defaultProviderName ?? t("runtime.newChat.notConfigured")}
               </span>
             </div>
             <div className="py-2.5 flex items-center justify-between gap-3">
               <span className="text-[11px] text-muted-foreground shrink-0">
-                {isZh ? "默认模型" : "Default model"}
+                {t("runtime.newChat.defaultModel")}
               </span>
               <span className="text-xs text-foreground/85 text-right truncate">
-                {defaultModelLabel ?? (isZh ? "未配置" : "Not configured")}
+                {defaultModelLabel ?? t("runtime.newChat.notConfigured")}
               </span>
             </div>
             {/* Fallback row — shown when stored preference is Claude
@@ -1534,16 +1450,12 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
             {agentRuntime === "claude-code-sdk" && effectiveRuntime !== "claude-code-sdk" && (
               <div className="py-2.5 flex items-center justify-between gap-3">
                 <span className="text-[11px] text-muted-foreground shrink-0">
-                  {isZh ? "降级路径" : "Fallback"}
+                  {t("runtime.newChat.fallbackLabel")}
                 </span>
                 <span className="text-xs text-status-warning-foreground text-right">
                   {!cliEnabled
-                    ? (isZh
-                        ? "CLI 已禁用 → 走 CodePilot"
-                        : "CLI disabled → routes to CodePilot")
-                    : (isZh
-                        ? "Claude Code 不可用 → 自动用 CodePilot"
-                        : "Claude Code unavailable → falls back to CodePilot")}
+                    ? t("runtime.newChat.fallbackCliDisabled")
+                    : t("runtime.newChat.fallbackCliUnavailable")}
                 </span>
               </div>
             )}
@@ -1552,8 +1464,8 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
       </div>
 
       {/* ── Claude Code detail card ──────────────────────────────────── */}
-      <RuntimeCard name="Claude Code" state={claudeCodeStatus.state} isZh={isZh}>
-        <RuntimeStatusExplanation info={claudeCodeStatus} isZh={isZh} />
+      <RuntimeCard name="Claude Code" state={claudeCodeStatus.state}>
+        <RuntimeStatusExplanation info={claudeCodeStatus} />
 
         <CliMaintenanceRow
           snapshot={claudeMaintenance.installed || !connected
@@ -1780,8 +1692,8 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
            app-server detail (binary status / version / Codex home) and
            a jump-link to Providers + Models where Codex Account
            login + models live. Doesn't duplicate that data here. */}
-      <RuntimeCard name="Codex" state={codexRuntimeStatus.state} isZh={isZh}>
-        <RuntimeStatusExplanation info={codexRuntimeStatus} isZh={isZh} />
+      <RuntimeCard name="Codex" state={codexRuntimeStatus.state}>
+        <RuntimeStatusExplanation info={codexRuntimeStatus} />
 
         <CliMaintenanceRow
           snapshot={codexMaintenance}
@@ -1795,7 +1707,7 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
         <div className="rounded-md bg-muted/40 px-3.5 divide-y divide-border/50">
           <div className="py-2.5 flex items-center justify-between gap-3">
             <span className="text-[11px] text-muted-foreground shrink-0">
-              {isZh ? "应用服务" : "App-server"}
+              {t("runtime.codexDetail.appServer")}
             </span>
             <div className="flex items-center gap-2">
               {codexAvailability.kind === "ready" ? (
@@ -1809,21 +1721,21 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
                 <>
                   <XCircle size={14} className="text-status-error-foreground" />
                   <span className="text-xs text-muted-foreground">
-                    {isZh ? "未安装" : "Not installed"}
+                    {t("runtime.codexDetail.notInstalled")}
                   </span>
                 </>
               ) : codexAvailability.kind === "desktop_only" ? (
                 <>
                   <Warning size={14} weight="fill" className="text-status-warning-foreground" />
                   <span className="text-xs text-muted-foreground">
-                    {isZh ? "仅桌面应用" : "Desktop app only"}
+                    {t("runtime.codexDetail.desktopOnly")}
                   </span>
                 </>
               ) : codexAvailability.kind === "installed_idle" ? (
                 <>
                   <CheckCircle size={14} className="text-status-success-foreground" />
                   <span className="text-xs text-muted-foreground">
-                    {isZh ? "已安装，可用" : "Installed, starts on demand"}
+                    {t("runtime.codexDetail.installedIdle")}
                   </span>
                 </>
               ) : codexAvailability.kind === "too_old" ? (
@@ -1837,14 +1749,14 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
                 <>
                   <XCircle size={14} className="text-status-error-foreground" />
                   <span className="text-xs text-muted-foreground">
-                    {isZh ? "启动失败" : "Spawn failed"}
+                    {t("runtime.codexDetail.spawnFailed")}
                   </span>
                 </>
               ) : (
                 <>
                   <SpinnerGap size={14} className="animate-spin text-muted-foreground" />
                   <span className="text-xs text-muted-foreground">
-                    {isZh ? "检测中…" : "Detecting…"}
+                    {t("runtime.codexDetail.detecting")}
                   </span>
                 </>
               )}
@@ -1854,7 +1766,7 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
                 className="h-6 w-6 p-0"
                 onClick={refreshCodexStatus}
                 disabled={codexStatusLoading}
-                aria-label={isZh ? "刷新" : "Refresh"}
+                aria-label={t("runtime.codexDetail.refreshAria")}
               >
                 <ArrowClockwise size={12} />
               </Button>
@@ -1863,7 +1775,7 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
           {codexBinary && (
             <div className="py-2.5 flex items-start justify-between gap-3">
               <span className="text-[11px] text-muted-foreground shrink-0">
-                {isZh ? "CLI 来源" : "CLI source"}
+                {t("runtime.codexDetail.cliSource")}
               </span>
               <span className="text-xs text-muted-foreground font-mono break-all text-right">
                 {codexBinary}
@@ -1873,7 +1785,7 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
           {codexAvailability.kind === "ready" && (
             <div className="py-2.5 flex items-center justify-between gap-3">
               <span className="text-[11px] text-muted-foreground shrink-0">
-                {isZh ? "Codex 目录" : "Codex home"}
+                {t("runtime.codexDetail.codexHome")}
               </span>
               <span className="text-xs text-muted-foreground font-mono break-all text-right">
                 {codexAvailability.codexHome}
@@ -1884,7 +1796,7 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
             <>
               <div className="py-2.5 flex items-center justify-between gap-3">
                 <span className="text-[11px] text-muted-foreground shrink-0">
-                  {isZh ? "候选来源" : "Candidate source"}
+                  {t("runtime.codexDetail.candidateSource")}
                 </span>
                 <span className="text-xs text-muted-foreground font-mono">
                   {codexProbe.candidateSource}
@@ -1892,23 +1804,23 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
               </div>
               <div className="py-2.5 flex items-start justify-between gap-3">
                 <span className="text-[11px] text-muted-foreground shrink-0">
-                  {isZh ? "沙盒就绪度" : "Sandbox readiness"}
+                  {t("runtime.codexDetail.sandboxReadiness")}
                 </span>
                 <span className="text-xs text-muted-foreground text-right">
                   {codexProbe.sandbox?.state === "setup"
-                    ? (isZh ? "setup 已完成；runner / 首个受限命令未验证" : "Setup completed; runner / first restricted command unverified")
+                    ? t("runtime.codexDetail.sandboxSetup")
                     : codexProbe.sandbox?.state === "error"
-                        ? (isZh ? `错误 · ${codexProbe.sandbox.stage ?? "unknown"}` : `Error · ${codexProbe.sandbox.stage ?? "unknown"}`)
+                        ? t("runtime.codexDetail.sandboxError", { stage: codexProbe.sandbox.stage ?? "unknown" })
                         : codexProbe.sandbox?.state === "degraded"
-                          ? (isZh ? `有警告 · ${codexProbe.sandbox.stage ?? "unknown"}` : `Warning · ${codexProbe.sandbox.stage ?? "unknown"}`)
+                          ? t("runtime.codexDetail.sandboxWarning", { stage: codexProbe.sandbox.stage ?? "unknown" })
                           : codexProbe.sandbox?.state === "not_applicable"
-                            ? (isZh ? "等待可执行的独立 CLI" : "Waiting for an executable standalone CLI")
-                            : (isZh ? "未运行 / 无真实信号" : "Not run / no observed signal")}
+                            ? t("runtime.codexDetail.sandboxNotApplicable")
+                            : t("runtime.codexDetail.sandboxUnobserved")}
                 </span>
               </div>
               <div className="py-2.5 flex items-start justify-between gap-3">
                 <span className="text-[11px] text-muted-foreground shrink-0">
-                  {isZh ? "诊断 CWD" : "Diagnostic CWD"}
+                  {t("runtime.codexDetail.diagnosticCwd")}
                 </span>
                 <span className="text-xs text-muted-foreground font-mono break-all text-right">
                   {codexProbe.cwd.resolved}
@@ -1927,7 +1839,7 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
             <div className="flex flex-wrap items-center justify-between gap-2">
               <div>
                 <p className="text-xs font-medium">
-                  {isZh ? "准备安装独立 Codex CLI" : "Prepare the standalone Codex CLI"}
+                  {t("runtime.codexDetail.prepareStandaloneTitle")}
                 </p>
                 <p className="text-[11px] text-muted-foreground mt-0.5">
                   {t("runtime.codexRecoveryNoAutoRun")}
@@ -1976,60 +1888,54 @@ export function RuntimePanel(props: RuntimePanelProps = {}) {
         <div className="flex flex-wrap gap-2 justify-end">
           <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" asChild>
             <a href="/settings/providers">
-              {isZh ? "查看 Codex 账户 →" : "View Codex account →"}
+              {t("runtime.codexDetail.viewAccount")}
             </a>
           </Button>
           <Button variant="ghost" size="sm" className="h-7 text-xs gap-1" asChild>
             <a href="/settings/models">
-              {isZh ? "查看 Codex 模型 →" : "View Codex models →"}
+              {t("runtime.codexDetail.viewModels")}
             </a>
           </Button>
         </div>
       </RuntimeCard>
 
       {/* ── CodePilot detail card ────────────────────────────────────── */}
-      <RuntimeCard name="CodePilot" state={codepilotStatus.state} isZh={isZh}>
-        <RuntimeStatusExplanation info={codepilotStatus} isZh={isZh} />
+      <RuntimeCard name="CodePilot" state={codepilotStatus.state}>
+        <RuntimeStatusExplanation info={codepilotStatus} />
 
         {/* Capabilities / Permissions / Context — three medium-granularity blocks */}
         <div className="rounded-md bg-muted/40 px-3.5 divide-y divide-border/50">
           <div className="py-2.5 flex items-start justify-between gap-3">
             <div className="flex flex-col gap-0.5 max-w-[55%]">
-              <span className="text-xs font-medium">{isZh ? "能力" : "Capabilities"}</span>
+              <span className="text-xs font-medium">{t("runtime.codepilotDetail.capabilities")}</span>
               <span className="text-[11px] text-muted-foreground leading-snug">
-                {isZh
-                  ? "内置工具（Read / Edit / Bash 等），MCP 工具集（Chrome DevTools / 自定义 Server），文件 / 终端 / 浏览器全套支持"
-                  : "Built-in tools (Read / Edit / Bash / etc.), MCP toolsets (Chrome DevTools / custom servers), full file / terminal / browser stack"}
+                {t("runtime.codepilotDetail.capabilitiesDesc")}
               </span>
             </div>
             <span className="text-[10px] text-muted-foreground/70">
-              {isZh ? "随应用更新" : "ships with app"}
+              {t("runtime.codepilotDetail.capabilitiesBadge")}
             </span>
           </div>
           <div className="py-2.5 flex items-start justify-between gap-3">
             <div className="flex flex-col gap-0.5 max-w-[55%]">
-              <span className="text-xs font-medium">{isZh ? "权限" : "Permissions"}</span>
+              <span className="text-xs font-medium">{t("runtime.codepilotDetail.permissions")}</span>
               <span className="text-[11px] text-muted-foreground leading-snug">
-                {isZh
-                  ? "默认 explore（读 + 安全命令自动；写 / 删 / 网络需确认），可切到 normal / trust / plan"
-                  : "Defaults to Explore (auto for reads + safe commands; confirm before write / delete / network). Switchable to Normal / Trust / Plan."}
+                {t("runtime.codepilotDetail.permissionsDesc")}
               </span>
             </div>
             <span className="text-[10px] text-muted-foreground/70">
-              {isZh ? "会话级控制" : "per-session"}
+              {t("runtime.codepilotDetail.permissionsBadge")}
             </span>
           </div>
           <div className="py-2.5 flex items-start justify-between gap-3">
             <div className="flex flex-col gap-0.5 max-w-[55%]">
-              <span className="text-xs font-medium">{isZh ? "上下文" : "Context"}</span>
+              <span className="text-xs font-medium">{t("runtime.codepilotDetail.context")}</span>
               <span className="text-[11px] text-muted-foreground leading-snug">
-                {isZh
-                  ? "CodePilot 管理项目工作区、会话历史、模型选择和本地状态；自动按 token 预算修剪 / 压缩"
-                  : "CodePilot owns project workspace, session history, model choice, and local state; automatic token-budget prune + compress."}
+                {t("runtime.codepilotDetail.contextDesc")}
               </span>
             </div>
             <span className="text-[10px] text-muted-foreground/70">
-              {isZh ? "本地存储" : "local"}
+              {t("runtime.codepilotDetail.contextBadge")}
             </span>
           </div>
         </div>

@@ -235,8 +235,18 @@ describe('findCodexBinary — Windows standalone and desktop discovery', () => {
       'utf8',
     );
     assert.match(panelSrc, /codexAvailability\.kind === ["']desktop_only["']/);
-    assert.match(panelSrc, /chatgpt\.com\/codex\/install\.ps1/);
-    assert.match(panelSrc, /仅桌面应用/);
+    assert.match(panelSrc, /runtime\.codexInstallRecoveryWin/);
+    assert.match(panelSrc, /runtime\.codexDetail\.desktopOnly/);
+    const enSrc = fs.readFileSync(
+      path.resolve(__dirname, '../../i18n/en.ts'),
+      'utf8',
+    );
+    const zhSrc = fs.readFileSync(
+      path.resolve(__dirname, '../../i18n/zh.ts'),
+      'utf8',
+    );
+    assert.match(enSrc, /'runtime\.codexInstallRecoveryWin':[\s\S]{0,200}chatgpt\.com\/codex\/install\.ps1/);
+    assert.match(zhSrc, /'runtime\.codexDetail\.desktopOnly':\s*'仅桌面应用'/);
   });
 });
 
@@ -265,8 +275,17 @@ describe('Codex availability — installed but idle state', () => {
     // usable". The new wording frames it as available + a small
     // explainer about on-demand startup. Both languages tested so a
     // refactor can't drop one side accidentally.
-    assert.match(panelSrc, /已安装，可用/);
-    assert.match(panelSrc, /Installed, starts on demand/);
+    assert.match(panelSrc, /runtime\.codexDetail\.installedIdle/);
+    const enSrc = fs.readFileSync(
+      path.resolve(__dirname, '../../i18n/en.ts'),
+      'utf8',
+    );
+    const zhSrc = fs.readFileSync(
+      path.resolve(__dirname, '../../i18n/zh.ts'),
+      'utf8',
+    );
+    assert.match(zhSrc, /'runtime\.codexDetail\.installedIdle':\s*'已安装，可用'/);
+    assert.match(enSrc, /'runtime\.codexDetail\.installedIdle':\s*'Installed, starts on demand'/);
     assert.doesNotMatch(
       panelSrc,
       /installed_idle[\s\S]{0,220}SpinnerGap/,

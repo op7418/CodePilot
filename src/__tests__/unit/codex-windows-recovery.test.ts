@@ -66,16 +66,19 @@ test('main/preload bridge exposes only a no-argument prepare action and does not
 
 test('Runtime recovery copy exposes the PowerShell installer only in Windows Electron', () => {
   const panel = fs.readFileSync(path.join(repoRoot, 'src/components/settings/RuntimePanel.tsx'), 'utf8');
+  const enSrc = fs.readFileSync(path.join(repoRoot, 'src/i18n/en.ts'), 'utf8');
   const helperStart = panel.indexOf('function codexCliInstallRecovery');
   const helper = panel.slice(helperStart, helperStart + 1_200);
   assert.ok(helperStart >= 0);
   assert.match(helper, /if \(isWindowsElectron\)/);
-  assert.match(helper, /install\.ps1/);
-  assert.match(helper, /official instructions for this platform/);
+  assert.match(helper, /runtime\.codexInstallRecoveryWin/);
+  assert.match(helper, /runtime\.codexInstallRecoveryOther/);
+  assert.match(enSrc, /'runtime\.codexInstallRecoveryWin':[\s\S]{0,200}install\.ps1/);
+  assert.match(enSrc, /'runtime\.codexInstallRecoveryOther':[\s\S]{0,200}official instructions for this platform/);
 
   const statusStart = panel.indexOf('const codexRuntimeStatus');
   const status = panel.slice(statusStart, statusStart + 8_000);
-  assert.match(status, /codexCliInstallRecovery\(isZh, isWindowsElectron\)/);
+  assert.match(status, /codexCliInstallRecovery\(t, isWindowsElectron\)/);
   assert.match(status, /kind === "desktop_only"[\s\S]*recovery: installRecovery/);
   assert.match(status, /kind === "not_installed"[\s\S]*recovery: installRecovery/);
 });
