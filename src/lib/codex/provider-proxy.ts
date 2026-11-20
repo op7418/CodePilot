@@ -26,7 +26,7 @@
  * Phase 5b status: the proxy route is fully implemented for every
  * recognised compat tier via the unified translator at
  * `src/lib/codex/proxy/unified-adapter.ts`. CodexRuntime.stream()
- * threads provider id through to `buildCodexThreadStartParams`
+ * threads provider id through to `buildCodexThreadParams`
  * below, so a non-codex_account provider's first message creates
  * a thread bound to the proxy injection; subsequent messages on the
  * same chat session resume that thread as long as the provider
@@ -220,15 +220,6 @@ export function buildCodexThreadParams(opts: {
     },
   };
 }
-
-/**
- * @deprecated Phase 5b P1 follow-up — prefer `buildCodexThreadParams`.
- * Kept as an alias so existing callers (and the regression test that
- * pins the start-only contract) compile. The shape and semantics are
- * identical; only the name changed to reflect that the helper now
- * serves resume too.
- */
-export const buildCodexThreadStartParams = buildCodexThreadParams;
 
 /**
  * Resolve the base URL CodePilot's Next server is reachable at from

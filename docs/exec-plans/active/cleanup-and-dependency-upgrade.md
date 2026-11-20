@@ -20,7 +20,7 @@
 | WP1 | 三处实际缺陷：上传路由路径检查、MCP 连接管理、定时任务并发 | Opus | 完成 |
 | WP2 | 依赖：lock 同步、漏洞修复、删无用依赖 | Opus | 完成（mac universal 包未在本机验证） |
 | WP3 | Node 与 Electron 大版本升级 | Opus | 待开始 |
-| WP4 | 第二轮死代码：路由、IPC、模块、`资料/` | Gemini | 待开始 |
+| WP4 | 第二轮死代码：路由、IPC、模块、`资料/` | Gemini | 完成（`资料/` 按用户决定暂不取消跟踪） |
 | WP5 | GitHub 模板与工作流的过时口径 | Gemini | 待开始 |
 | WP6 | 永久跳过的 E2E 用例 | Gemini | 待开始 |
 | WP7 | 设置页内联中英文迁到 i18n 字典 | Gemini | 待开始 |
@@ -166,3 +166,12 @@
   - guardrails：19 份删掉"关键文件 + 责任"小节，其中 23 条别处没写的约束改写后迁入各自的不变量节；README 写作规范同步去掉这一节。唯一失效的文件引用是 `ProviderDoctorDialog.tsx`（已随表删除）。
   - 三份旧计划：`codex-stop-recovery` 和 `mimo-ultraspeed-openai-compatible-provider` 代码已全部落地（后者唯一未勾的"模型来源标识"已由 `ModelsSection` 的 source badge 实现），删除，剩下的真实凭据 smoke 记为 tech-debt #101。`v0.56.x-stability-trust` 还有约 30 个未勾选项，无法确认全部做完，没删。
   - 指向已删文档的源码注释和其他文档链接已改指 `external-facts.md` 或标注"已删除，见 git 历史"。
+- 2026-11-20：WP4 完成。分四类（路由/页面、Electron IPC、模块/仓库文件/测试 helper、孤儿 i18n 键）逐类验证 `tsc --noEmit` + `npm run test` 全绿（5686 pass / 0 fail / 1 skipped）。与计划的出入和保留项：
+  - `资料/` 目录：执行前征询用户确认，按用户决定暂不取消跟踪，保留现状。
+  - `src/app/api/settings/weixin/` 仅删除无调用方的根 `route.ts`；子路由 `accounts/*` 和 `login/*` 仍由 `WeixinBridgeSection.tsx` 调用，保留。
+  - `src/app/api/tasks/notify/route.ts` 仅删 `POST`（及 `GET` 405 响应里指向已删 `POST` 的 `Allow` 头），保留 retired `GET` 405 提示；`src/app/api/tasks/route.ts` 仅删 `POST`/`PUT`，保留 `GET`（`TaskCheckpoint.tsx` 调用）。
+  - `src/app/api/chat/sessions/[id]/handoff/route.ts` 与 5 个 `src/app/api/harness-home/*` 路由按计划保留；核实当前 `handoff` 路由无运行期 HTTP 调用方（`chat/route.ts` 与 `sessions/[id]/route.ts` 直接读 DB），`harness-home/*` 仅被单测调用。
+  - `src/lib/codex/proxy/builtin-event-bus.ts` 除源码两处 import 外，另有 3 个单测 import 及 `codex-user-mcp-wiring.test.ts` 的文件路径列表引用，已一并迁至 `@/lib/harness/builtin-event-bus`。
+  - `src/lib/plugin-discovery.ts` 在删除 `api/plugins` 两路由后已无剩余调用方，未在本计划模块清单内，暂未删除，记录待后续处理。
+  - `src/i18n/{en,zh}.ts` 在保护全部 15 个动态前缀（含计划所列 5 个及全仓扫描确认的其余 10 个）后删除 479 个零引用孤儿键。
+  - `src/__tests__/helpers.ts` 删除未使用的旧别名及指向 `svg.lucide-user`/`svg.lucide-bot` 的 `userAvatar`/`assistantAvatar`，并将仍在 `skills.spec.ts` 中调用的 `skillDeleteButton` 选择器从失效的 `svg.lucide-trash-2` 改为 `[class*="cursor-pointer"] button:has(svg)`。

@@ -117,12 +117,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
       return () => { ipcRenderer.removeListener('cli-maintenance:status', listener); };
     },
   },
-  bridge: {
-    isActive: () => ipcRenderer.invoke('bridge:is-active'),
-  },
-  proxy: {
-    resolve: (url: string) => ipcRenderer.invoke('proxy:resolve', url),
-  },
   widget: {
     exportPng: (html: string, width: number, isDark: boolean) =>
       ipcRenderer.invoke('widget:export-png', { html, width, isDark }),

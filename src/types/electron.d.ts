@@ -156,12 +156,6 @@ interface ElectronAPI {
   install: ElectronInstallAPI;
   updater?: ElectronUpdaterAPI;
   cliMaintenance?: ElectronCliMaintenanceAPI;
-  bridge?: {
-    isActive: () => Promise<boolean>;
-  };
-  proxy?: {
-    resolve: (url: string) => Promise<string>;
-  };
   asset?: ElectronAssetAPI;
   terminal?: ElectronTerminalAPI;
   notification?: {

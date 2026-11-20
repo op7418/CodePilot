@@ -420,35 +420,6 @@ function killServer(): Promise<void> {
   });
 }
 
-/**
- * Check if the remote bridge is currently active by querying the local API.
- */
-async function isBridgeActive(): Promise<boolean> {
-  if (!serverPort) return false;
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const http = require('http');
-    return await new Promise<boolean>((resolve) => {
-      const req = http.get(`http://127.0.0.1:${serverPort}/api/bridge`, (res: { statusCode?: number; on: (event: string, cb: (data?: Buffer) => void) => void }) => {
-        let body = '';
-        res.on('data', (chunk: Buffer) => { body += chunk.toString(); });
-        res.on('end', () => {
-          try {
-            const data = JSON.parse(body);
-            resolve(data.running === true);
-          } catch {
-            resolve(false);
-          }
-        });
-      });
-      req.on('error', () => resolve(false));
-      req.setTimeout(2000, () => { req.destroy(); resolve(false); });
-    });
-  } catch {
-    return false;
-  }
-}
-
 async function getActiveUpdateWork(): Promise<Array<'chat' | 'bridge' | 'task'>> {
   if (!serverPort) throw new Error('activity state unavailable');
   try {
@@ -3079,11 +3050,6 @@ app.whenReady().then(async () => {
     return true;
   });
 
-  // Bridge status IPC
-  ipcMain.handle('bridge:is-active', async () => {
-    return isBridgeActive();
-  });
-
   // Native folder picker dialog
   ipcMain.handle('dialog:open-folder', async (_event, options?: { defaultPath?: string; title?: string }) => {
     if (!mainWindow) return { canceled: true, filePaths: [] };
@@ -3496,15 +3462,6 @@ app.whenReady().then(async () => {
   // for clicks but cannot ask Main to show arbitrary native notifications.
   ipcMain.on('notification:renderer-ready', () => {
     notificationClickQueue.setReady(true);
-  });
-
-  // Proxy resolution IPC — allows renderer/API routes to query system proxy
-  ipcMain.handle('proxy:resolve', async (_event, url: string) => {
-    try {
-      return await session.defaultSession.resolveProxy(url);
-    } catch {
-      return 'DIRECT';
-    }
   });
 
   const isTrustedServerRecoverySender = (event: Electron.IpcMainInvokeEvent): boolean => (

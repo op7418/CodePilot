@@ -5,7 +5,7 @@
  *
  * Tests verify:
  * 1. getLocalDateString returns local (not UTC) date at timezone boundaries
- * 2. needsDailyCheckIn uses local date, not UTC
+ * 2. shouldRunHeartbeat uses local date, not UTC
  * 3. v2→v3 migration normalizes old UTC-style lastCheckInDate
  * 4. getTokenUsageStats buckets by local calendar day
  * 5. localDayStartAsUTC computes correct UTC boundary
@@ -32,7 +32,7 @@ const {
 } = require('../../lib/utils') as typeof import('../../lib/utils');
 
 const {
-  needsDailyCheckIn,
+  shouldRunHeartbeat,
   loadState,
   saveState,
   initializeWorkspace,
@@ -108,16 +108,16 @@ describe('getLocalDateString timezone boundaries', () => {
 });
 
 // ---------------------------------------------------------------------------
-// 2. needsDailyCheckIn with fixed time at timezone boundary
+// 2. shouldRunHeartbeat with fixed time at timezone boundary
 // ---------------------------------------------------------------------------
-describe('needsDailyCheckIn timezone boundaries', () => {
+describe('shouldRunHeartbeat timezone boundaries', () => {
   afterEach(() => restoreTZ());
 
   it('UTC+9: check-in done as local 2026-03-10, still valid at 08:30 JST', () => {
     setTZ('Asia/Tokyo');
     const now = new Date('2026-03-10T00:30:00Z'); // 09:30 JST, still March 10 local
     const state = { onboardingComplete: true, lastHeartbeatDate: '2026-03-10', lastCheckInDate: '2026-03-10', heartbeatEnabled: true, dailyCheckInEnabled: true, schemaVersion: 5 };
-    assert.equal(needsDailyCheckIn(state, now), false);
+    assert.equal(shouldRunHeartbeat(state, undefined, now), false);
   });
 
   it('UTC+9: old date from yesterday (both local and UTC) triggers check-in', () => {
@@ -127,7 +127,7 @@ describe('needsDailyCheckIn timezone boundaries', () => {
     // stored '2026-03-09' matches neither → triggers
     const now = new Date('2026-03-10T01:00:00Z');
     const state = { onboardingComplete: true, lastHeartbeatDate: '2026-03-09', lastCheckInDate: '2026-03-09', heartbeatEnabled: true, dailyCheckInEnabled: true, schemaVersion: 5 };
-    assert.equal(needsDailyCheckIn(state, now), true);
+    assert.equal(shouldRunHeartbeat(state, undefined, now), true);
   });
 
   it('UTC+9: at local midnight where utcToday still matches stored, compat suppresses', () => {
@@ -138,7 +138,7 @@ describe('needsDailyCheckIn timezone boundaries', () => {
     // old code could have written this just hours ago during the same UTC day)
     const now = new Date('2026-03-09T15:00:00Z');
     const state = { onboardingComplete: true, lastHeartbeatDate: '2026-03-09', lastCheckInDate: '2026-03-09', heartbeatEnabled: true, dailyCheckInEnabled: true, schemaVersion: 5 };
-    assert.equal(needsDailyCheckIn(state, now), false);
+    assert.equal(shouldRunHeartbeat(state, undefined, now), false);
   });
 
   it('UTC+8: old UTC date matching utcToday suppresses re-trigger (compat)', () => {
@@ -151,7 +151,7 @@ describe('needsDailyCheckIn timezone boundaries', () => {
     const now = new Date('2026-03-09T17:00:00Z');
     const state = { onboardingComplete: true, lastHeartbeatDate: '2026-03-09', lastCheckInDate: '2026-03-09', heartbeatEnabled: true, dailyCheckInEnabled: true, schemaVersion: 5 };
     // utcToday = '2026-03-09' matches stored → should NOT trigger
-    assert.equal(needsDailyCheckIn(state, now), false);
+    assert.equal(shouldRunHeartbeat(state, undefined, now), false);
   });
 
   it('clearly-past date triggers check-in regardless of compat', () => {
@@ -160,7 +160,7 @@ describe('needsDailyCheckIn timezone boundaries', () => {
     // localToday = '2026-03-10', utcToday = '2026-03-10'
     // stored '2026-03-07' matches neither → triggers
     const state = { onboardingComplete: true, lastHeartbeatDate: '2026-03-07', lastCheckInDate: '2026-03-07', heartbeatEnabled: true, dailyCheckInEnabled: true, schemaVersion: 5 };
-    assert.equal(needsDailyCheckIn(state, now), true);
+    assert.equal(shouldRunHeartbeat(state, undefined, now), true);
   });
 });
 

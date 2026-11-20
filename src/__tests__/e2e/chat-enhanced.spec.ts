@@ -11,8 +11,6 @@ import {
   toolBlocks,
   toolCallLabels,
   toolResultLabels,
-  userAvatar,
-  assistantAvatar,
   tokenUsageDisplay,
   waitForStreamingStart,
   waitForStreamingEnd,

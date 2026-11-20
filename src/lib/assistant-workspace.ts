@@ -807,11 +807,6 @@ function cryptoRandomSuffix(): string {
   return `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
 }
 
-/** @deprecated Use shouldRunHeartbeat instead */
-export function needsDailyCheckIn(state: AssistantWorkspaceState, now?: Date): boolean {
-  return shouldRunHeartbeat(state, undefined, now);
-}
-
 export function shouldRunHeartbeat(
   state: AssistantWorkspaceState,
   heartbeatConfig?: { activeHours?: { start?: string; end?: string } },

@@ -14,7 +14,7 @@
  *
  * These tests pin the contract at two layers:
  *
- *   1. `buildCodexThreadStartParams` (pure helper) — exercises every
+ *   1. `buildCodexThreadParams` (pure helper) — exercises every
  *      provider-resolution branch (env / empty → throw, codex_account
  *      → no injection, real provider → full injection).
  *
@@ -30,21 +30,20 @@ import fs from 'node:fs';
 import path from 'node:path';
 import {
   buildCodexThreadParams,
-  buildCodexThreadStartParams,
   buildCodexProviderProxyInjection,
   CODEX_PROXY_PROVIDER_KEY,
 } from '@/lib/codex/provider-proxy';
 import { codexRuntime } from '@/lib/codex/runtime';
 
 // ─────────────────────────────────────────────────────────────────────
-// buildCodexThreadStartParams — provider-resolution branches
+// buildCodexThreadParams — provider-resolution branches
 // ─────────────────────────────────────────────────────────────────────
 
-describe('buildCodexThreadStartParams — provider routing', () => {
+describe('buildCodexThreadParams — provider routing', () => {
   it('throws for empty providerId (caller must reject before this layer)', () => {
     assert.throws(
       () =>
-        buildCodexThreadStartParams({
+        buildCodexThreadParams({
           providerId: '',
           workingDirectory: '/tmp',
           proxyBaseUrl: 'http://127.0.0.1:3000',
@@ -56,7 +55,7 @@ describe('buildCodexThreadStartParams — provider routing', () => {
   it('throws for env providerId (Claude Code default explicitly excluded)', () => {
     assert.throws(
       () =>
-        buildCodexThreadStartParams({
+        buildCodexThreadParams({
           providerId: 'env',
           workingDirectory: '/tmp',
           proxyBaseUrl: 'http://127.0.0.1:3000',
@@ -66,7 +65,7 @@ describe('buildCodexThreadStartParams — provider routing', () => {
   });
 
   it('returns just {cwd} for codex_account (Codex uses its own credentials, no proxy injection)', () => {
-    const params = buildCodexThreadStartParams({
+    const params = buildCodexThreadParams({
       providerId: 'codex_account',
       workingDirectory: '/tmp/work',
       proxyBaseUrl: 'http://127.0.0.1:3000',
@@ -81,7 +80,7 @@ describe('buildCodexThreadStartParams — provider routing', () => {
   });
 
   it('injects codepilot_proxy + target header for a real CodePilot provider', () => {
-    const params = buildCodexThreadStartParams({
+    const params = buildCodexThreadParams({
       providerId: 'glm-test',
       workingDirectory: '/tmp/work',
       proxyBaseUrl: 'http://127.0.0.1:3000',
@@ -108,7 +107,7 @@ describe('buildCodexThreadStartParams — provider routing', () => {
   });
 
   it('omits cwd when workingDirectory is not provided', () => {
-    const params = buildCodexThreadStartParams({
+    const params = buildCodexThreadParams({
       providerId: 'codex_account',
       proxyBaseUrl: 'http://127.0.0.1:3000',
     });
@@ -116,7 +115,7 @@ describe('buildCodexThreadStartParams — provider routing', () => {
   });
 
   it('strips trailing slashes off the proxy base url so the path concat stays clean', () => {
-    const params = buildCodexThreadStartParams({
+    const params = buildCodexThreadParams({
       providerId: 'glm-test',
       proxyBaseUrl: 'http://127.0.0.1:3000/',
     });
@@ -135,7 +134,7 @@ describe('buildCodexThreadStartParams — provider routing', () => {
     // codepilot_proxy (we don't set default_model on the proxy entry by design),
     // so the turn fails with a generic "Codex error" before our proxy is ever
     // called. Pinning the field-presence here so a future refactor doesn't drop it.
-    const params = buildCodexThreadStartParams({
+    const params = buildCodexThreadParams({
       providerId: 'glm-test',
       workingDirectory: '/tmp/work',
       proxyBaseUrl: 'http://127.0.0.1:3000',
@@ -147,7 +146,7 @@ describe('buildCodexThreadStartParams — provider routing', () => {
   });
 
   it('omits `model` when caller didn\'t supply one (back-compat with sessions that haven\'t persisted a model yet)', () => {
-    const params = buildCodexThreadStartParams({
+    const params = buildCodexThreadParams({
       providerId: 'glm-test',
       proxyBaseUrl: 'http://127.0.0.1:3000',
     });
@@ -155,7 +154,7 @@ describe('buildCodexThreadStartParams — provider routing', () => {
   });
 
   it('forwards `model` for codex_account (Codex uses it to pick the upstream model id)', () => {
-    const params = buildCodexThreadStartParams({
+    const params = buildCodexThreadParams({
       providerId: 'codex_account',
       workingDirectory: '/tmp',
       proxyBaseUrl: 'http://127.0.0.1:3000',
@@ -269,17 +268,6 @@ describe('buildCodexThreadParams — shared shape for thread/start + thread/resu
     // adds a non-spreadable field (function, Symbol, etc.) trips.
     const keys = Object.keys(a).sort();
     assert.deepEqual(keys, ['config', 'cwd', 'modelProvider']);
-  });
-
-  it('legacy buildCodexThreadStartParams alias is wired to the same helper', () => {
-    // The rename is non-breaking — the alias keeps the original name
-    // valid for callers / tests that haven't migrated. Asserting
-    // function identity catches an accidental forked implementation.
-    assert.equal(
-      buildCodexThreadStartParams,
-      buildCodexThreadParams,
-      'buildCodexThreadStartParams must be a true alias of buildCodexThreadParams so the start and resume paths share one source of truth',
-    );
   });
 });
 

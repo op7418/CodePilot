@@ -229,7 +229,7 @@ describe('onboarding completion + workspace state integration', () => {
     initializeWorkspace,
     loadState,
     saveState,
-    needsDailyCheckIn,
+    shouldRunHeartbeat,
   } = require('../../lib/assistant-workspace') as typeof import('../../lib/assistant-workspace');
   const { getLocalDateString } = require('../../lib/utils') as typeof import('../../lib/utils');
   /* eslint-enable @typescript-eslint/no-require-imports */
@@ -250,7 +250,7 @@ describe('onboarding completion + workspace state integration', () => {
     const reloaded = loadState(workDir);
     assert.equal(reloaded.onboardingComplete, true);
     assert.equal(reloaded.lastHeartbeatDate, today);
-    assert.equal(needsDailyCheckIn(reloaded), false, 'Should not need check-in on onboarding day');
+    assert.equal(shouldRunHeartbeat(reloaded), false, 'Should not need check-in on onboarding day');
 
     fs.rmSync(workDir, { recursive: true, force: true });
   });
@@ -262,14 +262,14 @@ describe('onboarding completion + workspace state integration', () => {
     const state = loadState(workDir);
     state.onboardingComplete = true;
     state.lastHeartbeatDate = '2020-01-01'; // yesterday or earlier
-    state.lastCheckInDate = '2020-01-01'; // keep deprecated field for needsDailyCheckIn compat
+    state.lastCheckInDate = '2020-01-01';
     state.schemaVersion = 5;
     state.heartbeatEnabled = true;
-    state.dailyCheckInEnabled = true; // keep deprecated field for needsDailyCheckIn compat
+    state.dailyCheckInEnabled = true;
     saveState(workDir, state);
 
     const reloaded = loadState(workDir);
-    assert.equal(needsDailyCheckIn(reloaded), true);
+    assert.equal(shouldRunHeartbeat(reloaded), true);
 
     fs.rmSync(workDir, { recursive: true, force: true });
   });

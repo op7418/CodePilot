@@ -27,8 +27,6 @@ import {
 } from '@/app/api/assets/[id]/tags/route';
 import { DELETE as deleteMedia } from '@/app/api/media/[id]/route';
 import { PUT as toggleFavorite } from '@/app/api/media/[id]/favorite/route';
-import { PUT as updateLegacyMediaTags } from '@/app/api/media/[id]/tags/route';
-import { POST as restoreLegacyAsset } from '@/app/api/assets/[id]/restore/route';
 import { getMediaDir } from '@/lib/media-saver';
 
 const workspace = fs.mkdtempSync(path.join(os.tmpdir(), 'asset-api-workspace-'));
@@ -283,16 +281,6 @@ describe('Asset Library API', () => {
     assert.equal(getAssetRecord(archivedAssetId)?.curation_state, 'selected');
   });
 
-  it('does not expose restore semantics for an active Asset', async () => {
-    const response = await restoreLegacyAsset(
-      request(`/api/assets/${archivedAssetId}/restore`, { method: 'POST' }),
-      { params: Promise.resolve({ id: archivedAssetId }) },
-    );
-    assert.equal(response.status, 409);
-    assert.equal((await response.json()).code, 'asset_restore_failed');
-    assert.equal(getAssetRecord(archivedAssetId)?.lifecycle_state, 'active');
-  });
-
   it('persists bounded tags for every Asset kind and makes them searchable', async () => {
     const updated = await updateAssetTags(
       request(`/api/assets/${archivedAssetId}/tags`, {
@@ -353,7 +341,7 @@ describe('Asset Library API', () => {
     );
   });
 
-  it('rejects tag writes to trashed Assets through both tag routes', async () => {
+  it('rejects tag writes to trashed Assets through the canonical tag route', async () => {
     const mediaDir = getMediaDir();
     fs.mkdirSync(mediaDir, { recursive: true });
     const localPath = path.join(mediaDir, 'trashed-tag-route.png');
@@ -389,12 +377,6 @@ describe('Asset Library API', () => {
     );
     assert.equal(canonical.status, 409);
     assert.equal((await canonical.json()).code, 'asset_not_active');
-    const legacy = await updateLegacyMediaTags(
-      request('/api/media/trashed-tag-route/tags', body),
-      { params: Promise.resolve({ id: 'trashed-tag-route' }) },
-    );
-    assert.equal(legacy.status, 409);
-    assert.equal((await legacy.json()).code, 'asset_not_active');
     assert.equal(
       (getDb().prepare(
         'SELECT tags FROM media_generations WHERE id = ?',

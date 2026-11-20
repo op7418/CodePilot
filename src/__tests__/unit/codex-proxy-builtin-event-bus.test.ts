@@ -17,7 +17,7 @@ import {
   emitBuiltinEvent,
   __resetBuiltinEventBusForTests,
   __subscriberCountForTests,
-} from '@/lib/codex/proxy/builtin-event-bus';
+} from '@/lib/harness/builtin-event-bus';
 import type { RuntimeRunEvent } from '@/lib/runtime/contract';
 
 /** Build a canonical `assistant_delta` event with the required base

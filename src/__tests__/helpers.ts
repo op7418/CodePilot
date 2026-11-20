@@ -283,28 +283,6 @@ export function panelCloseButton(page: Page): Locator {
   return page.locator('button:has(.sr-only:text("Close panel"))');
 }
 
-// Legacy aliases for backward compatibility
-/** @deprecated Use fileTreePanel() instead */
-export function rightPanel(page: Page): Locator {
-  return fileTreePanel(page);
-}
-/** @deprecated Use fileTreeToggleButton() instead */
-export function panelOpenButton(page: Page): Locator {
-  return fileTreeToggleButton(page);
-}
-/** @deprecated Tabs no longer exist — FileTree panel always shows files */
-export function panelFilesTab(page: Page): Locator {
-  return fileTreeToggleButton(page);
-}
-/** @deprecated Tasks are always visible in FileTree panel, no separate tab */
-export function panelTasksTab(page: Page): Locator {
-  return fileTreeToggleButton(page);
-}
-/** @deprecated No separate collapsed state — use fileTreeToggleButton() */
-export function rightPanelCollapsed(page: Page): Locator {
-  return fileTreeToggleButton(page);
-}
-
 // ---------------------------------------------------------------------------
 // File Tree helpers (V2)
 // ---------------------------------------------------------------------------
@@ -369,22 +347,6 @@ export function filePreviewCode(page: Page): Locator {
 }
 
 // ---------------------------------------------------------------------------
-// Task panel helpers (V2)
-// ---------------------------------------------------------------------------
-
-/** @deprecated Tasks are always visible in FileTree panel. Opens file tree panel instead. */
-export async function switchToTasksTab(page: Page) {
-  await fileTreeToggleButton(page).click();
-  await page.waitForTimeout(200);
-}
-
-/** @deprecated Opens file tree panel. */
-export async function switchToFilesTab(page: Page) {
-  await fileTreeToggleButton(page).click();
-  await page.waitForTimeout(200);
-}
-
-// ---------------------------------------------------------------------------
 // Skills Editor helpers (V2)
 // ---------------------------------------------------------------------------
 
@@ -436,7 +398,7 @@ export function skillSourceBadge(page: Page, source: 'global' | 'project'): Loca
 
 /** The skill delete button (trash icon, appears on hover). */
 export function skillDeleteButton(page: Page): Locator {
-  return page.locator('button:has(svg.lucide-trash-2)');
+  return page.locator('[class*="cursor-pointer"] button:has(svg)');
 }
 
 // ---------------------------------------------------------------------------
@@ -471,16 +433,6 @@ export function toolCallLabels(page: Page): Locator {
 /** Tool result labels (green "Tool Result" text). */
 export function toolResultLabels(page: Page): Locator {
   return page.locator('span.text-green-600, span.dark\\:text-green-400').filter({ hasText: 'Tool Result' });
-}
-
-/** User message avatar circles. */
-export function userAvatar(page: Page): Locator {
-  return page.locator('.bg-secondary.rounded-full:has(svg.lucide-user)');
-}
-
-/** Assistant message avatar circles. */
-export function assistantAvatar(page: Page): Locator {
-  return page.locator('.bg-primary.rounded-full:has(svg.lucide-bot)');
 }
 
 /** Token usage display container. */

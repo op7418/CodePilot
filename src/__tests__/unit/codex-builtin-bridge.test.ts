@@ -32,7 +32,7 @@ import {
 import {
   subscribeBuiltinEvents,
   __resetBuiltinEventBusForTests,
-} from '@/lib/codex/proxy/builtin-event-bus';
+} from '@/lib/harness/builtin-event-bus';
 import type { RuntimeRunEvent } from '@/lib/runtime/contract';
 import fs from 'node:fs';
 import path from 'node:path';

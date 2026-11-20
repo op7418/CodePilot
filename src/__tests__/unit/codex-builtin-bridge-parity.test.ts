@@ -29,7 +29,7 @@ import { createCodePilotBuiltinTools } from '@/lib/codex/proxy/builtin-bridge';
 import {
   subscribeBuiltinEvents,
   __resetBuiltinEventBusForTests,
-} from '@/lib/codex/proxy/builtin-event-bus';
+} from '@/lib/harness/builtin-event-bus';
 import {
   addSessionTask,
   getSessionTasks,

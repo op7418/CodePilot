@@ -40,7 +40,7 @@ function srcExists(rel: string): boolean {
 const CODEX_FILES = [
   'src/lib/codex/proxy/unified-adapter.ts',
   'src/lib/codex/proxy/builtin-bridge.ts',
-  'src/lib/codex/proxy/builtin-event-bus.ts',
+  'src/lib/harness/builtin-event-bus.ts',
   'src/lib/codex/proxy/translate-input.ts',
   'src/lib/codex/proxy/translate-tools.ts',
   'src/lib/codex/proxy/translate-stream.ts',

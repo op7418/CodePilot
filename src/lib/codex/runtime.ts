@@ -102,7 +102,7 @@ import {
   DECLINE_ELICITATION,
 } from './mcp-elicitation';
 import { getSetting, getSession } from '@/lib/db';
-import { subscribeBuiltinEvents } from './proxy/builtin-event-bus';
+import { subscribeBuiltinEvents } from '@/lib/harness/builtin-event-bus';
 import { createCodexAccountManagedTools } from './proxy/builtin-bridge';
 import {
   codexNotificationBelongsToThread,

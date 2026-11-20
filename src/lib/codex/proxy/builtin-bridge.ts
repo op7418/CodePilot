@@ -52,7 +52,7 @@ import type { ResolvedProvider } from '@/lib/provider-resolver';
 import type { JSONSchema7 } from '@ai-sdk/provider';
 import type { MediaBlock } from '@/types';
 import { makeToolStarted, makeToolCompleted } from '@/lib/runtime/event-adapter';
-import { emitBuiltinEvent } from './builtin-event-bus';
+import { emitBuiltinEvent } from '@/lib/harness/builtin-event-bus';
 import { materializeCodexEventMedia } from '@/lib/codex/media-import';
 import {
   CODEX_SUBAGENT_TIMEOUT_MS,

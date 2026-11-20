@@ -9,7 +9,7 @@ import {
   navLink,
   newChatButton,
   chatInput,
-  rightPanel,
+  fileTreePanel,
   panelCloseButton,
   collectConsoleErrors,
   filterCriticalErrors,
@@ -320,15 +320,15 @@ test.describe('Layout', () => {
       // Three columns: sidebar + main + right panel
       await expect(sidebar(page).first()).toBeVisible();
       await expect(page.locator('main')).toBeVisible();
-      await expect(rightPanel(page)).toBeVisible();
+      await expect(fileTreePanel(page)).toBeVisible();
     });
 
     test('right panel is hidden on non-chat routes', async ({ page }) => {
       await goToSettings(page);
-      await expect(rightPanel(page)).toBeHidden();
+      await expect(fileTreePanel(page)).toBeHidden();
 
       await goToPlugins(page);
-      await expect(rightPanel(page)).toBeHidden();
+      await expect(fileTreePanel(page)).toBeHidden();
     });
 
     test('main content adjusts width when panel collapses', async ({ page }) => {
