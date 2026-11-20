@@ -2506,6 +2506,17 @@ const zh: Record<TranslationKey, string> = {
   'provider.codexQuota.balance': '余额',
   'provider.codexQuota.unlimited': '不限',
   'provider.codexQuota.rateLimitReached': '已触达配额上限：',
+
+  // Settings — Overview Heatmap
+  'overview.heatmap.ariaMostActive': '最活跃 {date}，{tokens} tokens。',
+  'overview.heatmap.ariaLabel': 'Token 用量活跃度图，过去 {days} 天。总用量 {total} tokens。{mostActive}最长连续 {longest} 天，当前连续 {current} 天。',
+  'overview.heatmap.subtitle': '过去 {days} 天的每日 token 消耗',
+  'overview.heatmap.weekdayMon': '一',
+  'overview.heatmap.weekdayWed': '三',
+  'overview.heatmap.weekdayFri': '五',
+  'overview.heatmap.less': '少',
+  'overview.heatmap.more': '多',
+  'overview.heatmap.daysUnit': '天',
 };
 
 export default zh;

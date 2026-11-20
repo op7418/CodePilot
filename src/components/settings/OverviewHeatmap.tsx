@@ -271,7 +271,7 @@ export function OverviewHeatmap({ isZh, onJumpToDetails, hideViewDetails = false
   useEffect(() => {
     // setState lands on a microtask after `await fetch()` — the
     // `react-hooks/set-state-in-effect` rule false-flags fetch-on-mount.
-     
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchStats();
     return () => abortRef.current?.abort();
   }, [fetchStats]);
@@ -306,17 +306,19 @@ export function OverviewHeatmap({ isZh, onJumpToDetails, hideViewDetails = false
   // Single accessible summary for the whole heatmap so screen readers don't
   // walk through 365 cells. Pairs with `role="img"` + `aria-hidden` on the
   // visual grid below.
-  const heatmapAriaLabel = isZh
-    ? `Token 用量活跃度图，过去 ${WINDOW_DAYS} 天。总用量 ${formatTokens(stats.totalTokens)} tokens。${
-        stats.mostActiveDate
-          ? `最活跃 ${localiseDate(new Date(stats.mostActiveDate + "T00:00:00"), true)}，${formatTokens(stats.mostActiveTokens)} tokens。`
-          : ""
-      }最长连续 ${stats.longestStreak} 天，当前连续 ${stats.currentStreak} 天。`
-    : `Token usage activity heatmap, past ${WINDOW_DAYS} days. Total ${formatTokens(stats.totalTokens)} tokens. ${
-        stats.mostActiveDate
-          ? `Most active ${localiseDate(new Date(stats.mostActiveDate + "T00:00:00"), false)} with ${formatTokens(stats.mostActiveTokens)} tokens. `
-          : ""
-      }Longest streak ${stats.longestStreak} days, current streak ${stats.currentStreak} days.`;
+  const mostActiveAria = stats.mostActiveDate
+    ? t("overview.heatmap.ariaMostActive", {
+        date: localiseDate(new Date(stats.mostActiveDate + "T00:00:00"), isZh),
+        tokens: formatTokens(stats.mostActiveTokens),
+      })
+    : "";
+  const heatmapAriaLabel = t("overview.heatmap.ariaLabel", {
+    days: WINDOW_DAYS,
+    total: formatTokens(stats.totalTokens),
+    mostActive: mostActiveAria,
+    longest: stats.longestStreak,
+    current: stats.currentStreak,
+  });
 
   return (
     <div className="rounded-lg border border-border/50 bg-card p-5">
@@ -326,9 +328,7 @@ export function OverviewHeatmap({ isZh, onJumpToDetails, hideViewDetails = false
           {t("overview.heatmapTitle" as TranslationKey)}
         </h3>
         <p className="text-sm text-muted-foreground mt-1.5">
-          {isZh
-            ? `过去 ${WINDOW_DAYS} 天的每日 token 消耗`
-            : `Daily token usage over the past ${WINDOW_DAYS} days`}
+          {t("overview.heatmap.subtitle", { days: WINDOW_DAYS })}
         </p>
       </div>
 
@@ -383,11 +383,11 @@ export function OverviewHeatmap({ isZh, onJumpToDetails, hideViewDetails = false
                   className="text-[9px] text-muted-foreground text-right leading-none flex items-center justify-end"
                 >
                   {row === 1
-                    ? isZh ? "一" : "M"
+                    ? t("overview.heatmap.weekdayMon")
                     : row === 3
-                      ? isZh ? "三" : "W"
+                      ? t("overview.heatmap.weekdayWed")
                       : row === 5
-                        ? isZh ? "五" : "F"
+                        ? t("overview.heatmap.weekdayFri")
                         : ""}
                 </span>
               ))}
@@ -425,13 +425,13 @@ export function OverviewHeatmap({ isZh, onJumpToDetails, hideViewDetails = false
 
           {/* Legend */}
           <div className="mt-3 flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            <span>{isZh ? "少" : "Less"}</span>
+            <span>{t("overview.heatmap.less")}</span>
             <div className="size-[10px] rounded-[2px] bg-muted/40" />
             <div className="size-[10px] rounded-[2px] bg-status-success/15" />
             <div className="size-[10px] rounded-[2px] bg-status-success/35" />
             <div className="size-[10px] rounded-[2px] bg-status-success/65" />
             <div className="size-[10px] rounded-[2px] bg-status-success/95" />
-            <span>{isZh ? "多" : "More"}</span>
+            <span>{t("overview.heatmap.more")}</span>
           </div>
         </div>
       </div>
@@ -462,11 +462,11 @@ export function OverviewHeatmap({ isZh, onJumpToDetails, hideViewDetails = false
           />
           <Stat
             label={t("overview.heatmapLongestStreak" as TranslationKey)}
-            value={loading ? "–" : `${stats.longestStreak} ${isZh ? "天" : "days"}`}
+            value={loading ? "–" : `${stats.longestStreak} ${t("overview.heatmap.daysUnit")}`}
           />
           <Stat
             label={t("overview.heatmapCurrentStreak" as TranslationKey)}
-            value={loading ? "–" : `${stats.currentStreak} ${isZh ? "天" : "days"}`}
+            value={loading ? "–" : `${stats.currentStreak} ${t("overview.heatmap.daysUnit")}`}
           />
         </div>
       )}

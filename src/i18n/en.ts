@@ -2535,6 +2535,17 @@ const en = {
   'provider.codexQuota.balance': 'Balance',
   'provider.codexQuota.unlimited': 'Unlimited',
   'provider.codexQuota.rateLimitReached': 'Rate limit reached: ',
+
+  // Settings — Overview Heatmap
+  'overview.heatmap.ariaMostActive': 'Most active {date} with {tokens} tokens. ',
+  'overview.heatmap.ariaLabel': 'Token usage activity heatmap, past {days} days. Total {total} tokens. {mostActive}Longest streak {longest} days, current streak {current} days.',
+  'overview.heatmap.subtitle': 'Daily token usage over the past {days} days',
+  'overview.heatmap.weekdayMon': 'M',
+  'overview.heatmap.weekdayWed': 'W',
+  'overview.heatmap.weekdayFri': 'F',
+  'overview.heatmap.less': 'Less',
+  'overview.heatmap.more': 'More',
+  'overview.heatmap.daysUnit': 'days',
 } as const;
 
 export type TranslationKey = keyof typeof en;
