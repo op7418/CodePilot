@@ -22,7 +22,7 @@
 | WP3 | Node 与 Electron 大版本升级 | Opus | 待开始 |
 | WP4 | 第二轮死代码：路由、IPC、模块、`资料/` | Gemini | 完成（`资料/` 按用户决定暂不取消跟踪） |
 | WP5 | GitHub 模板与工作流的过时口径 | Gemini | 完成 |
-| WP6 | 永久跳过的 E2E 用例 | Gemini | 待开始 |
+| WP6 | 永久跳过的 E2E 用例 | Gemini | 完成（`visual-regression.spec.ts` 因基线截图未入库保持 skip） |
 | WP7 | 设置页内联中英文迁到 i18n 字典 | Gemini | 待开始 |
 | WP8 | `docs/research/` 与 `docs/guardrails/` 按新标准分流 | Opus | 完成（`v0.56.x-stability-trust` 留待所有者决定） |
 
@@ -176,3 +176,12 @@
   - `src/i18n/{en,zh}.ts` 在保护全部 15 个动态前缀（含计划所列 5 个及全仓扫描确认的其余 10 个）后删除 479 个零引用孤儿键。
   - `src/__tests__/helpers.ts` 删除未使用的旧别名及指向 `svg.lucide-user`/`svg.lucide-bot` 的 `userAvatar`/`assistantAvatar`，并将仍在 `skills.spec.ts` 中调用的 `skillDeleteButton` 选择器从失效的 `svg.lucide-trash-2` 改为 `[class*="cursor-pointer"] button:has(svg)`。
 - 2026-11-20：WP5 完成。清理 `.github/ISSUE_TEMPLATE/{bug_report,feature_request,config}.yml`、`PULL_REQUEST_TEMPLATE.md`、`TRIAGE.md` 中过时的 `v0.56.x` 冻结期口径（保留 P0/P1 分级与复现信息要求）；`issue-intake.yml` 与 `stale-needs-repro.yml` 去掉硬编码的 `v0.56.2+`；`release-blocker-check.yml` 将写死的 `v0.56.x Stability / Trust` milestone 改为必填 `workflow_dispatch` 输入 `milestone`（经 `env.TARGET_MILESTONE` 传入，保持 fail-closed）；`preview-release.yml` 去掉 `from the refactor branch` 和 `0.54.x` 过时说明。所有 workflow action 保持 40 位 commit SHA。已有 GitHub 标签名未改动（含历史版本号前缀的标签：`v0.57+ parking-lot`，留待仓库所有者决定是否重命名）。
+- 2026-11-20：WP6 完成。更新 `src/__tests__/helpers.ts` 失效选择器（`[data-platform-sidebar]`、`UnifiedTopBar` 侧栏切换按钮、本地化发送/停止 `aria-label`、`[data-codepilot-chat-code-block]`、`/plugins#mcp`、`/settings/<tab>`），并逐个处理 7 个含永久 skip 的 E2E 文件：
+  - `layout.spec.ts`：修复并取消 skip 侧栏导航/折叠展开、主题切换（迁至 `/settings/appearance`）、导航高亮、移动端响应；删除已不存在的旧 `Header`（页头 `h1`）和旧 `Three-Column Layout (V2)` 块。
+  - `plugins.spec.ts`：删除已取消的旧 `Plugins Landing Page (V2)` 与 `Navigate to MCP`；修复并取消 skip `/plugins` 统一标签页、`/plugins/mcp` 重定向、Add MCP Server 对话框、MCP JSON 配置对话框。
+  - `settings.spec.ts`：删除已取消的 `/settings?tab=skills`；修复并取消 skip `/settings` 重定向与侧栏导航、`/settings/runtime` 内折叠的 `settings.json` Form/JSON 编辑器。
+  - `skills.spec.ts`：删除已取消的 `/settings?tab=skills` 内联分栏编辑器用例；修复并取消 skip `/skills` 重定向与 `/plugins#skills` 列表、搜索、新建技能弹窗、技能商店弹窗。
+  - `chat.spec.ts` 与 `chat-enhanced.spec.ts`：删除已移除的 `helper text is displayed below input` 与 `user messages have User icon avatar`；用独立 fixture provider + SSE 拦截替代对真实外网模型调用的依赖，修复并取消 skip 发送消息、会话侧栏更新、代码块头/复制按钮与中断流式响应。
+  - `mention-ui.spec.ts`：补齐 provider fixture 与 `/api/files/raw` 路由拦截，修复并取消 skip 两个 `@mention` 集成用例。
+  - `visual-regression.spec.ts`：保留 `test.describe.skip`（因跨平台截图基线目录已 `.gitignore`，不入库，取消 skip 会导致干净检出环境下 `test:e2e` 必然失败）。
+  - 验证：修改的 7 个 E2E 文件共 49 个用例 `npm run test:e2e` 全部通过（49 passed, 0 skipped）；全量 `npm run test:e2e` 另有 7 个无关历史用例失败（`foundation-refresh-capability` U6 因 `CODEX_DISABLED=1`、`context-chips-send-clear` 2 条缺默认 provider、`chat-save-warning` 1 条并行 locale 竞争、`global-search-modes` 1 条、`model-identity-conflict` 2 条超时），未改动这些文件，记录在汇报中。

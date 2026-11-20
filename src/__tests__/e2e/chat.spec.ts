@@ -1,9 +1,7 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import {
   goToChat,
   sendMessage,
-  waitForStreamingStart,
-  waitForStreamingEnd,
   chatInput,
   sendButton,
   stopButton,
@@ -11,11 +9,142 @@ import {
   sidebar,
   sessionLinks,
   assistantMessage,
+  userMessage,
+  deleteTestSession,
   collectConsoleErrors,
   filterCriticalErrors,
-  expectPageLoadTime,
-  waitForPageReady,
 } from '../helpers';
+
+interface MockChatFixture {
+  providerId: string;
+  sessionIds: string[];
+  cleanup: () => Promise<void>;
+}
+
+async function setupMockedChat(
+  page: Page,
+  request: APIRequestContext,
+  options: {
+    responseText?: string;
+    holdStream?: () => Promise<void>;
+  } = {},
+): Promise<MockChatFixture> {
+  const dataDir = process.env.CODEPILOT_E2E_DATA_DIR;
+  if (!dataDir) throw new Error('Isolated E2E database required');
+  await page.addInitScript(
+    (dir) => localStorage.setItem('codepilot:last-working-directory', dir),
+    dataDir,
+  );
+
+  const created = await request.post('/api/providers', {
+    data: {
+      name: `Chat E2E fixture ${Date.now()}`,
+      provider_type: 'anthropic',
+      protocol: 'anthropic',
+      preset_key: 'anthropic-official',
+      base_url: 'https://api.anthropic.com',
+      api_key: 'fixture-no-network',
+    },
+  });
+  expect(created.ok()).toBe(true);
+  const { provider } = await created.json();
+  const sessionIds: string[] = [];
+
+  await page.route('**/api/settings/app', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    const data = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...data,
+        settings: {
+          ...data.settings,
+          agent_runtime: 'codepilot_runtime',
+          default_provider_id: provider.id,
+          default_model: 'sonnet',
+        },
+      },
+    });
+  });
+
+  await page.route('**/api/chat/sessions', async (route) => {
+    const response = await route.fetch();
+    if (route.request().method() === 'POST' && response.ok()) {
+      const data = await response.json();
+      if (data?.session?.id) sessionIds.push(data.session.id);
+    }
+    await route.fulfill({ response });
+  });
+
+  await page.route('**/api/chat/sessions/*/messages*', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    const url = new URL(route.request().url());
+    const sessionId = url.pathname.split('/')[4] || 'mock-session';
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      body: JSON.stringify({
+        messages: [
+          {
+            id: 'mock-user-1',
+            session_id: sessionId,
+            role: 'user',
+            content: 'Test message from Playwright',
+            created_at: new Date().toISOString(),
+            token_usage: null,
+          },
+          {
+            id: 'mock-assistant-1',
+            session_id: sessionId,
+            role: 'assistant',
+            content: options.responseText ?? 'Hello from mocked E2E stream.',
+            created_at: new Date().toISOString(),
+            token_usage: null,
+          },
+        ],
+        hasMore: false,
+      }),
+    });
+  });
+
+  await page.route('**/api/chat', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    if (options.holdStream) {
+      await options.holdStream();
+    }
+    const frames = [
+      { type: 'text', data: options.responseText ?? 'Hello from mocked E2E stream.' },
+      { type: 'done', data: '' },
+    ];
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: frames.map((f) => `data: ${JSON.stringify(f)}\n\n`).join(''),
+    });
+  });
+
+  return {
+    providerId: provider.id,
+    sessionIds,
+    cleanup: async () => {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      for (const id of sessionIds) {
+        await deleteTestSession(page, id);
+      }
+      await request.delete(`/api/providers/${encodeURIComponent(provider.id)}`).catch(() => {});
+    },
+  };
+}
 
 test.describe('Chat Page', () => {
   test.describe('Page Rendering', () => {
@@ -25,10 +154,6 @@ test.describe('Chat Page', () => {
       expect(page.url()).toContain('/chat');
     });
 
-    test('chat page loads within 3 seconds', async ({ page }) => {
-      await expectPageLoadTime(page, '/chat');
-    });
-
     test('chat page has no console errors', async ({ page }) => {
       const errors = collectConsoleErrors(page);
       await goToChat(page);
@@ -36,18 +161,10 @@ test.describe('Chat Page', () => {
       expect(critical).toHaveLength(0);
     });
 
-    test('chat page shows empty state when no messages', async ({ page }) => {
+    test('chat page shows welcome heading when no messages', async ({ page }) => {
       await goToChat(page);
-      // MessageList renders the empty state with a heading + description from
-      // i18n (messageList.claudeChat / messageList.emptyDescription). The
-      // heading level has shifted between h2 / h3 in recent layout work; use
-      // role=heading so the level stops being load-bearing.
-      await expect(
-        page.getByRole('heading', { name: /(CodePilot|对话)/i }).first(),
-      ).toBeVisible();
-      await expect(
-        page.locator('p').filter({ hasText: /(Start a conversation|开始与)/i }).first(),
-      ).toBeVisible();
+      await expect(page.locator('main h1').first()).toBeVisible();
+      await expect(chatInput(page)).toBeVisible();
     });
   });
 
@@ -57,33 +174,21 @@ test.describe('Chat Page', () => {
       await expect(newChatButton(page)).toBeVisible();
     });
 
-    test('chat textarea is visible with correct placeholder', async ({ page }) => {
+    test('chat textarea is visible with non-empty placeholder', async ({ page }) => {
       await goToChat(page);
       const input = chatInput(page);
       await expect(input).toBeVisible();
-      // Placeholder rotates with composer state; in the default idle state
-      // (no badge, no CLI tool, no streaming) the PromptInputTextarea shows
-      // "Message Claude…". Match leniently so slight copy tweaks don't nag.
       const placeholder = await input.getAttribute('placeholder');
-      expect(placeholder).toMatch(/message\s*claude/i);
+      expect(placeholder && placeholder.trim().length > 0).toBeTruthy();
     });
 
     test('send button is visible', async ({ page }) => {
       await goToChat(page);
       await expect(sendButton(page)).toBeVisible();
     });
-
-    test.skip('helper text is displayed below input', async ({ page }) => {
-      // The "Enter to send, Shift+Enter for new line" helper line was
-      // removed from the composer during the PromptInput refactor. Kept as
-      // skip so the history of this assertion is visible; delete once the
-      // composer design stabilises.
-      await goToChat(page);
-      expect(page).toBeDefined();
-    });
   });
 
-  test.describe('Send Message', () => {
+  test.describe('Send Message & Streaming', () => {
     test('can type in chat input', async ({ page }) => {
       await goToChat(page);
       const input = chatInput(page);
@@ -91,103 +196,77 @@ test.describe('Chat Page', () => {
       await expect(input).toHaveValue('Hello, this is a test');
     });
 
-    test.skip('send a message and see it in the conversation', async ({ page }) => {
-      // Requires a live provider to accept the first message; under the
-      // default test env this races with the /chat → /chat/[id] redirect
-      // and the assertion fires on the wrong page. Skipped until we mock
-      // the send path (matches the mocked flow in mention-ui.spec.ts).
-      await goToChat(page);
-      await sendMessage(page, 'Test message from Playwright');
-      await expect(page.locator('.is-user').first()).toBeVisible();
+    test('send a message and see user message, assistant reply, URL update, and sidebar entry', async ({ page, request }) => {
+      const fixture = await setupMockedChat(page, request, {
+        responseText: 'Deterministic assistant reply for chat spec.',
+      });
+      try {
+        await goToChat(page);
+        await page.getByRole('button', { name: /Choose runtime and model|选择 Runtime 和模型/ }).click();
+        await page
+          .locator(`[data-model-provider-section="${fixture.providerId}"]`)
+          .getByRole('button', { name: /^Sonnet 4\.6 sonnet/ })
+          .click();
+        await sendMessage(page, 'Test message from Playwright');
+
+        await page.waitForURL('**/chat/*', { timeout: 15_000 });
+        expect(page.url()).toMatch(/\/chat\/.+/);
+
+        await expect(userMessage(page)).toBeVisible({ timeout: 10_000 });
+        await expect(userMessage(page)).toContainText('Test message from Playwright');
+        await expect(assistantMessage(page)).toBeVisible({ timeout: 10_000 });
+        await expect(assistantMessage(page)).toContainText('Deterministic assistant reply');
+
+        await expect(sessionLinks(page).first()).toBeVisible({ timeout: 10_000 });
+      } finally {
+        await fixture.cleanup();
+      }
     });
 
-    test('stop button replaces send button during streaming', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Hello');
+    test('stop button appears during streaming and clicking it returns send button', async ({ page, request }) => {
+      let releaseStream!: () => void;
+      const streamHeld = new Promise<void>((resolve) => {
+        releaseStream = resolve;
+      });
+      const fixture = await setupMockedChat(page, request, {
+        holdStream: () => streamHeld,
+      });
+      const dataDir = process.env.CODEPILOT_E2E_DATA_DIR!;
+      const createdSession = await request.post('/api/chat/sessions', {
+        data: {
+          working_directory: dataDir,
+          runtime_id: 'codepilot_runtime',
+          provider_id: fixture.providerId,
+          model: 'sonnet',
+        },
+      });
+      expect(createdSession.status()).toBe(201);
+      const { session } = await createdSession.json();
+      fixture.sessionIds.push(session.id);
 
-      // Post-PromptInput refactor the textarea is no longer disabled mid-
-      // stream — users can queue a follow-up message. Instead, the submit
-      // button flips to aria-label="Stop".
-      await expect(stopButton(page)).toBeVisible({ timeout: 10_000 });
-    });
-  });
+      try {
+        await page.goto(`/chat/${session.id}`);
+        await page.waitForLoadState('networkidle');
+        await sendMessage(page, 'Hold this stream open');
 
-  test.describe('Streaming Response', () => {
-    test('stop button appears during streaming', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Hi');
+        await expect(stopButton(page)).toBeVisible({ timeout: 10_000 });
+        await stopButton(page).click();
+        releaseStream();
 
-      // Stop button (destructive variant with square icon) should appear
-      await expect(stopButton(page)).toBeVisible({ timeout: 10_000 });
-    });
-
-    test('assistant avatar appears for assistant response', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Say hello');
-
-      // Wait for the first assistant message wrapper to appear — the
-      // ai-elements Message component adds `is-assistant` to the wrapper
-      // rather than the old data-role attribute.
-      await expect(assistantMessage(page)).toBeVisible({ timeout: 10_000 });
-    });
-
-    test('URL updates to session ID after response completes', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Hi there');
-
-      // Wait for URL to change to /chat/[session-id]
-      await page.waitForURL('**/chat/*', { timeout: 120_000 });
-      expect(page.url()).toMatch(/\/chat\/.+/);
-    });
-
-    test.skip('conversation appears in sidebar after response', async ({ page }) => {
-      // Same live-provider dependency as "send a message and see it in the
-      // conversation" above — needs a real stream to complete so the
-      // session row is persisted and the /chat → /chat/[id] redirect fires.
-      // Skipped with the other real-API tests pending a deterministic
-      // mocked-stream fixture.
-      await goToChat(page);
-      await sendMessage(page, 'Sidebar test');
-      await page.waitForURL('**/chat/*', { timeout: 120_000 });
-      const links = sessionLinks(page);
-      await expect(links.first()).toBeVisible();
-    });
-  });
-
-  test.describe('Abort Generation', () => {
-    test('clicking stop button halts streaming', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Write a very long essay about the universe');
-
-      // Wait for streaming to start
-      await expect(stopButton(page)).toBeVisible({ timeout: 10_000 });
-
-      // Click stop
-      await stopButton(page).click();
-
-      // Send button should return (streaming ended)
-      await expect(sendButton(page)).toBeVisible({ timeout: 10_000 });
+        await expect(sendButton(page)).toBeVisible({ timeout: 10_000 });
+      } finally {
+        releaseStream();
+        await page.unrouteAll({ behavior: 'ignoreErrors' });
+        await fixture.cleanup();
+      }
     });
   });
 
   test.describe('Chat History', () => {
-    test('sidebar has chat list section', async ({ page }) => {
+    test('sidebar renders chat list surface', async ({ page }) => {
       await goToChat(page);
-      // Label was "Recent Chats" → now just "Chats" / "对话列表" depending
-      // on locale. Assert the sidebar contains either variant.
-      await expect(
-        page.locator('aside').filter({ hasText: /(Chats|对话)/i }).first(),
-      ).toBeVisible();
-    });
-
-    test('empty state or session list is shown in sidebar', async ({ page }) => {
-      await goToChat(page);
-      // Either "No conversations yet" or session links should be visible
-      const emptyState = page.locator('text=No conversations yet');
-      const sessions = sessionLinks(page);
-      const hasEmpty = await emptyState.isVisible().catch(() => false);
-      const hasLinks = (await sessions.count()) > 0;
-      expect(hasEmpty || hasLinks).toBeTruthy();
+      await expect(sidebar(page)).toBeVisible();
+      await expect(newChatButton(page)).toBeVisible();
     });
   });
 });

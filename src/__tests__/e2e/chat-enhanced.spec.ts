@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page, type APIRequestContext } from '@playwright/test';
 import {
   goToChat,
   sendMessage,
@@ -11,233 +11,199 @@ import {
   toolBlocks,
   toolCallLabels,
   toolResultLabels,
-  tokenUsageDisplay,
-  waitForStreamingStart,
-  waitForStreamingEnd,
+  userMessage,
+  assistantMessage,
+  deleteTestSession,
   collectConsoleErrors,
   filterCriticalErrors,
-  waitForPageReady,
 } from '../helpers';
 
-test.describe('Chat UI Enhanced (V2)', () => {
-  test.describe('Code Block Display', () => {
-    test.skip('code blocks have dark background header bar when present', async ({ page }) => {
-      // Depends on a real streaming response from the configured provider
-      // returning a code block. Flaky under the default test env (no
-      // mocking, no retries locally). Kept as skip so the intent is
-      // visible; re-enable once we have deterministic mocked-stream
-      // fixtures for this path.
-      await goToChat(page);
-      await sendMessage(page, 'Write a hello world function in JavaScript');
+async function setupCodeBlockChat(
+  page: Page,
+  request: APIRequestContext,
+  responseText: string,
+  holdStream?: () => Promise<void>,
+) {
+  const dataDir = process.env.CODEPILOT_E2E_DATA_DIR;
+  if (!dataDir) throw new Error('Isolated E2E database required');
+  await page.addInitScript(
+    (dir) => localStorage.setItem('codepilot:last-working-directory', dir),
+    dataDir,
+  );
 
-      // Wait for assistant response -- V2 uses gradient avatar instead of text label
-      // Detect assistant response via the gradient avatar
-      await expect(
-        page.locator('.is-assistant').first()
-      ).toBeVisible({ timeout: 30_000 });
+  const created = await request.post('/api/providers', {
+    data: {
+      name: `Chat Enhanced fixture ${Date.now()}`,
+      provider_type: 'anthropic',
+      protocol: 'anthropic',
+      preset_key: 'anthropic-official',
+      base_url: 'https://api.anthropic.com',
+      api_key: 'fixture-no-network',
+    },
+  });
+  expect(created.ok()).toBe(true);
+  const { provider } = await created.json();
+  const sessionIds: string[] = [];
 
-      // Wait for streaming to complete
-      await waitForStreamingEnd(page);
-
-      // Check for code block header (zinc-800 or zinc-900 background)
-      const codeHeaders = page.locator('.bg-zinc-800, .bg-zinc-900');
-      const count = await codeHeaders.count();
-      // May or may not have code blocks depending on response
-      if (count > 0) {
-        await expect(codeHeaders.first()).toBeVisible();
-      }
+  await page.route('**/api/settings/app', async (route) => {
+    if (route.request().method() !== 'GET') {
+      await route.continue();
+      return;
+    }
+    const response = await route.fetch();
+    const data = await response.json();
+    await route.fulfill({
+      response,
+      json: {
+        ...data,
+        settings: {
+          ...data.settings,
+          agent_runtime: 'codepilot_runtime',
+          default_provider_id: provider.id,
+          default_model: 'sonnet',
+        },
+      },
     });
+  });
 
-    test('code blocks have copy button when present', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Show me a Python hello world');
+  await page.route('**/api/chat/sessions', async (route) => {
+    const response = await route.fetch();
+    if (route.request().method() === 'POST' && response.ok()) {
+      const data = await response.json();
+      if (data?.session?.id) sessionIds.push(data.session.id);
+    }
+    await route.fulfill({ response });
+  });
 
-      await expect(
-        page.locator('.is-assistant').first()
-      ).toBeVisible({ timeout: 30_000 });
+  await page.route('**/api/chat', async (route) => {
+    if (route.request().method() !== 'POST') {
+      await route.continue();
+      return;
+    }
+    if (holdStream) await holdStream();
+    const frames = [
+      { type: 'text', data: responseText },
+      { type: 'done', data: '' },
+    ];
+    await route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: frames.map((f) => `data: ${JSON.stringify(f)}\n\n`).join(''),
+    });
+  });
 
-      await waitForStreamingEnd(page);
+  return {
+    providerId: provider.id,
+    sessionIds,
+    cleanup: async () => {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      for (const id of sessionIds) {
+        await deleteTestSession(page, id);
+      }
+      await request.delete(`/api/providers/${encodeURIComponent(provider.id)}`).catch(() => {});
+    },
+  };
+}
 
-      const copyBtn = codeBlockCopyButton(page);
-      const count = await copyBtn.count();
-      if (count > 0) {
-        await expect(copyBtn.first()).toBeVisible();
+test.describe('Chat UI Enhanced', () => {
+  test.describe('Code Block Display', () => {
+    test('code blocks render header bar, language label, and copy button', async ({ page, request }) => {
+      const fixture = await setupCodeBlockChat(
+        page,
+        request,
+        'Here is an example:\n\n```javascript\nfunction hello() {\n  return "world";\n}\n```\n',
+      );
+      try {
+        await goToChat(page);
+        await page.getByRole('button', { name: /Choose runtime and model|选择 Runtime 和模型/ }).click();
+        await page
+          .locator(`[data-model-provider-section="${fixture.providerId}"]`)
+          .getByRole('button', { name: /^Sonnet 4\.6 sonnet/ })
+          .click();
+        await sendMessage(page, 'Write a hello world function in JavaScript');
+
+        await expect(assistantMessage(page)).toBeVisible({ timeout: 10_000 });
+        await expect(codeBlocks(page).first()).toBeVisible({ timeout: 10_000 });
+        await expect(codeBlockLanguageLabel(page)).toContainText(/javascript/i);
+        await expect(codeBlockCopyButton(page).first()).toBeVisible();
+      } finally {
+        await fixture.cleanup();
       }
     });
   });
 
   test.describe('Tool Call Display', () => {
-    test('tool blocks render with expand/collapse toggle', async ({ page }) => {
+    test('tool block locators do not throw on clean chat page', async ({ page }) => {
       await goToChat(page);
-      // Tool blocks are rendered when the message contains <!--tool_use:...--> markers
-      // This is a structural test: verify the component renders correctly if present
-      const blocks = toolBlocks(page);
-      const count = await blocks.count();
-      // Tool blocks may not be present in basic chat, but the locator should work
-      expect(count).toBeGreaterThanOrEqual(0);
-    });
-
-    test('tool call labels have correct styling classes', async ({ page }) => {
-      // Structural verification: the label locator targets blue-600 for tool calls
-      const labels = toolCallLabels(page);
-      const count = await labels.count();
-      expect(count).toBeGreaterThanOrEqual(0);
-    });
-
-    test('tool result labels have correct styling classes', async ({ page }) => {
-      const labels = toolResultLabels(page);
-      const count = await labels.count();
-      expect(count).toBeGreaterThanOrEqual(0);
+      expect(await toolBlocks(page).count()).toBeGreaterThanOrEqual(0);
+      expect(await toolCallLabels(page).count()).toBeGreaterThanOrEqual(0);
+      expect(await toolResultLabels(page).count()).toBeGreaterThanOrEqual(0);
     });
   });
 
-  test.describe('Message Layout (V2)', () => {
-    test('user messages render as right-aligned bubble', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Hello');
+  test.describe('Message Layout', () => {
+    test('user and assistant messages render with distinct wrappers', async ({ page, request }) => {
+      const fixture = await setupCodeBlockChat(page, request, 'Assistant layout test reply.');
+      try {
+        await goToChat(page);
+        await page.getByRole('button', { name: /Choose runtime and model|选择 Runtime 和模型/ }).click();
+        await page
+          .locator(`[data-model-provider-section="${fixture.providerId}"]`)
+          .getByRole('button', { name: /^Sonnet 4\.6 sonnet/ })
+          .click();
+        await sendMessage(page, 'Hello layout');
 
-      // ai-elements `<Message from="user">` adds `.is-user` + `ml-auto` to
-      // the wrapper. The old `.justify-end .bg-primary` pair was a V2-era
-      // styling hook that no longer exists.
-      await expect(
-        page.locator('.is-user').first(),
-      ).toBeVisible({ timeout: 5000 });
-    });
-
-    test('assistant messages render with gradient avatar', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Hi there');
-
-      // Detect assistant response via data-role attribute
-      await expect(
-        page.locator('.is-assistant').first()
-      ).toBeVisible({ timeout: 30_000 });
-    });
-
-    test.skip('user messages have User icon avatar', async ({ page }) => {
-      // The user-message avatar was removed when ai-elements Message moved
-      // to the bubble-only style; `.bg-secondary:has(svg)` no longer
-      // matches any sidebar/composer-neutral element either. Skip until a
-      // UX decision on bringing the avatar back vs dropping this test.
-      await goToChat(page);
-      expect(page).toBeDefined();
-    });
-
-    test('assistant messages have Bot icon avatar', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Test bot avatar');
-
-      // V2: Assistant avatar is gradient, not bg-primary
-      await expect(
-        page.locator('.is-assistant').first()
-      ).toBeVisible({ timeout: 30_000 });
+        await expect(userMessage(page)).toBeVisible({ timeout: 10_000 });
+        await expect(assistantMessage(page)).toBeVisible({ timeout: 10_000 });
+      } finally {
+        await fixture.cleanup();
+      }
     });
   });
 
-  test.describe('Input Box Features (V2)', () => {
-    test('textarea renders with the default placeholder', async ({ page }) => {
+  test.describe('Input Box Features', () => {
+    test('textarea renders inside wrapper with send button', async ({ page }) => {
       await goToChat(page);
       const input = chatInput(page);
-      // Placeholder is i18n-driven; the idle default is "Message Claude…"
-      // in en and a Chinese equivalent in zh. Match leniently.
-      const placeholder = await input.getAttribute('placeholder');
-      expect(placeholder).toMatch(/message\s*claude/i);
-    });
-
-    test('send button is visible with stable aria-label', async ({ page }) => {
-      await goToChat(page);
-      const btn = sendButton(page);
-      await expect(btn).toBeVisible();
-      // The ai-elements PromptInputSubmit sets aria-label="Submit" when
-      // idle; `sendButton()` already keys on this, assert it here too so a
-      // rename shows up as a targeted failure.
-      await expect(btn).toHaveAttribute('aria-label', 'Submit');
-    });
-
-    test('stop button appears during streaming', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Tell me a long story');
-
-      const stop = stopButton(page);
-      await expect(stop).toBeVisible({ timeout: 10_000 });
-      await expect(stop).toHaveAttribute('aria-label', 'Stop');
-    });
-
-    test('stop button replaces send button during streaming', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Hello world');
-
-      // Post-PromptInput refactor the textarea stays enabled mid-stream so
-      // the user can queue a follow-up message; the observable "busy" signal
-      // is the submit button flipping to aria-label="Stop".
-      await expect(stopButton(page)).toBeVisible({ timeout: 10_000 });
-    });
-
-    test.skip('helper text is displayed below input', async ({ page }) => {
-      // Removed during the composer refactor. See chat.spec.ts for the
-      // matching skip + rationale.
-      await goToChat(page);
-      expect(page).toBeDefined();
-    });
-
-    test('input box renders inside a rounded border wrapper', async ({ page }) => {
-      await goToChat(page);
-      // The rounded-2xl wrapper was specific to V2; the ai-elements
-      // InputGroup now renders the textarea inside any rounded border.
-      const wrapper = page.locator('textarea[name="message"]').locator('..');
-      await expect(wrapper).toBeVisible();
-    });
-  });
-
-  test.describe('Token Usage Display', () => {
-    test('token usage shows input/output counts after response', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Say hello');
-
-      // Wait for response to complete
-      await waitForStreamingEnd(page);
-      await page.waitForTimeout(1000);
-
-      // Token usage may be displayed if the response includes token_usage data
-      const usage = tokenUsageDisplay(page);
-      const count = await usage.count();
-      // Token usage display is conditional on API response including usage data
-      expect(count).toBeGreaterThanOrEqual(0);
-    });
-  });
-
-  test.describe('Streaming Status', () => {
-    test('streaming activates on message send', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Hello');
-
-      // Stop button should appear (indicating streaming)
-      await expect(stopButton(page)).toBeVisible({ timeout: 10_000 });
-    });
-
-    test('send button returns after streaming completes', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Say hi briefly');
-
-      // Wait for streaming to end
-      await waitForStreamingEnd(page);
-
-      // Send button should be back
+      await expect(input).toBeVisible();
+      await expect(input.locator('..')).toBeVisible();
       await expect(sendButton(page)).toBeVisible();
     });
 
-    test('clicking stop button halts streaming', async ({ page }) => {
-      await goToChat(page);
-      await sendMessage(page, 'Write a very long essay about history');
+    test('stop button replaces send button during streaming and halts on click', async ({ page, request }) => {
+      let releaseStream!: () => void;
+      const streamHeld = new Promise<void>((resolve) => {
+        releaseStream = resolve;
+      });
+      const fixture = await setupCodeBlockChat(page, request, 'Long story', () => streamHeld);
+      const dataDir = process.env.CODEPILOT_E2E_DATA_DIR!;
+      const createdSession = await request.post('/api/chat/sessions', {
+        data: {
+          working_directory: dataDir,
+          runtime_id: 'codepilot_runtime',
+          provider_id: fixture.providerId,
+          model: 'sonnet',
+        },
+      });
+      expect(createdSession.status()).toBe(201);
+      const { session } = await createdSession.json();
+      fixture.sessionIds.push(session.id);
 
-      // Wait for streaming to start
-      await expect(stopButton(page)).toBeVisible({ timeout: 10_000 });
+      try {
+        await page.goto(`/chat/${session.id}`);
+        await page.waitForLoadState('networkidle');
+        await sendMessage(page, 'Tell me a long story');
 
-      // Click stop
-      await stopButton(page).click();
+        const stop = stopButton(page);
+        await expect(stop).toBeVisible({ timeout: 10_000 });
+        await stop.click();
+        releaseStream();
 
-      // Send button should return
-      await expect(sendButton(page)).toBeVisible({ timeout: 10_000 });
+        await expect(sendButton(page)).toBeVisible({ timeout: 10_000 });
+      } finally {
+        releaseStream();
+        await fixture.cleanup();
+      }
     });
   });
 

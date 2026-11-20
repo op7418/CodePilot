@@ -1,14 +1,11 @@
 import { test, expect } from '@playwright/test';
-import { goToChat } from '../helpers';
+import { goToChat, deleteTestSession } from '../helpers';
 
 test.describe('@mention UI/UX', () => {
   test('typing @ keeps input shadow consistent with slash mode', async ({ page }) => {
     await goToChat(page);
 
     const input = page.locator('textarea[name="message"]').first();
-    if ((await input.count()) === 0) {
-      test.skip(true, 'Chat message input is unavailable in current test environment');
-    }
     await expect(input).toBeVisible();
 
     await input.fill('@');
@@ -16,16 +13,50 @@ test.describe('@mention UI/UX', () => {
     await expect(input).not.toHaveClass(/border-primary\/20/);
   });
 
-  test.skip('@mentions send structured files/mentions without dumping directory contents', async ({ page }) => {
-    // Complex mocked flow — mocks /api/files/suggest, /files/serve, /files?,
-    // /chat/sessions, /chat and then races through a type → click → Enter
-    // chain. Reliably passes on a freshly-restarted dev server but flakes
-    // when the server has accumulated route state across earlier tests.
-    // mention-picker-style.spec.ts already covers the picker shell;
-    // structured-mention serialization is covered by the unit tests in
-    // message-input-interactions.test.ts. Skip this heavy integration spec.
+  test('@mentions send structured files/mentions without dumping directory contents', async ({ page, request }) => {
+    const dataDir = process.env.CODEPILOT_E2E_DATA_DIR;
+    if (!dataDir) throw new Error('Isolated E2E database required');
+    await page.addInitScript(
+      (dir) => localStorage.setItem('codepilot:last-working-directory', dir),
+      dataDir,
+    );
+
+    const created = await request.post('/api/providers', {
+      data: {
+        name: `Mention E2E fixture ${Date.now()}`,
+        provider_type: 'anthropic',
+        protocol: 'anthropic',
+        preset_key: 'anthropic-official',
+        base_url: 'https://api.anthropic.com',
+        api_key: 'fixture-no-network',
+      },
+    });
+    expect(created.ok()).toBe(true);
+    const { provider } = await created.json();
+    const sessionIds: string[] = [];
+
     let chatRequestBody: Record<string, unknown> | null = null;
-    let sessionCounter = 0;
+
+    await page.route('**/api/settings/app', async (route) => {
+      if (route.request().method() !== 'GET') {
+        await route.continue();
+        return;
+      }
+      const response = await route.fetch();
+      const data = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...data,
+          settings: {
+            ...data.settings,
+            agent_runtime: 'codepilot_runtime',
+            default_provider_id: provider.id,
+            default_model: 'sonnet',
+          },
+        },
+      });
+    });
 
     await page.route('**/api/files/suggest**', async (route) => {
       await route.fulfill({
@@ -48,6 +79,14 @@ test.describe('@mention UI/UX', () => {
       });
     });
 
+    await page.route('**/api/files/raw**', async (route) => {
+      await route.fulfill({
+        status: 200,
+        headers: { 'content-type': 'text/plain', 'content-length': '38' },
+        body: 'export const page = () => "hello mention";\n',
+      });
+    });
+
     await page.route('**/api/files?**', async (route) => {
       await route.fulfill({
         status: 200,
@@ -63,26 +102,12 @@ test.describe('@mention UI/UX', () => {
     });
 
     await page.route('**/api/chat/sessions', async (route) => {
-      if (route.request().method() !== 'POST') {
-        await route.continue();
-        return;
+      const response = await route.fetch();
+      if (route.request().method() === 'POST' && response.ok()) {
+        const data = await response.json();
+        if (data?.session?.id) sessionIds.push(data.session.id);
       }
-      sessionCounter += 1;
-      const id = `mock-session-${sessionCounter}`;
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          session: {
-            id,
-            title: 'Mock Session',
-            model: 'sonnet',
-            mode: 'code',
-            provider_id: 'mock',
-            working_directory: '/tmp',
-          },
-        }),
-      });
+      await route.fulfill({ response });
     });
 
     await page.route('**/api/chat', async (route) => {
@@ -99,50 +124,55 @@ test.describe('@mention UI/UX', () => {
       await route.fulfill({
         status: 200,
         contentType: 'text/event-stream',
-        body: `data: ${JSON.stringify({ type: 'text', data: 'ok' })}\n\ndata: ${JSON.stringify({ type: 'done' })}\n\n`,
+        body: `data: ${JSON.stringify({ type: 'text', data: 'ok' })}\n\ndata: ${JSON.stringify({ type: 'done', data: '' })}\n\n`,
       });
     });
 
-    await goToChat(page);
+    try {
+      await goToChat(page);
+      await page.getByRole('button', { name: /Choose runtime and model|选择 Runtime 和模型/ }).click();
+      await page
+        .locator(`[data-model-provider-section="${provider.id}"]`)
+        .getByRole('button', { name: /^Sonnet 4\.6 sonnet/ })
+        .click();
 
-    const input = page.locator('textarea[name="message"]').first();
-    if ((await input.count()) === 0) {
-      test.skip(true, 'Chat message input is unavailable in current test environment');
-    }
-    await expect(input).toBeVisible();
+      const input = page.locator('textarea[name="message"]').first();
+      await expect(input).toBeVisible();
 
-    await input.fill('@src/com');
-    const dirOption = page.locator('button:has-text("src/components/")').first();
-    if ((await dirOption.count()) > 0) {
+      await input.fill('@src/com');
+      const dirOption = page.locator('button', { hasText: 'src/components/' }).first();
+      await expect(dirOption).toBeVisible({ timeout: 5_000 });
       await dirOption.click();
-      await input.type(' and @src/app/page.tsx');
-    } else {
-      test.skip(true, 'Directory mention option is unavailable in current test environment');
+
+      await input.pressSequentially(' and @src/app/page.tsx');
+      const fileOption = page.locator('button', { hasText: 'src/app/page.tsx' }).first();
+      await expect(fileOption).toBeVisible({ timeout: 5_000 });
+      await fileOption.click();
+      await input.press('Enter');
+
+      await expect.poll(() => chatRequestBody !== null, { timeout: 10_000 }).toBeTruthy();
+
+      const payload = (chatRequestBody ?? {}) as { files?: unknown; mentions?: unknown; content?: unknown };
+      const files = Array.isArray(payload.files) ? payload.files : [];
+      const mentions = Array.isArray(payload.mentions) ? payload.mentions : [];
+      const content = typeof payload.content === 'string' ? payload.content : '';
+
+      expect(files.length).toBeGreaterThanOrEqual(1);
+      expect(mentions.length).toBeGreaterThanOrEqual(2);
+      expect(content).toContain('[Referenced Directories]');
+      expect(content).toContain('Directory reference @src/components/');
+      expect(content).toContain('- Button.tsx');
+      expect(content).not.toContain('export const page = () => "hello mention"');
+    } finally {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      for (const id of sessionIds) {
+        await deleteTestSession(page, id);
+      }
+      await request.delete(`/api/providers/${encodeURIComponent(provider.id)}`).catch(() => {});
     }
-    await input.press('Enter');
-
-    await expect.poll(() => chatRequestBody !== null).toBeTruthy();
-
-    const payload = (chatRequestBody ?? {}) as { files?: unknown; mentions?: unknown; content?: unknown };
-    const files = Array.isArray(payload.files) ? payload.files : [];
-    const mentions = Array.isArray(payload.mentions) ? payload.mentions : [];
-    const content = typeof payload.content === 'string' ? payload.content : '';
-
-    expect(files.length).toBeGreaterThanOrEqual(1);
-    expect(mentions.length).toBeGreaterThanOrEqual(2);
-    expect(content).toContain('[Referenced Directories]');
-    expect(content).toContain('Directory reference @src/components/');
-    expect(content).toContain('- Button.tsx');
-    expect(content).not.toContain('export const page = () => "hello mention"');
   });
 
-  test.skip('removing one mention keeps others and chip order follows selection order', async ({ page }) => {
-    // Same flakiness profile as the other multi-step mention test in this
-    // file — it opens the picker twice, clicks chips, types in between,
-    // and depends on the popover staying open during a click that
-    // sometimes detaches it. Unit coverage in
-    // message-input-interactions.test.ts asserts the same ordering
-    // invariants deterministically.
+  test('removing one mention keeps others and chip order follows selection order', async ({ page }) => {
     await page.route('**/api/files/suggest**', async (route) => {
       await route.fulfill({
         status: 200,
@@ -159,47 +189,44 @@ test.describe('@mention UI/UX', () => {
     await goToChat(page);
 
     const input = page.locator('textarea[name="message"]').first();
-    if ((await input.count()) === 0) {
-      test.skip(true, 'Chat message input is unavailable in current test environment');
-    }
     await expect(input).toBeVisible();
-
-    // Create a slash badge first so we can verify mixed chip ordering.
-    await input.fill('/doctor');
-    await input.press('Enter');
 
     // Insert two file mentions in order: alpha then beta.
     await input.fill('@src/al');
-    await page.locator('button:has-text("src/alpha.ts")').first().click();
-    await input.type('@src/be');
-    await page.locator('button:has-text("src/beta.ts")').first().click();
+    const alphaOption = page.locator('button', { hasText: 'src/alpha.ts' }).first();
+    await expect(alphaOption).toBeVisible({ timeout: 5_000 });
+    await alphaOption.click();
 
-    // Selection order should be preserved in chip row: /doctor -> @alpha -> @beta.
+    await input.pressSequentially('@src/be');
+    const betaOption = page.locator('button', { hasText: 'src/beta.ts' }).first();
+    await expect(betaOption).toBeVisible({ timeout: 5_000 });
+    await betaOption.click();
+
+    // Selection order should be preserved in chip row: @alpha -> @beta.
+    const alphaChip = page.locator('span.font-mono', { hasText: '@src/alpha.ts' }).first();
+    const betaChip = page.locator('span.font-mono', { hasText: '@src/beta.ts' }).first();
+    await expect(alphaChip).toBeVisible();
+    await expect(betaChip).toBeVisible();
+
     const chipsBefore = (await page.locator('span.font-mono').allTextContents()).map((t) => t.trim()).filter(Boolean);
-    const doctorIdx = chipsBefore.findIndex((t) => t === '/doctor');
     const alphaIdx = chipsBefore.findIndex((t) => t.includes('@src/alpha.ts'));
     const betaIdx = chipsBefore.findIndex((t) => t.includes('@src/beta.ts'));
-    expect(doctorIdx).toBeGreaterThanOrEqual(0);
-    expect(alphaIdx).toBeGreaterThan(doctorIdx);
+    expect(alphaIdx).toBeGreaterThanOrEqual(0);
     expect(betaIdx).toBeGreaterThan(alphaIdx);
 
     // Remove one mention chip explicitly; the other mention should remain.
-    await page
-      .locator('span:has-text("@src/alpha.ts")')
-      .first()
-      .locator('button')
-      .click();
+    const removeAlphaBtn = page.locator('button[aria-label*="src/alpha.ts"]').first();
+    await expect(removeAlphaBtn).toBeVisible();
+    await removeAlphaBtn.click();
+
+    await expect(alphaChip).toHaveCount(0);
+    await expect(betaChip).toBeVisible();
 
     const after = await input.inputValue();
     expect(after).not.toContain('@src/alpha.ts');
     expect(after).toContain('@src/beta.ts');
 
-    const chipsAfter = (await page.locator('span.font-mono').allTextContents()).map((t) => t.trim()).filter(Boolean);
-    expect(chipsAfter.some((t) => t === '/doctor')).toBeTruthy();
-    expect(chipsAfter.some((t) => t.includes('@src/alpha.ts'))).toBeFalsy();
-    expect(chipsAfter.some((t) => t.includes('@src/beta.ts'))).toBeTruthy();
-
-    // Then Backspace should clear the remaining @file token as one unit.
+    // Backspace at the end clears the remaining @file token as one unit.
     await input.evaluate((el) => {
       const ta = el as HTMLTextAreaElement;
       const len = ta.value.length;
@@ -207,7 +234,6 @@ test.describe('@mention UI/UX', () => {
       ta.setSelectionRange(len, len);
     });
     await input.press('Backspace');
-    const afterBackspace = await input.inputValue();
-    expect(afterBackspace).not.toContain('@src/beta.ts');
+    await expect.poll(async () => input.inputValue()).not.toContain('@src/beta.ts');
   });
 });

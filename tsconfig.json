@@ -1,7 +1,11 @@
 {
   "compilerOptions": {
     "target": "ES2017",
-    "lib": ["dom", "dom.iterable", "esnext"],
+    "lib": [
+      "dom",
+      "dom.iterable",
+      "esnext"
+    ],
     "allowJs": true,
     "skipLibCheck": true,
     "strict": true,
@@ -19,7 +23,9 @@
       }
     ],
     "paths": {
-      "@/*": ["./src/*"]
+      "@/*": [
+        "./src/*"
+      ]
     }
   },
   "include": [
@@ -28,7 +34,23 @@
     "**/*.tsx",
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
-    "**/*.mts"
+    "**/*.mts",
+    ".next-e2e-CjS8nQ/types/**/*.ts",
+    ".next-e2e-CjS8nQ/dev/types/**/*.ts",
+    ".next-e2e-2JT5ag/types/**/*.ts",
+    ".next-e2e-2JT5ag/dev/types/**/*.ts",
+    ".next-e2e-5EUXw4/types/**/*.ts",
+    ".next-e2e-5EUXw4/dev/types/**/*.ts",
+    ".next-e2e-HFvESk/types/**/*.ts",
+    ".next-e2e-HFvESk/dev/types/**/*.ts",
+    ".next-e2e-bNTGe1/types/**/*.ts",
+    ".next-e2e-bNTGe1/dev/types/**/*.ts",
+    ".next-e2e-A1R0eO/types/**/*.ts",
+    ".next-e2e-A1R0eO/dev/types/**/*.ts",
+    ".next-e2e-oZjaA7/types/**/*.ts",
+    ".next-e2e-oZjaA7/dev/types/**/*.ts",
+    ".next-e2e-5vnxvA/types/**/*.ts",
+    ".next-e2e-5vnxvA/dev/types/**/*.ts"
   ],
   "exclude": [
     "node_modules",

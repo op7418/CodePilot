@@ -55,7 +55,7 @@ export async function goToPlugins(page: Page) {
 /** Navigate to the MCP management page. */
 export async function goToMCP(page: Page) {
   await disableUpdateDialog(page);
-  await page.goto('/plugins/mcp');
+  await page.goto('/plugins#mcp');
   await waitForPageReady(page);
 }
 
@@ -66,10 +66,10 @@ export async function goToSettings(page: Page) {
   await waitForPageReady(page);
 }
 
-/** Navigate to the settings page with a specific tab selected. */
+/** Navigate to a specific settings section route. */
 export async function goToSettingsTab(page: Page, tab: string) {
   await disableUpdateDialog(page);
-  await page.goto(`/settings?tab=${tab}`);
+  await page.goto(`/settings/${tab}`);
   await waitForPageReady(page);
 }
 
@@ -91,10 +91,10 @@ export async function waitForStreamingStart(page: Page) {
 
 /**
  * Wait for streaming to finish. The composer's submit button flips from
- * aria-label="Stop" back to aria-label="Submit" when the stream ends.
+ * stop aria-label back to submit aria-label when the stream ends.
  */
 export async function waitForStreamingEnd(page: Page) {
-  await page.locator('button[aria-label="Submit"]').waitFor({ state: 'visible', timeout: 120_000 });
+  await sendButton(page).waitFor({ state: 'visible', timeout: 120_000 });
 }
 
 // ---------------------------------------------------------------------------
@@ -143,37 +143,33 @@ export function chatInput(page: Page): Locator {
 }
 
 /**
- * The send / submit button. `PromptInputSubmit` sets
- * `aria-label="Submit"` when idle and `aria-label="Stop"` when streaming,
- * so both sendButton() and stopButton() key off aria-label.
+ * The send / submit button. Matches localized aria-label across en/zh.
  */
 export function sendButton(page: Page): Locator {
-  return page.locator('button[aria-label="Submit"]');
+  return page
+    .locator('button[aria-label="Send message"], button[aria-label="发送消息"], button[aria-label="Submit"]')
+    .first();
 }
 
 /** The stop button shown while the stream is active. */
 export function stopButton(page: Page): Locator {
-  return page.locator('button[aria-label="Stop"]');
-}
-
-/**
- * The "New Chat" link or button in the sidebar.
- *
- * Copy rotates between "New Chat" / "新对话" / "+ 新对话" depending on
- * locale. The current sidebar renders it as a <button>, not an <a>, so
- * the helper accepts either and matches both zh and en copy.
- */
-export function newChatButton(page: Page): Locator {
   return page
-    .locator('aside button, aside a')
-    .filter({ hasText: /^(New Chat|新对话)$/ })
+    .locator('button[aria-label="Stop generating"], button[aria-label="停止生成"], button[aria-label="Stop"]')
     .first();
 }
 
 /**
- * Assistant message container. Replaces the stale `[data-role="assistant"]`
- * selector — the current ai-elements `<Message from="assistant">` renders
- * with `.is-assistant` on the wrapper and no data-role attribute.
+ * The "New Conversation" button in the sidebar.
+ */
+export function newChatButton(page: Page): Locator {
+  return sidebar(page)
+    .locator('button, a')
+    .filter({ hasText: /^(New Conversation|New Chat|新对话)$/ })
+    .first();
+}
+
+/**
+ * Assistant message container.
  */
 export function assistantMessage(page: Page): Locator {
   return page.locator('.is-assistant').first();
@@ -184,39 +180,41 @@ export function userMessage(page: Page): Locator {
   return page.locator('.is-user').first();
 }
 
-/** The sidebar <aside> element. */
+/** The left sidebar surface (`CardSurface kind="sidebar"`). */
 export function sidebar(page: Page): Locator {
-  return page.locator('aside');
+  return page.locator('[data-platform-sidebar]').first();
 }
 
-/** The sidebar toggle button in the header (sr-only text "Toggle sidebar"). */
+/** The sidebar collapse/expand toggle button in UnifiedTopBar. */
 export function sidebarToggle(page: Page): Locator {
-  return page.locator('header button:has(.sr-only:text("Toggle sidebar"))');
+  return page
+    .locator('button[aria-label="Collapse sidebar"], button[aria-label="Expand sidebar"], button[aria-label="收起侧栏"], button[aria-label="展开侧栏"]')
+    .first();
 }
 
-/** The theme toggle button in the header (sr-only text "Toggle theme"). */
+/** The theme toggle radio group on /settings/appearance. */
 export function themeToggle(page: Page): Locator {
-  return page.locator('header button:has(.sr-only:text("Toggle theme"))');
+  return page.locator('[role="radiogroup"]').first();
 }
 
-/** A sidebar nav link by its exact label text. */
-export function navLink(page: Page, label: string): Locator {
-  return page.locator('aside nav a').filter({ hasText: new RegExp(`^\\s*${label}\\s*$`) });
+/** A sidebar nav link by its href. */
+export function navLink(page: Page, href: string): Locator {
+  return sidebar(page).locator(`a[href="${href}"]`).first();
 }
 
 /** Chat session links in the sidebar (links to /chat/[id]). */
 export function sessionLinks(page: Page): Locator {
-  return page.locator('aside a[href^="/chat/"]');
+  return sidebar(page).locator('a[href^="/chat/"]');
 }
 
-/** The search input on the plugins page. */
+/** The search input on the unified /plugins page. */
 export function pluginSearchInput(page: Page): Locator {
-  return page.locator('input[placeholder*="Search skills"]');
+  return page.locator('header input').first();
 }
 
-/** The "Add Server" button on the MCP page. */
+/** The "Add MCP server" button on /plugins#mcp. */
 export function addServerButton(page: Page): Locator {
-  return page.locator('button:has-text("Add Server")');
+  return page.getByRole('button', { name: /Add MCP server|添加 MCP 服务|Add Server/i }).first();
 }
 
 /** The save button on the settings page. */
@@ -350,14 +348,14 @@ export function filePreviewCode(page: Page): Locator {
 // Skills Editor helpers (V2)
 // ---------------------------------------------------------------------------
 
-/** The skills search input in the settings skills editor. */
+/** The skills search input on /plugins#skills. */
 export function skillsSearchInput(page: Page): Locator {
-  return page.locator('input[placeholder*="Search"]').first();
+  return page.locator('header input').first();
 }
 
-/** All skill list items in the skills editor. */
+/** All skill list items in the skills grid. */
 export function skillListItems(page: Page): Locator {
-  return page.locator('[class*="cursor-pointer"]:has(.truncate)');
+  return page.locator('main [role="button"][aria-label^="/"]');
 }
 
 /** Click a skill by name in the skills list. */
@@ -366,9 +364,9 @@ export async function selectSkill(page: Page, name: string) {
   await page.waitForTimeout(200);
 }
 
-/** The primary "New Skill" button in the skills editor header (next to heading). */
+/** The primary "New skill" button on /plugins#skills. */
 export function createSkillButton(page: Page): Locator {
-  return page.getByRole('button', { name: 'New Skill' }).first();
+  return page.getByRole('button', { name: /New skill|新建技能/i }).first();
 }
 
 /** The skill editor textarea/content area. */
@@ -407,17 +405,17 @@ export function skillDeleteButton(page: Page): Locator {
 
 /** All code blocks in the chat messages area. */
 export function codeBlocks(page: Page): Locator {
-  return page.locator('.group.not-prose');
+  return page.locator('[data-codepilot-chat-code-block]');
 }
 
 /** The language label in a code block header. */
 export function codeBlockLanguageLabel(page: Page): Locator {
-  return page.locator('.bg-zinc-800 span, .bg-zinc-900 span').first();
+  return page.locator('[data-codepilot-chat-code-block] span').first();
 }
 
 /** The copy button within a code block. */
 export function codeBlockCopyButton(page: Page): Locator {
-  return page.locator('button[title="Copy code"]');
+  return page.locator('[data-codepilot-chat-code-block] button[aria-label="Copy code"]');
 }
 
 /** All tool call/result blocks in the message area. */

@@ -47,3 +47,13 @@ CodePilot — 多模型 AI Agent 桌面客户端（Electron + Next.js）。和�
 - [docs/external-facts.md](./docs/external-facts.md) — 服务商、上游 SDK / CLI、操作系统、IM 平台的实测事实，带日期
 - `docs/insights/` — 产品思考：功能为什么存在、取舍理由
 - `docs/research/` — 竞品和上游调研，以及历史诊断记录；后者只反映当时的代码
+
+<!-- BEGIN:nextjs-agent-rules -->
+
+## This is NOT the Next.js you know
+
+This version has breaking changes — APIs, conventions, and file structure may all differ from your training data. Read the relevant guide in `node_modules/next/dist/docs/` (resolved from this file's directory; in monorepos the `next` package may not be visible from the repo root) before writing any code. Heed deprecation notices.
+
+This block is written and re-added by `next dev` — verify at `node_modules/next/dist/server/lib/generate-agent-files.js`. Removing it from a diff only re-creates the uncommitted change; committing it with your work keeps the tree clean.
+
+<!-- END:nextjs-agent-rules -->
