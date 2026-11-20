@@ -58,8 +58,8 @@ import { useOverviewData } from "./useOverviewData";
 // ---------------------------------------------------------------------------
 
 export function OverviewSection() {
-  const { t } = useTranslation();
-  const isZh = t("nav.chats") === "对话";
+  const { t, locale } = useTranslation();
+  const isZh = locale === "zh";
   const state = useOverviewData();
   const { accountInfo } = useAccountInfo();
   const { updateInfo, checking, checkForUpdates } = useUpdate();
@@ -146,7 +146,7 @@ export function OverviewSection() {
           </p>
         </div>
         <div className="rounded-lg border border-dashed border-border/50 bg-card/50 p-10 text-center">
-          <p className="text-xs text-muted-foreground">{isZh ? "加载中…" : "Loading…"}</p>
+          <p className="text-xs text-muted-foreground">{t("overview.loading")}</p>
         </div>
       </div>
     );
@@ -174,32 +174,32 @@ export function OverviewSection() {
         {/* Card 1 — Runtime status */}
         <OverviewCard
           icon={<CodePilotIcon name="runtime" size="md" strokeWidth={runtimeIsFallback ? undefined : 2} />}
-          title={isZh ? "运行环境" : "Runtime"}
+          title={t("overview.runtime.title")}
           tone={runtimeIsFallback ? "warning" : "success"}
           primaryActionLabel={
             runtimeIsFallback
-              ? isZh ? "去执行引擎修复" : "Fix in Runtime"
-              : isZh ? "管理执行引擎" : "Manage Runtime"
+              ? t("overview.runtime.ctaFix")
+              : t("overview.runtime.ctaManage")
           }
           onPrimaryAction={() => navToSection("runtime")}
         >
           <p>
             <span className="text-muted-foreground">
-              {isZh ? "当前默认：" : "Current default: "}
+              {t("overview.runtime.currentDefault")}
             </span>
             <span className="font-medium">{runtimeLabel}</span>
             {runtimeIsFallback && (
               <span className="ml-1 text-status-warning-foreground">
                 {!state.cliEnabled
-                  ? (isZh ? "（CLI 已禁用，自动降级）" : "(CLI disabled, fallback)")
-                  : (isZh ? "（Claude Code 不可用，自动降级）" : "(Claude Code unavailable, fallback)")}
+                  ? t("overview.runtime.fallbackCliDisabled")
+                  : t("overview.runtime.fallbackCliUnavailable")}
               </span>
             )}
           </p>
           {claudeWarnings && (
             <p className="text-status-warning-foreground flex items-start gap-1">
               <Warning size={12} weight="fill" className="mt-0.5 shrink-0" />
-              <span>{isZh ? "Claude Code 有兼容性提示" : "Claude Code reports compatibility warnings"}</span>
+              <span>{t("overview.runtime.claudeWarnings")}</span>
             </p>
           )}
         </OverviewCard>
@@ -207,35 +207,33 @@ export function OverviewSection() {
         {/* Card 2 — Providers (provider count + new-chat default) */}
         <OverviewCard
           icon={<Plug size={16} />}
-          title={isZh ? "服务商" : "Providers"}
+          title={t("overview.providers.title")}
           tone={state.noCompatibleProvider ? "warning" : "muted"}
-          primaryActionLabel={isZh ? "管理服务商" : "Manage providers"}
+          primaryActionLabel={t("overview.providers.ctaManage")}
           onPrimaryAction={() => navToSection("providers")}
         >
           <p>
             <span className="text-muted-foreground">
-              {isZh ? "已接入：" : "Configured: "}
+              {t("overview.providers.configuredLabel")}
             </span>
             <span className="font-medium">{state.providersConfigured}</span>
           </p>
           {state.noCompatibleProvider ? (
             <p className="text-status-warning-foreground">
-              {isZh
-                ? `当前执行引擎（${runtimeLabel}）下没有可用的 provider/model。`
-                : `No provider / model is compatible with the current runtime (${runtimeLabel}).`}
+              {t("overview.providers.noCompatible", { runtime: runtimeLabel })}
             </p>
           ) : (
             <>
               <p>
-                <span className="text-muted-foreground">{isZh ? "默认服务商：" : "Default provider: "}</span>
+                <span className="text-muted-foreground">{t("overview.providers.defaultProviderLabel")}</span>
                 <span className="font-medium">
-                  {state.defaultProviderName ?? (isZh ? "未配置" : "Not configured")}
+                  {state.defaultProviderName ?? t("overview.providers.notConfigured")}
                 </span>
               </p>
               <p>
-                <span className="text-muted-foreground">{isZh ? "默认模型：" : "Default model: "}</span>
+                <span className="text-muted-foreground">{t("overview.providers.defaultModelLabel")}</span>
                 <span className="font-medium">
-                  {state.defaultModelLabel ?? (isZh ? "未配置" : "Not configured")}
+                  {state.defaultModelLabel ?? t("overview.providers.notConfigured")}
                 </span>
               </p>
             </>
@@ -245,14 +243,14 @@ export function OverviewSection() {
         {/* Card 3 — Models exposure */}
         <OverviewCard
           icon={<CodePilotIcon name="model" size="md" />}
-          title={isZh ? "模型暴露" : "Models exposure"}
+          title={t("overview.models.title")}
           tone={state.modelsEnabled === 0 && state.providersConfigured > 0 ? "warning" : "muted"}
-          primaryActionLabel={isZh ? "管理模型" : "Manage models"}
+          primaryActionLabel={t("overview.models.ctaManage")}
           onPrimaryAction={() => navToSection("models")}
         >
           <p>
             <span className="text-muted-foreground">
-              {isZh ? "可见 / 全部：" : "Visible / total: "}
+              {t("overview.models.visibleTotalLabel")}
             </span>
             <span className="font-medium">
               {state.modelsEnabled} / {state.modelsTotal}
@@ -260,15 +258,14 @@ export function OverviewSection() {
           </p>
           {state.modelsEnabled === 0 && state.providersConfigured > 0 ? (
             <p className="text-status-warning-foreground">
-              {isZh
-                ? "你已经接入了服务商，但没有任何模型对 picker 可见。"
-                : "You've connected a provider, but no models are visible to the picker."}
+              {t("overview.models.noneVisible")}
             </p>
           ) : (state.modelsManualEnabled > 0 || state.modelsManualHidden > 0) ? (
             <p className="text-muted-foreground">
-              {isZh
-                ? `手动启用 ${state.modelsManualEnabled} · 手动隐藏 ${state.modelsManualHidden}（刷新不会覆盖）`
-                : `${state.modelsManualEnabled} manually enabled · ${state.modelsManualHidden} manually hidden (preserved on refresh)`}
+              {t("overview.models.manualNote", {
+                enabled: state.modelsManualEnabled,
+                hidden: state.modelsManualHidden,
+              })}
             </p>
           ) : null}
         </OverviewCard>
@@ -276,12 +273,12 @@ export function OverviewSection() {
         {/* Card 4 — Assistant Workspace */}
         <OverviewCard
           icon={<UserCircle size={16} />}
-          title={isZh ? "助理工作空间" : "Assistant Workspace"}
+          title={t("overview.workspace.title")}
           tone={state.workspaceConfigured ? "success" : "warning"}
           primaryActionLabel={
             state.workspaceConfigured
-              ? isZh ? "管理助理" : "Manage assistant"
-              : isZh ? "去配置" : "Configure"
+              ? t("overview.workspace.ctaManage")
+              : t("overview.workspace.ctaConfigure")
           }
           onPrimaryAction={() => navToSection("assistant")}
         >
@@ -293,14 +290,12 @@ export function OverviewSection() {
                 className="inline-block text-status-success-foreground mr-1 -mt-0.5"
               />
               {state.workspaceName
-                ? (isZh ? `已配置：${state.workspaceName}` : `Configured: ${state.workspaceName}`)
-                : (isZh ? "已配置工作空间" : "Workspace configured")}
+                ? t("overview.workspace.configuredNamed", { name: state.workspaceName })
+                : t("overview.workspace.configured")}
             </p>
           ) : (
             <p className="text-muted-foreground">
-              {isZh
-                ? "尚未配置 — 设定一个本地工作目录开始使用助理"
-                : "Not yet configured — pick a local working directory to start"}
+              {t("overview.workspace.notConfigured")}
             </p>
           )}
         </OverviewCard>
@@ -308,9 +303,9 @@ export function OverviewSection() {
         {/* Card 5 — Update / About */}
         <OverviewCard
           icon={<Info size={16} />}
-          title={isZh ? "版本与账户" : "Update & About"}
+          title={t("overview.update.title")}
           tone={updateInfo?.updateAvailable ? "warning" : "success"}
-          primaryActionLabel={isZh ? "查看关于" : "View About"}
+          primaryActionLabel={t("overview.update.ctaView")}
           onPrimaryAction={() => navToSection("about")}
           footer={
             <Button
@@ -338,21 +333,19 @@ export function OverviewSection() {
                       version: updateInfo.latestVersion,
                       platform: releasePlatformLabel(updateInfo.detectedPlatform),
                     })
-                  : isZh
-                    ? `有新版本 v${updateInfo.latestVersion} 可用`
-                    : `Update available: v${updateInfo.latestVersion}`}
+                  : t("overview.update.available", { version: updateInfo.latestVersion })}
               </span>
             </p>
           ) : (
             <p className="text-muted-foreground">
               {checking
-                ? (isZh ? "正在检查更新…" : "Checking for updates…")
-                : (isZh ? "已是最新版本" : "Up to date")}
+                ? t("overview.update.checking")
+                : t("overview.update.upToDate")}
             </p>
           )}
           {accountInfo?.email && (
             <p className="text-muted-foreground">
-              {isZh ? "账户：" : "Account: "}
+              {t("overview.update.accountLabel")}
               <span className="text-foreground/85">{accountInfo.email}</span>
             </p>
           )}
@@ -374,25 +367,21 @@ export function OverviewSection() {
           // the warning copy below the card, so we don't need the
           // icon weight to carry that signal too.
           icon={<CodePilotIcon name="health" size="md" />}
-          title={isZh ? "健康检查" : "Health"}
+          title={t("overview.health.title")}
           tone={claudeWarnings ? "warning" : "muted"}
-          primaryActionLabel={isZh ? "去健康检查" : "Open Health"}
+          primaryActionLabel={t("overview.health.ctaOpen")}
           onPrimaryAction={() => navToSection("health")}
         >
           {claudeWarnings ? (
             <p className="text-status-warning-foreground flex items-start gap-1">
               <Warning size={12} weight="fill" className="mt-0.5 shrink-0" />
               <span>
-                {isZh
-                  ? "检测到 Claude Code 兼容性提示，建议在健康检查页查看"
-                  : "Claude Code compatibility warnings detected — see Health"}
+                {t("overview.health.claudeWarnings")}
               </span>
             </p>
           ) : (
             <p className="text-muted-foreground">
-              {isZh
-                ? "服务商连接、Runtime、默认模型、模型暴露、工作空间状态一站式总览"
-                : "One-page overview of provider connectivity, runtime, default model, exposure, and workspace"}
+              {t("overview.health.summary")}
             </p>
           )}
         </OverviewCard>
