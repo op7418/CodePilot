@@ -2491,6 +2491,21 @@ const zh: Record<TranslationKey, string> = {
   'provider.preset.testing': '测试中...',
   'provider.preset.testAction': '测试连接',
   'provider.preset.fillKeyBeforeConnect': '请先填写 API Key 再连接',
+
+  // Settings — Codex Quota Widget
+  'provider.codexQuota.window': '窗口',
+  'provider.codexQuota.windowMin': '{n} 分钟窗口',
+  'provider.codexQuota.windowHour': '{n} 小时窗口',
+  'provider.codexQuota.windowDay': '{n} 天窗口',
+  'provider.codexQuota.rolledOver': '已重置',
+  'provider.codexQuota.resetsInMin': '{n} 分钟后重置',
+  'provider.codexQuota.resetsInHour': '{n} 小时后重置',
+  'provider.codexQuota.resetsInDay': '{n} 天后重置',
+  'provider.codexQuota.usedPercent': '已用 {pct}%',
+  'provider.codexQuota.title': '使用配额',
+  'provider.codexQuota.balance': '余额',
+  'provider.codexQuota.unlimited': '不限',
+  'provider.codexQuota.rateLimitReached': '已触达配额上限：',
 };
 
 export default zh;

@@ -346,8 +346,11 @@ describe('CodexQuotaWidget — primary + secondary windows (IA correction)', () 
     // Upstream only reports usedPercent + resetsAt — there is no
     // absolute token count. UI copy must reflect that or it implies
     // data the API doesn't actually return.
-    assert.match(src, /已用\s*\$\{pct\.toFixed\(0\)\}%/);
-    assert.match(src, /\$\{pct\.toFixed\(0\)\}%\s*used/);
+    const enSrc = fs.readFileSync(path.join(repoRoot, 'i18n/en.ts'), 'utf8');
+    const zhSrc = fs.readFileSync(path.join(repoRoot, 'i18n/zh.ts'), 'utf8');
+    assert.match(src, /provider\.codexQuota\.usedPercent/);
+    assert.match(zhSrc, /'provider\.codexQuota\.usedPercent':\s*'已用 \{pct\}%'/);
+    assert.match(enSrc, /'provider\.codexQuota\.usedPercent':\s*'\{pct\}% used'/);
     assert.doesNotMatch(src, /剩余\s*\d+\s*tokens?/);
     assert.doesNotMatch(src, /remaining\s*\d+\s*tokens?/i);
   });
@@ -362,9 +365,12 @@ describe('CodexQuotaWidget — primary + secondary windows (IA correction)', () 
     // Split: the gate variable, the warning copy, and the rendered
     // type label live in separate code regions. Pin them
     // independently rather than via one wide regex.
+    const enSrc = fs.readFileSync(path.join(repoRoot, 'i18n/en.ts'), 'utf8');
+    const zhSrc = fs.readFileSync(path.join(repoRoot, 'i18n/zh.ts'), 'utf8');
     assert.match(src, /isRateLimited\s*=\s*!!snapshot\.rateLimitReachedType/);
-    assert.match(src, /已触达配额上限/);
-    assert.match(src, /Rate limit reached/);
+    assert.match(src, /provider\.codexQuota\.rateLimitReached/);
+    assert.match(zhSrc, /'provider\.codexQuota\.rateLimitReached':\s*'已触达配额上限：'/);
+    assert.match(enSrc, /'provider\.codexQuota\.rateLimitReached':\s*'Rate limit reached: '/);
   });
 });
 

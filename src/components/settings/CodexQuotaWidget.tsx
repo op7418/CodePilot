@@ -23,29 +23,33 @@
 import type { CodexRateLimitSnapshot, CodexRateLimitWindow } from "@/lib/codex/types";
 import { cn } from "@/lib/utils";
 import { Warning } from "@/components/ui/icon";
+import { useTranslation } from "@/hooks/useTranslation";
+import type { TranslationKey } from "@/i18n";
 
-function formatWindowLabel(mins: number | undefined, isZh: boolean): string {
-  if (!mins || mins <= 0) return isZh ? "窗口" : "Window";
-  if (mins < 120) return isZh ? `${mins} 分钟窗口` : `${mins}min window`;
+type TranslateFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
+
+function formatWindowLabel(mins: number | undefined, t: TranslateFn): string {
+  if (!mins || mins <= 0) return t("provider.codexQuota.window");
+  if (mins < 120) return t("provider.codexQuota.windowMin", { n: mins });
   if (mins < 60 * 24) {
     const hrs = Math.round(mins / 60);
-    return isZh ? `${hrs} 小时窗口` : `${hrs}h window`;
+    return t("provider.codexQuota.windowHour", { n: hrs });
   }
   const days = Math.round(mins / 60 / 24);
-  return isZh ? `${days} 天窗口` : `${days}d window`;
+  return t("provider.codexQuota.windowDay", { n: days });
 }
 
-function formatResetsAt(epochSec: number | undefined, isZh: boolean): string {
+function formatResetsAt(epochSec: number | undefined, t: TranslateFn): string {
   if (!epochSec) return "";
   const nowMs = Date.now();
   const diffMs = epochSec * 1000 - nowMs;
-  if (diffMs <= 0) return isZh ? "已重置" : "Rolled over";
+  if (diffMs <= 0) return t("provider.codexQuota.rolledOver");
   const mins = Math.round(diffMs / 60_000);
-  if (mins < 60) return isZh ? `${mins} 分钟后重置` : `Resets in ${mins}m`;
+  if (mins < 60) return t("provider.codexQuota.resetsInMin", { n: mins });
   const hrs = Math.round(mins / 60);
-  if (hrs < 24) return isZh ? `${hrs} 小时后重置` : `Resets in ${hrs}h`;
+  if (hrs < 24) return t("provider.codexQuota.resetsInHour", { n: hrs });
   const days = Math.round(hrs / 24);
-  return isZh ? `${days} 天后重置` : `Resets in ${days}d`;
+  return t("provider.codexQuota.resetsInDay", { n: days });
 }
 
 function tone(usedPercent: number): { bar: string; pct: string } {
@@ -68,23 +72,23 @@ function tone(usedPercent: number): { bar: string; pct: string } {
   };
 }
 
-function WindowRow({ label, window, isZh }: { label: string; window: CodexRateLimitWindow; isZh: boolean }) {
+function WindowRow({ label, window, t }: { label: string; window: CodexRateLimitWindow; t: TranslateFn }) {
   const pct = Math.max(0, Math.min(100, window.usedPercent));
-  const t = tone(pct);
+  const barTone = tone(pct);
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-center justify-between text-[11px]">
         <span className="text-muted-foreground">{label}</span>
-        <span className={cn("font-mono font-medium", t.pct)}>
-          {isZh ? `已用 ${pct.toFixed(0)}%` : `${pct.toFixed(0)}% used`}
+        <span className={cn("font-mono font-medium", barTone.pct)}>
+          {t("provider.codexQuota.usedPercent", { pct: pct.toFixed(0) })}
         </span>
       </div>
       <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-        <div className={cn("h-full transition-all", t.bar)} style={{ width: `${pct}%` }} />
+        <div className={cn("h-full transition-all", barTone.bar)} style={{ width: `${pct}%` }} />
       </div>
       {window.resetsAt && (
         <div className="text-[10px] text-muted-foreground">
-          {formatResetsAt(window.resetsAt, isZh)}
+          {formatResetsAt(window.resetsAt, t)}
         </div>
       )}
     </div>
@@ -93,10 +97,11 @@ function WindowRow({ label, window, isZh }: { label: string; window: CodexRateLi
 
 interface CodexQuotaWidgetProps {
   snapshot: CodexRateLimitSnapshot;
-  isZh: boolean;
+  isZh?: boolean;
 }
 
-export function CodexQuotaWidget({ snapshot, isZh }: CodexQuotaWidgetProps) {
+export function CodexQuotaWidget({ snapshot }: CodexQuotaWidgetProps) {
+  const { t } = useTranslation();
   const hasPrimary = !!snapshot.primary;
   const hasSecondary = !!snapshot.secondary;
   const hasCredits = !!snapshot.credits;
@@ -105,28 +110,28 @@ export function CodexQuotaWidget({ snapshot, isZh }: CodexQuotaWidgetProps) {
   return (
     <div className="rounded-md bg-muted/30 px-3.5 py-3 flex flex-col gap-3 mt-2">
       <div className="text-[10px] text-muted-foreground uppercase tracking-wider font-medium">
-        {isZh ? "使用配额" : "Usage quota"}
+        {t("provider.codexQuota.title")}
       </div>
       {snapshot.primary && (
         <WindowRow
-          label={formatWindowLabel(snapshot.primary.windowDurationMins, isZh)}
+          label={formatWindowLabel(snapshot.primary.windowDurationMins, t)}
           window={snapshot.primary}
-          isZh={isZh}
+          t={t}
         />
       )}
       {snapshot.secondary && (
         <WindowRow
-          label={formatWindowLabel(snapshot.secondary.windowDurationMins, isZh)}
+          label={formatWindowLabel(snapshot.secondary.windowDurationMins, t)}
           window={snapshot.secondary}
-          isZh={isZh}
+          t={t}
         />
       )}
       {snapshot.credits && (snapshot.credits.unlimited || (snapshot.credits.hasCredits && snapshot.credits.balance)) && (
         <div className="flex items-center justify-between text-[11px] pt-1 border-t border-border/40">
-          <span className="text-muted-foreground">{isZh ? "余额" : "Balance"}</span>
+          <span className="text-muted-foreground">{t("provider.codexQuota.balance")}</span>
           <span className="font-mono">
             {snapshot.credits.unlimited
-              ? (isZh ? "不限" : "Unlimited")
+              ? t("provider.codexQuota.unlimited")
               : snapshot.credits.balance ?? "—"}
           </span>
         </div>
@@ -135,7 +140,7 @@ export function CodexQuotaWidget({ snapshot, isZh }: CodexQuotaWidgetProps) {
         <div className="flex items-start gap-1.5 text-[11px] text-status-warning-foreground">
           <Warning size={12} weight="fill" className="shrink-0 mt-0.5" />
           <span>
-            {isZh ? "已触达配额上限：" : "Rate limit reached: "}
+            {t("provider.codexQuota.rateLimitReached")}
             <span className="font-mono">{snapshot.rateLimitReachedType}</span>
           </span>
         </div>

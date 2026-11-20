@@ -2520,6 +2520,21 @@ const en = {
   'provider.preset.testing': 'Testing...',
   'provider.preset.testAction': 'Test',
   'provider.preset.fillKeyBeforeConnect': 'Fill the API Key before connecting',
+
+  // Settings — Codex Quota Widget
+  'provider.codexQuota.window': 'Window',
+  'provider.codexQuota.windowMin': '{n}min window',
+  'provider.codexQuota.windowHour': '{n}h window',
+  'provider.codexQuota.windowDay': '{n}d window',
+  'provider.codexQuota.rolledOver': 'Rolled over',
+  'provider.codexQuota.resetsInMin': 'Resets in {n}m',
+  'provider.codexQuota.resetsInHour': 'Resets in {n}h',
+  'provider.codexQuota.resetsInDay': 'Resets in {n}d',
+  'provider.codexQuota.usedPercent': '{pct}% used',
+  'provider.codexQuota.title': 'Usage quota',
+  'provider.codexQuota.balance': 'Balance',
+  'provider.codexQuota.unlimited': 'Unlimited',
+  'provider.codexQuota.rateLimitReached': 'Rate limit reached: ',
 } as const;
 
 export type TranslationKey = keyof typeof en;
