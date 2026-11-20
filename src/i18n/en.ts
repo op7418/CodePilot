@@ -2592,6 +2592,9 @@ const en = {
 
   // Settings — Overview Getting Started Bar
   'overview.allSet': '✓ All set',
+
+  // CLI Tools — Prefill Prompts
+  'cliTools.tryToolPrefill': 'I want to use {name} to: ',
 } as const;
 
 export type TranslationKey = keyof typeof en;

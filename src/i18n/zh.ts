@@ -2563,6 +2563,9 @@ const zh: Record<TranslationKey, string> = {
 
   // Settings — Overview Getting Started Bar
   'overview.allSet': '✓ 全部就绪',
+
+  // CLI Tools — Prefill Prompts
+  'cliTools.tryToolPrefill': '我想用 {name} 工具完成：',
 };
 
 export default zh;

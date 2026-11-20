@@ -43,9 +43,7 @@ export function CliToolExtraDetailDialog({
   };
 
   const handleTryTool = () => {
-    const prefill = isZh
-      ? `我想用 ${displayName} 工具完成：`
-      : `I want to use ${displayName} to: `;
+    const prefill = t('cliTools.tryToolPrefill', { name: displayName });
     window.location.href = `/chat?prefill=${encodeURIComponent(prefill)}`;
   };
 
