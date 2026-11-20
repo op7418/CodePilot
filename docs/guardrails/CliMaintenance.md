@@ -29,18 +29,7 @@
 | CLIM-11 | IPC/snapshot/log/Sentry 不含 absolute path、command、raw stdout/stderr、环境变量或 registry query；只允许 provider/channel/phase/errorCode、before/after semver 等低基数字段。expected network/permission/lock/active-work 不生成 Issue。 |
 | CLIM-12 | Settings 与启动提醒消费同一 Main snapshot。一次提醒以 provider+真实 target version 去重；左下更新卡片在用户未操作时不得定时消失，只有 available 态手动关闭才记录同版本 dismissal。卡片必须使用对应 Claude/Codex brand、紧凑宽度、current→latest、简短说明、与文案左对齐的 primary action，以及至少 28px 且有明确 hover/focus 的右上角浮层关闭按钮；关闭按钮不得独占内容列或挤压正文。更新中无可信百分比时显示 spinner 并禁用关闭；多 Provider 失败重试只执行未完成项；失败关闭不写版本 dismissal，post-verify 成功后清 notification key，才允许短暂显示完成并自动消失。below-minimum compatibility 与 latest advisory 分开，unknown/`0.0.0` 不补假版本或假支持状态。 |
 
-## 3. 关键文件 + 责任
-
-- `electron/cli-maintenance.ts`：Main 状态机、target proof、same-channel probe、IPC、lease 心跳、post-verify。
-- `electron/cli-maintenance-runner.ts`：无 shell 的 bounded child runner 与进程树 finalizer。
-- `electron/install-lifecycle-coordinator.ts`：CLI updater / app updater 单一排他 owner。
-- `src/lib/cli-maintenance-contract.ts`：Renderer 可见 snapshot 与 semver 合同。
-- `src/lib/cli-install-channel.ts`：path evidence；不能单独授予 one-click。
-- `src/lib/cli-maintenance-lease.ts`、`/api/cli-maintenance/lease`：utility gate、TTL、idle recheck、Codex quiesce。
-- `src/hooks/useCliMaintenance.ts`、`CliMaintenanceRow.tsx`：snapshot replay、提醒、Settings 诚实展示。
-- `electron/main.ts`、`electron/updater.ts`：utility recovery bootstrap、quit coordinator、双向 lifecycle latch。
-
-## 4. 改动检查表
+## 3. 改动检查表
 
 - [ ] Renderer/preload 是否仍只有 provider enum，没有新增 path/channel/command 控制面？
 - [ ] 新渠道是否同时有 ownership 正反例、same-channel latest 和 exact update mapping？缺任一项是否 fail closed？
@@ -53,7 +42,7 @@
 - [ ] UI 是否隐藏无 source 的 latest、不给 ambiguous 渠道假一键更新？
 - [ ] raw output/path/env 是否只留在短生命周期 Main 内存，未进入 IPC/log/Sentry？
 
-## 5. 常见坑
+## 4. 常见坑
 
 - `winget list --id`、PATH 命中或目录名像 npm 都不是 selected-target ownership proof。
 - Windows npm shim 不是 symlink；realpath 不穿透不能直接判 unknown，也不能只凭 prefix 同目录判 proven。
@@ -65,7 +54,7 @@
 - cancel 可能发生在二次 proof 阶段；必须记录 cancel intent，不能因为 child 尚未 spawn 就丢掉取消。
 - 一次 active-work snapshot 只解决准入当下；执行期必须依赖 provider lease，应用安装互斥必须依赖 Main latch。
 
-## 6. 测试覆盖
+## 5. 测试覆盖
 
 - `cli-maintenance-contract.test.ts`：semver、Homebrew exit-0/1 JSON、lease competitor/TTL/recovery bootstrap、Main lifecycle same-owner 非重入、multi-provider retry remainder。
 - `cli-maintenance-concurrency.test.ts`：真实 `performUpdate` 同/异 Provider 并发入口；第二次不得触达 activity/target，且第一次结束前 latch 保持占用。
@@ -75,7 +64,7 @@
 - `release-notes-rendering.test.ts`：Atom HTML/Markdown 与 XSS/追踪反例。
 - 完整门禁：`npm run test`、`npm run build`；真实渠道仍需 disposable macOS 与 Windows clean VM smoke，不能用单元测试冒充。
 
-## 7. 设计决策日志
+## 6. 设计决策日志
 
 - 2026-08-28：采用 Main-owned executor，原因是 child 不随 utility recovery 被杀、状态可跨 Renderer reload 重放，并能与 app updater/quit 共用 latch；loopback same-origin 不视为 Main 身份。
 - 2026-08-28：Windows Claude WinGet/native 重叠无法唯一证明时选择 manual-only；安全更新错目标的风险高于少一个一键按钮。

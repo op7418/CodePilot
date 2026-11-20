@@ -36,30 +36,6 @@
 | 20 | UI 切换权限档位必须在一个请求中提交 mode/profile pair；session API 在任何写入前同时校验两个字段。不得用两个独立 PATCH 制造短暂的 `plan+full_access` 或 stale profile 组合 | `ChatPermissionSelector.tsx` + `api/chat/sessions/[id]/route.ts` |
 | 21 | Browser 网页权限与 Agent/Runtime permission profile 完全分离。guest 的 permission check/request 当前默认全部拒绝；Composer 的 full access、auto review 或“请求批准”不得改变网页摄像头、定位、通知、剪贴板或下载策略 | Electron browser Session + BrowserPanel |
 
-## 关键文件 + 责任
-
-| 文件 | 守哪条不变量 |
-|------|--------------|
-| `src/lib/permission/*` | 工具白名单 + 用户确认流程 |
-| `src/lib/agent-sdk-capabilities.ts` | mutationLevel 派生 |
-| `src/__tests__/unit/harness-capability-contract.test.ts` | 跨 Runtime exposure 一致性 |
-| `src/lib/permission/profile.ts` | 跨 Runtime reviewer capability 分流与 fail-closed |
-| `src/lib/codex/app-server-manager.ts` | Codex binary 版本门与最低已验证版本 |
-| `src/lib/codex/permission.ts` | Codex profile → thread/turn wire 与回显降级 |
-| `src/lib/codex/runtime.ts` | 运行时二次门禁、thread 回显和 canonical unavailable |
-| `src/lib/codex/dynamic-tool-bridge.ts` | Codex dynamic MCP transport；不得维护 CodePilot namespace/tool allowlist |
-| `src/lib/codex/proxy/builtin-bridge.ts` | Codex child Provider+Model 路由、depth 1；不得要求父模型分类 child capability |
-| `src/lib/tools/agent.ts` | Native child 父工具/权限继承、depth=1、并发=2、abort 下传 |
-| `src/lib/agent-tools.ts` | permission request 的 child run 归属 metadata |
-| `src/lib/tools/grep.ts`、`src/lib/tools/glob.ts` | Native `safe_read` 搜索工具的无 shell 进程边界 |
-| `src/lib/skills-marketplace-command.ts` | Marketplace 同源 mutation、输入语法与跨平台进程 argv 边界 |
-| `src/lib/provider-call-policy.ts` | delegated_interactive 场景分类 |
-| `src/components/chat/PermissionPrompt.tsx` | 子 Agent 权限发起者的用户可见归属 |
-| `src/lib/composer-access-level.ts` | persisted mode/profile ↔ Composer 四档的双向映射、legacy ask/no-touch/fail-closed |
-| `src/components/chat/ChatPermissionSelector.tsx` | 单一权限入口、capability degraded 展示、显式切档 |
-| `src/app/api/chat/sessions/[id]/route.ts` | mode/profile pair 的 write-before-validation 防线 |
-| `electron/main.ts` + `electron/browser-surface-security.ts` | 网页 guest permission 默认拒绝、workspace partition 与 attach gate |
-
 ## 改动检查表
 
 - [ ] 加新工具时确认默认是 unsafe，明确决定是否加入 PERMISSION_SAFE_TOOLS

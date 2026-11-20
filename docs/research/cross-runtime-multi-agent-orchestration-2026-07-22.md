@@ -502,4 +502,4 @@ Craft Agents 的 `spawn_session` 支持动态 connection / model，并把 child 
 - `src/lib/workspace-sidebar.ts`
 - `src/components/layout/WorkspaceSidebar/TabPanel.tsx`
 - `docs/research/ai-sdk-7-runtime-adoption-2026-06-29.md`
-- `docs/research/sub-agent-system.md`
+- `docs/research/sub-agent-system.md`（已删除，见 git 历史）

@@ -30,17 +30,7 @@
 | UP-13 | stable GitHub Release 同时发布三平台安装包，发布 macOS signed/notarized ZIP updater graph 与 Windows unsigned NSIS updater graph；Linux 必须使用 `CODEPILOT_OFFICIAL_UPDATE_BUILD=0`，只允许手动安装包/checksum/attestation，不得出现 Linux updater metadata。Windows unsigned feed 只有在新鲜的 Immutable Releases 管理员确认、active 且无 bypass/exclude/重名的 default-branch no-delete/no-force 与 `v*` tag no-delete/no-update rulesets、管理员 no-bypass 状态与 live `id` / `updated_at` 无漂移、40-hex Action pins 与真实 RC-A→RC-B 门禁全部成立时才可公开；Actions token 隐藏 `bypass_actors` 时不得把缺失解释为空；preview Release 仍为 macOS-only。 |
 | UP-14 | Windows differential update 必须显式保持 `nsis.differentialPackage=true` 与 `disableDifferentialDownload=false`。差分只是优先路径：旧 installer、blockmap 或 Range 请求不可用时必须回退完整 NSIS 下载；不得把理论节省比例冒充每次实测。 |
 
-## 3. 关键文件 + 责任
-
-- `electron/updater.ts`：单一 Main 状态机、electron-updater 策略、IPC 与日志。
-- `electron/install-lifecycle-coordinator.ts`：与 CLI maintenance 共用的安装排他 owner；另一侧合同见 `CliMaintenance.md`。
-- `src/lib/updater-contract.ts`：support/error/backoff/snapshot 纯合同。
-- `electron/preload.ts`, `src/types/electron.d.ts`：窄 bridge 同形。
-- `src/hooks/useUpdateChecker.ts`, `UpdateDialog.tsx`, `AboutSection.tsx`：snapshot 消费与手工 fallback。
-- `/api/app/activity`：活动工作只读事实。
-- `electron-builder.yml`, `.github/workflows/build.yml`, `.github/workflows/preview-release.yml`：feed、签名、发布平台范围与原子资产。
-
-## 4. 改动检查表
+## 3. 改动检查表
 
 - [ ] Renderer 是否完全不能指定 feed/channel/path/options？
 - [ ] Preview tag 是否为 `X.Y.Z-preview.N` 的真实 semver、等于 `package.json`，且只发布 `preview*.yml`？stable 是否继续只读 `latest*.yml`？
@@ -59,7 +49,7 @@
 - [ ] Windows NSIS 差分是否显式开启，并保留完整 installer fallback？
 - [ ] targeted + full + build + packaged RC-A→RC-B clean-machine smoke 是否登记？
 
-## 5. 常见坑
+## 4. 常见坑
 
 - `autoDownload=true` 不等于可以静默 `quitAndInstall()`；活动任务保护是独立门禁。
 - `await autoUpdater.checkForUpdates()` 不等于等待自动下载完成；electron-updater 会把下载终态放在返回对象的 `downloadPromise`。不持有它会在断网时产生未处理 rejection。
@@ -71,7 +61,7 @@
 - 不要把调用 `quitAndInstall()` 当作不可逆成功；Electron 未进入真实 teardown 时必须有界回滚临时 quit latch。
 - 不要用“quit 前再查一次 activity”冒充原子修复；若没有让所有 chat/bridge/task 启动路径在同一租约 fence 下 fail closed，TOCTOU 仍然存在。
 
-## 6. 测试覆盖
+## 5. 测试覆盖
 
 - `updater-contract.test.ts`：平台/channel、错误分类、退避、Main-owned IPC、平台缺资产 UI 与下载中检查按钮 source contract。
 - `cli-maintenance-security.test.ts`：app updater/CLI updater 同一 latch、普通 quit coordinator 与 reciprocal source contract。
@@ -81,7 +71,7 @@
 - 发布资产合同测试：stable 要求 macOS metadata/blockmap、Windows metadata/blockmap 与三平台 installer/checksum 的 central audit；混入 Linux updater metadata 必须失败，preview 混入任一非 Mac 资产必须失败。
 - 真实 smoke：0.67.1→RC-A 手动 bootstrap；RC-A→RC-B native update，macOS arm64/x64 与 Windows x64。
 
-## 7. 设计决策日志
+## 6. 设计决策日志
 
 - 2026-08-23：0.67.1 没有 updater，首跳只能手动 bootstrap，不能冒充 auto-update。
 - 2026-08-23：采用后台检查/自动下载 + 用户确认重启；活动 chat/bridge/task 或 activity 不可判定时拒绝强退。

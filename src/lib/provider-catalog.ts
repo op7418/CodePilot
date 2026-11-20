@@ -631,8 +631,7 @@ const BEDROCK_VERTEX_DEFAULT_MODELS: CatalogModel[] = [
  * GLM Coding Plan catalog — shared by the CN and Global presets (same lineup,
  * different regional endpoints). Refreshed against the vendor's GLM-5.3-Flash
  * model, latest-model, overview, Claude Code and Codex pages on 2026-08-26;
- * the evidence matrix lives in
- * docs/research/glm-5-3-flash-codeplan-adaptation-2026-08-26.md.
+ * vendor facts live in docs/external-facts.md.
  *
  * The stable `sonnet` / `haiku` modelIds preserve saved CodePilot sessions.
  * Their upstream IDs are the current official products. Claude's Anthropic

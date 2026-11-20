@@ -61,6 +61,8 @@
   - `user_edited = 1`（legacy 信号，保护 Phase B 之前的行）
 - **新行的 enabled 由 caller 注入的 `isRecommended()` 决定** — 不在数据层硬编码白名单。
 - **orphan 行不动** — 上游临时下线 ≠ 用户想删，永远人工确认。
+- **按推荐整理 (`alignEnabledWithCatalog`) 同样不动用户管理行** — 只会 prune 不在目录内的 `source='catalog'` 系统行；`source='manual'` 行最多被禁用，不删除。
+- **catalog-only 读取合并 (`mergeCatalogManagedModels`) 的并发 INSERT 冲突**：输家必须采用已存在的行，不能报错或插入重复行。
 
 ### 2.3 为什么从 Phase A "必须 preview" 回到自动 apply 安全
 
@@ -132,7 +134,7 @@ const applicable = diff.filter(e =>
 
 **不变量**：Class C 的入口**不展示** "刷新模型" 按钮（图片 provider 已在 `ProviderManager.tsx:744` 注释明确不渲染 onRefreshModels）。
 
-套餐型 provider 的 `preset_key` 是目录选择的事实源。Qwen Token Plan 个人版/团队版共享 `https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic`；缺失 identity 的旧行必须显示“请选择套餐类型”，不能用 URL 命中第一个 catalog。2026-07-21 主动核对的精确白名单记录在 `docs/research/qwen-token-plan-grok-oauth-2026-07-21.md` 与 `docs/research/provider-model-discovery.md`。
+套餐型 provider 的 `preset_key` 是目录选择的事实源。Qwen Token Plan 个人版/团队版共享 `https://token-plan.cn-beijing.maas.aliyuncs.com/apps/anthropic`；缺失 identity 的旧行必须显示“请选择套餐类型”，不能用 URL 命中第一个 catalog。2026-07-21 主动核对的精确白名单记录在 `docs/external-facts.md` 与 `docs/research/provider-model-discovery.md`。
 
 ## 4. 安全约束
 
@@ -167,24 +169,7 @@ availableModels = [
 ];
 ```
 
-详细见 `Runtime.md` §3 关键文件表。
-
-## 6. 关键文件 + 责任
-
-| 模块 | 文件 | 不变量 |
-|---|---|---|
-| Probe + classification | `src/lib/model-discovery.ts` | classifyProvider 三类分明；probe 永远不写库；超时 8s；key 不回显 |
-| Discover route | `src/app/api/providers/[id]/discover-models/route.ts` POST | 仅返 diff，不写库；Gemini key 替换占位 |
-| Apply route | `src/app/api/providers/[id]/discover-models/apply/route.ts` | 唯一写入入口；保留 user_edited；orphan 不动 |
-| Diff apply DB op | `src/lib/db.ts` `applyDiscoveryDiff()` | 五种 case 分明；user_edited / hidden 守护 |
-| Align with catalog | `/api/providers/[id]/models/align-enabled` + `db.alignModelsWithCatalog()` | preview-first；apply 保留 user_edited；不删 manual |
-| Catalog-only plan read merge | `/api/providers/[id]/models` GET + `db.mergeCatalogManagedModels()` | pristine catalog 行可刷新；legacy 仅按完整 fingerprint compare-and-swap；upstream 占用/歧义 fail-closed；不 disable/prune，并发 INSERT 输家采用已有行 |
-| Catalog model identity | `src/lib/catalog-model-identity.ts` | 搜索候选区分 current enabled/hidden、legacy upgrade、identity conflict、missing 五态 |
-| Refresh diff Dialog | `ProviderManager.tsx` `handleApplyDiff` | 仅发 actionable diff（new/update/preserve/hidden-up），跳 unchanged/orphan |
-| Models page row badges | `ModelsSection.tsx` source badge | source 5 态 tone 锁定 |
-| Catalog | `provider-catalog.ts:VENDOR_PRESETS` `defaultModels` | seed 模型来源 |
-
-## 7. 改 / 加新功能必须检查
+## 6. 改 / 加新功能必须检查
 
 - 新增 probe protocol（如 cohere / mistral 自家 endpoint）：
   - 加 `DiscoveryProtocol` type
@@ -209,7 +194,7 @@ availableModels = [
   - 套餐/白名单型 provider 必须记录官方来源、核对日期与精确大小写；不得从普通 `/models` 猜套餐可用性
   - 同 endpoint 多 preset 必须补 identity/ambiguous 测试
 
-## 8. 常见坑
+## 7. 常见坑
 
 1. **POST /discover-models 写库** — probe 路由必须 read-only。写入只能从 `/apply` 走。
 2. **apply 翻动 manual_* / user_edited 行** — 用户隐藏的模型刷新后被启用。`applyDiscoveryDiff` 三个分支必须严格按 `enable_source` + `user_edited` 守卫，user-managed 行只动 `upstream_model_id` / `last_refreshed_at`。
@@ -228,7 +213,7 @@ availableModels = [
 15. **只给主模型写 legacy 指纹** — 一个套餐的历史目录通常同时换过 sonnet/opus/haiku 槽位。替换 SKU 时必须从已发布 git 历史逐槽列出 upstream/display/capabilities；不得造一个“看起来合理”但从未发布的 wire。fixture 必须用当时完整目录行数，不能只造目标单行。
 16. **一条旧 duplicate 把已可用 current SKU 整体降为 conflict** — canonical current 行存在时，它是可用性真源；额外旧行需要在 Models 中可见/可整理，但不能让 Add dialog 只剩无动作徽章。真正 CAS 冲突必须服务端重读后返回 model ids，UI 消费并给出恢复入口。
 
-## 9. 测试覆盖
+## 8. 测试覆盖
 
 | 测试文件 | 覆盖 |
 |---|---|
@@ -242,7 +227,7 @@ availableModels = [
 
 加新 probe protocol / 改 apply 行为时，至少补对应单测；目前缺 model-discovery 的端到端 test，用真实 fetch mock 库（`undici` mock 或 `nock`）做。
 
-## 10. 设计决策日志
+## 9. 设计决策日志
 
 - **初版（已淘汰）** — 纯只读 spike，POST 返回探测结果，不动 DB。简单但不解决"用户怎么应用"
 - **第二版（已淘汰）** — 成功时**自动 upsert** 全部模型。Dialog 显示"已写入 N 个模型"。**违反用户改名 / 隐藏预期**，再次刷新回滚用户编辑

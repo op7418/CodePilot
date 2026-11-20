@@ -19,14 +19,6 @@
 | 4 | 连接失败的 server 在 `MCP_FAILED_RETRY_COOLDOWN_MS`（60 秒）内不被 `syncMcpConnections` 重试，因为 agent-loop 每轮对话都调同步；配置变更立即重试；`connectServer` / `reconnectServer`（toggle、reconnect 路由等用户主动操作）不受冷却限制 | 同上 |
 | 5 | `connectServer` 失败时必须关闭 transport，否则 stdio 子进程会泄漏；对同名 server 再次 `connectServer` 先关闭旧 client | 同上 `connectServer` |
 
-## 关键文件 + 责任
-
-| 文件 | 守哪条不变量 |
-|------|--------------|
-| `src/app/api/plugins/mcp/status/route.ts` | session→providerId 自动解析 |
-| `src/app/api/plugins/mcp/*` | MCP 配置 CRUD + server 加载 |
-| `src/lib/db.ts` | MCP 配置表 schema |
-
 ## 改动检查表
 
 - [ ] 改 MCP status 路由时确认仍自动解析 providerId

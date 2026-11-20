@@ -247,7 +247,7 @@ export function shouldAutoCompact(messages, contextWindowTokens): boolean {
 - `codepilot_memory_recent`：读最近 3 天 daily + 长期记忆摘要
 
 **没有**：
-- **Session 历史搜索**。`messages` 表数据完整存在 SQLite（schema 见 `docs/research/session-management-and-context-compaction.md:29-40`），
+- **Session 历史搜索**。`messages` 表数据完整存在 SQLite（schema 见 `docs/research/session-management-and-context-compaction.md`（已删除，见 git 历史）），
   但没有工具把它暴露给模型做跨会话全文检索
 
 ### 2.5 项目指令发现仅两级（`src/lib/agent-system-prompt.ts:210-236`）

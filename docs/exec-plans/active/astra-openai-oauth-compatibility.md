@@ -5,7 +5,7 @@
 
 ## 用户问题与取舍
 
-用户要求核对 Astra 在 Codex 的窗口和 OpenCode 最新授权实现，随后明确授权修复。源码对照及离线复现见 [调研](../../research/astra-fable51-adaptation-2026-09-05.md)。当前 OAuth 固定目录滞后，SDK 会丢 Astra reasoning，刷新并发/临时失败会清掉登录状态。API 的 1.05M 不能作为 Codex 默认窗口。
+用户要求核对 Astra 在 Codex 的窗口和 OpenCode 最新授权实现，随后明确授权修复。外部事实见 [外部事实手册](../../external-facts.md)。当前 OAuth 固定目录滞后，SDK 会丢 Astra reasoning，刷新并发/临时失败会清掉登录状态。API 的 1.05M 不能作为 Codex 默认窗口。
 
 用户验收：OpenAI OAuth 登录后在原聊天选择新模型、调整 effort；临时网络失败重试不要求重新登录；退出/重登录不会被旧请求覆盖。保持原聊天、Runtime owner 和既有默认模型；不触发新聊天或自动账号迁移。Fable 协议适配、device flow、WebSocket、发版不属于此轮授权的四项修复。
 

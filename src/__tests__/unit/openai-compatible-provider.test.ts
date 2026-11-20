@@ -10,8 +10,6 @@
  *     → findMatchingPresetForRecord → generic 'openai-compatible' preset
  *     → getProviderCompat → 'codepilot_only'
  *     → getModelCompat → supportedRuntimes [codepilot, codex], claude_code gated.
- *
- * See docs/exec-plans/active/mimo-ultraspeed-openai-compatible-provider.md.
  */
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import assert from 'node:assert/strict';

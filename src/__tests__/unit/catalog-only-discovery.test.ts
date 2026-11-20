@@ -18,8 +18,6 @@
  * OpenAI half stays `.../zen/go/v1` because the OpenAI SDK appends
  * `/chat/completions`. The two bases are therefore distinct (no preset
  * collision).
- *
- * Research: docs/research/clinepass-opencode-go-integration-2026-06-30.md
  */
 
 import { describe, it } from 'node:test';

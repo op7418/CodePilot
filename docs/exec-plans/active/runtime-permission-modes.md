@@ -6,7 +6,7 @@
 > 最后更新：2026-07-20
 > 状态：🚧 Claude capability route 可读取 Agent SDK 0.2.111；Codex auto reviewer 已完成 Runtime 分流、保守版本门、thread start/resume 回显校验与运行时降级，定向回归通过。真实 Claude/Codex approve/deny/MCP smoke 仍待完成；Native Phase 3 仍明确不支持。
 > 风险等级：Tier 2（权限边界 / Runtime）
-> 事实基线：[基础体验更新事实基线](../../research/foundation-experience-refresh-2026-07-17.md)
+> 事实基线：[外部事实手册](../../external-facts.md)
 
 ## 用户问题与争议
 

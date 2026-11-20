@@ -914,9 +914,8 @@ export const codexRuntime: AgentRuntime = {
               // Phase 7 — accumulate tool invocations for Context Accounting.
               // Codex Runtime's canonical RuntimeRunEvent already separates
               // tool_started / tool_completed / command_started into discrete
-              // events with stable id+name+input shape (see
-              // docs/research/codex-sdk-tool-call-surface.md). Just adapt
-              // the field names to ToolInvocationAccumulator contract.
+              // events with stable id+name+input shape. Just adapt the field
+              // names to ToolInvocationAccumulator contract.
               if (event.type === 'tool_started') {
                 toolInvocationAccumulator.recordToolUse(
                   event.toolId,

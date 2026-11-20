@@ -91,8 +91,8 @@ function withTimeout<T>(ms: number, start: (signal: AbortSignal) => Promise<T>):
  * `{ reasoningEffort, description }`; older binaries emit `{ effort }`.
  * We read BOTH — reading only `effort` against a 0.144.x app-server yields
  * `undefined` for every element, which used to collapse the capability list
- * into `[undefined, ...]` and render fake tiers downstream. See the local
- * read-only POC in docs/research/foundation-experience-refresh-2026-07-17.md.
+ * into `[undefined, ...]` and render fake tiers downstream. Schema change is
+ * recorded in docs/external-facts.md.
  */
 interface UpstreamReasoningEffort {
   /** New shape (codex-cli ≥ 0.144). */

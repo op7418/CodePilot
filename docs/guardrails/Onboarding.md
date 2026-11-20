@@ -30,20 +30,6 @@
 | 12 | Grok Build Imagine 的 OAuth bearer 按上游合同直接发往 `https://api.x.ai`，但必须由独立、purpose-specific fetch wrapper 限定到图片/视频生成与视频轮询的精确路径；每次请求取 fresh token，带版本/identifier，不携带 proxy-only headers。不得为复用文本 fetch 而放宽整个 `api.x.ai` host gate | `xai-oauth-manager.ts:createXaiOAuthMediaFetch()` + `xai-imagine.ts` |
 | 13 | Imagine 的调用方取消必须从 Native、Claude MCP、Codex bridge 与确认 API 四个入口传到生成/轮询/下载 transport。取消发生在轮询或下载完成前时必须停止后续请求且不新增 Gallery 行；若上游已完成且下载字节已经返回，则保留并登记可能已计费的资产，不在落盘前二次丢弃。该本地取消不承诺上游撤销或退款 | `builtin-tools/media.ts` + `image-gen-mcp.ts` + `codex/proxy/builtin-bridge.ts` + `/api/media/generate` + `xai-imagine.ts` |
 
-## 关键文件 + 责任
-
-| 文件 | 责任 |
-|---|---|
-| `src/lib/xai-oauth.ts` | PKCE/device protocol、JWT expiry/nonce、token exchange/refresh 与错误分类 |
-| `src/lib/xai-oauth-manager.ts` | 原子持久化、single-flight、loopback server、fresh bearer fetch、virtual status |
-| `src/lib/env-proxy-fetch.ts` | 为 xAI 外部请求显式选择 HTTP(S) env proxy dispatcher；`NO_PROXY`/相对 URL/非支持协议保持 direct |
-| `src/app/api/xai-oauth/start/route.ts` | browser/device flow 启动，不返回 token |
-| `src/app/api/xai-oauth/status/route.ts` | 脱敏状态与本地 logout |
-| `src/app/api/xai-oauth/cancel/route.ts` | 取消未完成流程 |
-| `src/lib/ai-provider.ts` | OpenAI/xAI Responses 的 fresh-token fetch 闭包 |
-| `src/lib/provider-resolver.ts` | `openai-oauth` / `xai-oauth` virtual resolution |
-| `src/components/settings/ProviderManager.tsx` | 双登录方式、轮询/取消、账号管理与风险/兜底文案 |
-
 ## 改动检查表
 
 - [ ] OAuth fetch 在闭包内拿 fresh token；没有把旧 token 捕获进 model instance

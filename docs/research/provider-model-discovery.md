@@ -178,7 +178,7 @@
 
 ### 套餐型 / 白名单型服务商 — 来源指针清单（Qwen/Bailian 于 2026-07-21 主动复核）
 
-> 2026-07-21 的 `qwen-token-plan-and-grok-access` 计划已主动复核阿里云百炼 Coding Plan、Qwen Token Plan 个人版/团队版；来源与产品边界见 `docs/research/qwen-token-plan-grok-oauth-2026-07-21.md`。下表其他 provider 仍只是来源指针，不能据此声称当日核准。
+> 2026-07-21 的 `qwen-token-plan-and-grok-access` 计划已主动复核阿里云百炼 Coding Plan、Qwen Token Plan 个人版/团队版；来源与产品边界见 `docs/external-facts.md`。下表其他 provider 仍只是来源指针，不能据此声称当日核准。
 >
 > 工程现状：除上述三个 Qwen/Bailian preset 外，其余阵容的最近核验状态仍按原记录和 tech-debt #16 管理。
 >

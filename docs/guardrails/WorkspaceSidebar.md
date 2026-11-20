@@ -43,19 +43,7 @@
 - “+”对普通 Primary 只列 `preferences.order - openPrimaryKinds`；Browser 是可重复项，每次选择都创建新的顶层 Browser tab（有界上限），而不是在 BrowserPanel 内创建嵌套 tab。availability 未通过的项必须 disabled 并显示真实原因；Browser 以 Electron preload 的窄 browser bridge 为事实源，web 客户端保持 disabled 并显示“仅桌面客户端支持”，不得创建假页面。
 - 每个 Browser tab 只拥有一个 BrowserPanel/guest；切换 tab 时保持已打开页面挂载，关闭时只销毁对应 guest。页面 URL/history/title 不写入 workspace preference，恢复时只从 Pin 生成一个空白 Browser tab。
 
-## 3. 关键文件 + 责任
-
-| 文件 | 责任 |
-|---|---|
-| `src/hooks/useWorkspaceSidebar.tsx` | identity hydrate、瞬时 open tabs、Pin persistence、关闭 fallback、legacy 只读迁移 |
-| `src/lib/workspace-surfaces.ts` | Primary kind、workspace preference parser/key、legacy migration |
-| `src/lib/workspace-sidebar.ts` | Primary/Inspector active state、thread preview persistence |
-| `src/components/layout/WorkspaceSidebar/TabBar.tsx` | Primary/Inspector 各自标签、各自 close、瞬时“+”与 Pin；Browser tab 可重复，shell collapse 不在此处 |
-| `src/components/layout/WorkspaceSidebar/TabPanel.tsx` | launcher、Primary + Inspector layout、Browser panels 保活与 availability |
-| `src/components/layout/WorkspaceSidebar/BrowserPanel.tsx` | 单网页地址栏、真实 loading lifecycle 与 guest；不得再建内层 tab bar |
-| `src/lib/workspace-identity.ts`, `/api/workspace/identity` | canonical workspace scope；worktree 共享、独立 clone 隔离 |
-
-## 4. 改动检查表
+## 3. 改动检查表
 
 - 改 Primary tab：验证 activate、Pin、Unpin、own close、关闭非 active、关闭最后一项与 reload。
 - 改持久化：确认只写 `codepilot:workspace-surfaces:v1:<opaque-id>` 与 thread state，不写 legacy workspace-sidebar key。
@@ -68,7 +56,7 @@
 - 改 Primary 激活：覆盖 Standalone Inspector → 加号打开 Widget/Files/Git → Primary 可见 → 点回 preview → 再点 Primary；preview tab 全程保留，交互切换不得改变 hydration 的 Inspector 恢复语义。
 - 改无障碍：Primary 与 Inspector 均是 tab；close button name 包含 tab 名；shell collapse 有不同名称。
 
-## 5. 常见坑
+## 4. 常见坑
 
 1. **用 `pinnedKinds` 直接渲染当前 tabs** — Unpin 会把正在用的模块立即关掉。
 2. **close 同时调用 unpin** — 用户只想临时关 tab，却永久修改项目恢复偏好。
@@ -83,7 +71,7 @@
 11. **交互激活与 hydration 共用同一副作用** — 用户点击 Primary 需要收起当前 Inspector 展示，hydration 却必须保留恢复出的 Inspector。应由 `activatePrimaryInteractively` 包装 `setActivePrimary + closeInspector`，hydrate 继续直接使用 `setActivePrimary`。
 12. **窄屏 Inspector 再加“返回来源”栏** — 顶部已经有同级 Primary/Inspector tabs；额外来源栏重复导航、占据预览高度，并把“从哪打开”误写成层级关系。
 
-## 6. 测试覆盖
+## 5. 测试覆盖
 
 | 测试 | 覆盖 |
 |---|---|
@@ -95,7 +83,7 @@
 
 改本护栏覆盖的状态或 UI，至少跑上述三组 unit targeted 与 `project-panel.spec.ts` scoped E2E。所有创建 session 的 E2E 必须在 `finally` 调用共享 `deleteTestSession`；Playwright 只能通过隔离启动器运行，不得把测试项目写入日常侧栏。
 
-## 7. 设计决策日志
+## 6. 设计决策日志
 
 - **2026-08-25** 单一 shell 采用 Primary + Inspector，而非互斥 tab；保留 Files 浏览上下文与并排预览。
 - **2026-08-25** Pin 归 canonical workspace，preview 归 thread；worktree 共享 workspace preference，独立 clone 隔离。

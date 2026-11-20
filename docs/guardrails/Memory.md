@@ -33,23 +33,10 @@
 | identity/block 读写故障返回可见 typed status；不能从可选增强向外抛错，凭据回执写失败仍保留内存阻断；旧 v1 模糊 block 不作为永久锁 | auxiliary-provider + identity |
 | Quick actions 缓存按当前配置身份失效；旧请求不能覆盖新配置结果，空列表失败仍可见；Retry 不绕过真实 retryAt，显示截止时间 | quick-action-suggestions + quick-actions route + QuickActions |
 | 满额、损坏、访问失败与版本冲突分别显示；抽取先存储预检，确定性存储阻塞等待文件变化才重试，不能按60秒反复消耗模型 | memory-records + lifecycle + UI |
+| 绑定判定的 getter / 读路径只读，不得顺带写入或补建绑定；一次性升级回填只新增绑定，不改变会话 Runtime owner、消息或 Provider | memory-binding + assistant-memory-migration |
+| 回合是否成功由桌面与 Bridge 共用的 sticky 终态事实决定：非成功终态一旦出现，后续帧不得把它恢复为成功 | stream-turn-outcome + collectors |
 
-## 3. 文件责任
-
-| 文件 | 责任 |
-|---|---|
-| `src/lib/memory-service.ts` | 查询/读取/写工具的共同 contract 与 handler |
-| `src/lib/memory-records.ts` | Markdown 真源、来源/CAS/幂等/更正/撤销/锁 |
-| `src/lib/memory-binding.ts` | 仅助理工具范围与显式服务绑定（getter 不写库） |
-| `src/lib/assistant-memory-migration.ts` | 一次性升级回填，不改变会话 Runtime owner |
-| `src/lib/memory-rerank.ts` | Runtime 中立检索的可选统一模型增强，快照/超时/降级 |
-| `src/lib/stream-turn-outcome.ts` | 桌面/Bridge 共用 sticky 终态成功事实 |
-| `src/lib/memory-lifecycle.ts` | 成功回合队列、恢复、状态和自动候选落盘 |
-| `src/lib/memory-search-mcp.ts`, `builtin-tools/memory-search.ts`, `codex/proxy/builtin-bridge.ts` | 协议适配；Codex proxy 只处理读 |
-| `src/lib/auxiliary-provider.ts`, `auxiliary-provider-identity.ts` | 模型能力、policy、快照、瞬态冷却、私有HMAC与等待配置的持久门禁 |
-| `src/app/api/workspace/memory/route.ts`, `MemoryRecordsPanel.tsx` | 用户可见 CRUD、来源与增强状态 |
-
-## 4. 改动检查
+## 3. 改动检查
 
 - 同一 fixture 经 Native、MCP 与 proxy 的实际 handler 返回一致；不能只看函数同名。
 - 路径/权限反例、冷正文命中、来源/版本冲突、撤销后的重建均有行为回归。
@@ -57,7 +44,7 @@
 - 新增强状态映射中英 UI，降级仍可手工使用，不展示假成功或猜测用户身份。
 - 生命周期必须在真实 collector / Bridge 中验证，不能仅调用 enqueue 函数声称全链路通过。
 
-## 5. 常见坑
+## 4. 常见坑
 
 - `hasCredentials` 代表 SDK 子进程能读配置，却被 Native 当作 transport 已拿到 key。
 - 缺 key 的固定 SDK 错误被包装后成为 unknown，静默降级仍重复上报。
@@ -65,11 +52,11 @@
 - 只改搜索工具，不改 Native/Codex 的实际注册、Plan prompt 或整服 auto-allow。
 - 使用任意 cwd 激活助理自动服务，或用宠物存在性决定记忆是否工作。
 
-## 6. 测试
+## 5. 测试
 
 `memory-scope-entrypoints.test.ts`、`memory-rerank.test.ts`、`memory-records-recovery.test.ts`、`memory-service.test.ts`、`memory-records.test.ts`、`memory-records-route.test.ts`、`memory-lifecycle.test.ts`、`memory-extractor.test.ts`、`codex-memory-mcp-route.test.ts`、`native-memory-tasks-parity.test.ts`、`codex-builtin-bridge-parity.test.ts`、capability/permission suites、`auxiliary-provider.test.ts`、`telemetry-provider-noise.test.ts`、`quick-actions-route.test.ts`、`quick-actions-status.test.ts`、`quick-action-suggestions.test.ts`。完整通过情况与真实 UI/Runtime smoke 分别记入执行计划，不能互相替代。
 
-## 7. 决策日志
+## 6. 决策日志
 
 - 2026-09-21：保留现有用户文件，增加可审计记录而不引入第三方 Memory 服务或向量库。查询先收敛确定性全文服务；自动抽取为可选、可见、可恢复增强。宠物排除本次兼容矩阵。
 - 2026-09-21：Codex read/write MCP 分离沿用现有审批通道；Claude 精确放行三个读工具，Native 根据真实已挂载工具启用能力提示。

@@ -10,7 +10,6 @@
  * populated effort menu sourced from nothing.
  *
  * These tests pin the dual-schema read and the fail-closed rules around it.
- * POC evidence: docs/research/foundation-experience-refresh-2026-07-17.md
  */
 
 import { describe, it, beforeEach } from 'node:test';

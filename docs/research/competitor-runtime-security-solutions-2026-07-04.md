@@ -1,6 +1,6 @@
 # 竞品对 CodePilot 其他问题的更优解法(Runtime / 安全 / 状态,2026-07-04)
 
-> 类型:竞品源码调研。承接 [competitor-chat-scroll-perf-2026-07-04.md](./competitor-chat-scroll-perf-2026-07-04.md)(那份只覆盖滚动/性能),本份覆盖 [stability-fluency-runtime-audit-2026-07-04.md](./stability-fluency-runtime-audit-2026-07-04.md) 里**滚动/性能之外**的问题:stop/abort、turn 所有权、消息队列、新会话导航、工具错误、密钥加密、Electron 安全、崩溃恢复、能力建模。
+> 类型:竞品源码调研。承接 [competitor-chat-scroll-perf-2026-07-04.md](./competitor-chat-scroll-perf-2026-07-04.md)(那份只覆盖滚动/性能),本份覆盖 `docs/research/stability-fluency-runtime-audit-2026-07-04.md`（已删除，见 git 历史） 里**滚动/性能之外**的问题:stop/abort、turn 所有权、消息队列、新会话导航、工具错误、密钥加密、Electron 安全、崩溃恢复、能力建模。
 > 版本:三个项目均已拉到最新(OpenCode `7a8e7c8`/2026-07-04、Codex `98d28aa`/2026-07-03、CraftAgent `v0.10.5`/2026-07-01)。所有竞品证据附 `文件:行号`,高价值迁移项已人工二次核读。
 
 ## 一个贯穿性根因(最重要的横向结论)

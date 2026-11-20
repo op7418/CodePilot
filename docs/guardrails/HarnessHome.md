@@ -47,31 +47,11 @@ Harness Home is the framework-neutral, user-owned source of truth for portable i
 | 23 | Skill, MCP, CLI, builtin, renderer and model-adapter surfaces belong to one user-managed Capability Package. Package actions may invoke declared dependencies only through the Capability Broker, which rechecks permission/secret/scope/policy on every hop and enforces cycle, depth, budget, timeout and cancellation limits. |
 | 24 | Capability Package installation writes the canonical repository first and creates only managed, provenance/hash-checked Runtime projections. Source/bridge/provider adapters are internal diagnostics, not separate user installation objects. They never overwrite or delete unmanaged external files; Runtime switching is read-only. |
 | 25 | Workflow, design and visualization behavior defaults to a progressive-disclosure Skill inside a Capability Package. Creative actions use declared MCP/CLI/builtin/renderer/model dependencies, typed Artifact/Asset lineage, model capability descriptors and policy resolution. Do not create a parallel workflow engine or persist one-off aesthetic choices as durable cross-project preference. |
+| 26 | Scope resolution order is fixed, least to most specific: built-in → user → assistant → project → Runtime overlay. An overlay applies only when its `runtimeId` matches the active Runtime, and it is applied last without becoming the canonical base. |
+| 27 | Skill/MCP definition create/update writes the canonical repository first. An update must carry the existing `expectedContentHash` (a create must omit it); any mismatch is a conflict, never a silent overwrite. |
+| 28 | All three Runtimes receive canonical content through the same validated projection injection; no Runtime facade may read canonical files through its own unvalidated path. |
 
-## 3. 关键文件 + 责任
-
-| File | Responsibility |
-|------|----------------|
-| `src/lib/harness-home/contracts.ts` | Portable schema, scope, provenance, capability, Method and Taste evidence shapes |
-| `manifest.ts` | Known-field validation, unknown-field preservation and manifest Secret gate |
-| `scope.ts` | Built-in → user → assistant → project → matching Runtime overlay order |
-| `validation.ts` | Secret scan, Full Reference rule and evidence validation |
-| `repository/file-repository.ts` | Repository identity, generation check, consistency diagnostics and commit orchestration |
-| `repository/writer-lease.ts` | Single-writer ownership and explicit dead-holder takeover |
-| `repository/transaction.ts` | Prepared/committed/orphaned journal and crash recovery |
-| `migration.ts` | Dry-run/apply, idempotency and same-name/different-content conflicts |
-| `secret-store.ts` | Value-free metadata plus explicit resolve/mutate facade |
-| `codepilot-secret-store.ts` | Compatibility resolver over v0.62 Settings/Provider/env/external-owned stores |
-| `registry.ts` | Open descriptor registries for Harness and Runtime adapters |
-| `src/lib/runtime/runtime-catalog.ts` | Built-in Runtime registration, display/driver/exposure metadata and packaged-driver gate |
-| `runtime/descriptor.ts` | Descriptor-derived capability declarations and CodePilot Full Reference assertion |
-| `runtime/repository-projection.ts` | Consistent canonical generation → Runtime projection and prompt fragment |
-| `runtime/definitions.ts` | Canonical-first Skill/MCP create/update with expected-hash conflict protection |
-| `runtime/configured.ts` | Read-only configured-root resolution and value-free Secret diagnostics |
-| `src/app/api/harness-home/**` | Metadata-only diagnostics, configure/unconfigure and canonical definition write boundary |
-| `src/lib/harness/runtime-adapter.ts` | Injects a validated canonical projection into all three Runtime facades |
-
-## 4. 改动检查表
+## 3. 改动检查表
 
 - [ ] Contract change preserves unknown fields and overlays.
 - [ ] New field has a portable meaning and does not expose a local absolute path or Secret.
@@ -97,7 +77,7 @@ Harness Home is the framework-neutral, user-owned source of truth for portable i
 - [ ] Method activation phrases pass the same non-empty/length/control-character validation on write, import and historical read.
 - [ ] Tests use isolated temporary roots; never point at a real user Harness root.
 
-## 5. 常见坑
+## 4. 常见坑
 
 - Treating a successful `fs.watch` event as proof that an index is current.
 - Deleting a lock by age or local PID miss alone. A slow, suspended or cross-machine process may still be the writer; automatic recovery requires an exact same-machine holder whose PID is provably dead.
@@ -118,7 +98,7 @@ Harness Home is the framework-neutral, user-owned source of truth for portable i
 - Treating a selected image or one-off edit as a permanent user preference.
 - Adding `component`, `document` or `html_bundle` before a real materializer/validator/consumer exists.
 
-## 6. 测试覆盖
+## 5. 测试覆盖
 
 | Contract | Test |
 |----------|------|
@@ -150,7 +130,7 @@ CODEX_DISABLED=1 npx tsx --test --import ./src/__tests__/db-isolation.setup.ts s
 
 Run full `npm run test` before closing a phase or changing existing Runtime/DB/MCP behavior.
 
-## 7. 设计决策日志
+## 6. 设计决策日志
 
 - 2026-07-30 — Harness Home is a domain aggregate, not a required page. UI entry remains a separate product decision.
 - 2026-07-30 — User files are canonical; SQLite may index but cannot become the only copy of identity, Memory, Skill or Method.

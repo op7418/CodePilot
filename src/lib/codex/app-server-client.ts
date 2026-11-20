@@ -174,7 +174,6 @@ export class CodexAppServerClient {
     // chat composer + Settings pages that depend on it — for a full 30s.
     // The transport invokes this synchronously if it is already closed,
     // which also covers a process that exits before we attach.
-    // See docs/research/packaged-preview-runtime-diagnosis-2026-05-31.md.
     if (this.transport.onClose) {
       this.unsubscribeClose = this.transport.onClose((reason) => this.handleClose(reason));
     }

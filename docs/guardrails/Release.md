@@ -33,20 +33,6 @@
 | 15 | universal 合并时，按目录选型的 SDK/Sharp Darwin 预编译文件与 already-universal Trash helper 只能由精确 `x64ArchFiles` glob 保留；`better-sqlite3` / `zlib-sync` 必须先逐架构替换再由 universal 合并，合并后的 `afterPack`（Arch=4）必须 no-op，不得把 fat binary 覆盖回单架构 | builder config + hooks + source-contract test + universal package probe |
 | 16 | 分发 DMG 容器必须在 package step 的临时 keychain 仍可用时由同一 Developer ID Application identity 签名；提交公证前先校验配置 Team，公证/staple 后再用 `codesign`、`stapler` 与 DMG 专用 Gatekeeper `open/context:primary-signature` 三重验收 | builder config + notarizer + final verifier |
 
-## 关键文件 + 责任
-
-| 文件 | 守哪条不变量 |
-|------|--------------|
-| `RELEASE_NOTES.md` | Release 正文 source of truth |
-| `package.json` | version 字段 |
-| `package-lock.json` | 同步版本号（`npm install` 后会自动更新） |
-| `.github/workflows/*` | CI 签名、公证、构建、资产审计、attestation 与上传 |
-| `scripts/after-pack.js` / `scripts/after-sign.js` | better-sqlite3 Electron ABI + macOS Developer ID identity gate |
-| `scripts/notarize-macos-dmgs.mjs` / `verify-macos-notarization.mjs` | DMG 公证/staple 与 app/DMG/ZIP Gatekeeper 门禁 |
-| `scripts/verify-windows-signing.ps1` | CodePilot installer + 顶层 app EXE publisher/timestamp 门禁；禁止递归要求第三方 EXE 同 publisher |
-| `scripts/verify-update-assets.mjs` | stable/preview metadata/hash/blockmap 原子图 |
-| `scripts/verify-github-update-rulesets.mjs` / `verify-immutable-release-ack.mjs` | 管理员 no-bypass 状态、live ruleset 防漂移与短时 Immutable 确认门禁 |
-
 ## 改动检查表
 
 - [ ] 更新 RELEASE_NOTES.md 之前先看 `git log --oneline` 但不要原样复制

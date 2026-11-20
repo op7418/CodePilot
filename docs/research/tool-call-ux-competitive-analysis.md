@@ -1,7 +1,7 @@
 # 工具调用 UX 竞品调研 — Claude Code / CraftAgent / Opencode / Codex
 
 > 目标：调研四个主流 AI Coding 客户端的工具调用展示与交互设计，提炼 CodePilot 可借鉴的优化方向。
-> 关联文档：[thinking display 实现方案](./tool-call-thinking-display.md)
+> 关联文档：thinking display 实现方案（原文已删除，见 git 历史）
 
 ## 调研对象
 

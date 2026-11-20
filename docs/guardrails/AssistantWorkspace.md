@@ -47,23 +47,7 @@
 | 18 | 交互聊天的审批请求与成功完成由服务端 `collectStreamResponse` 单点创建 durable event，覆盖三 Runtime。审批按 request id 去重；完成必须同时满足 successful result、assistant terminal 已持久化、仍持有当前 session lock。Codex `interrupted` / `inProgress` 是 sticky 非成功终态，后续 usage-only result 不得恢复成功。owner check 到 native event/delivery insert 之间不得有 await；失败、停止、autoTrigger 与 stale owner 不得发完成通知。锁屏正文不得含 tool input、路径或模型正文 | collector + `interactive-chat-notifications.ts` + notification manager static DB insert |
 | 19 | notification claim/ack HTTP 面只接受 `electron-native` + Electron Main owner；`renderer-toast` 只保留在 DB 历史/迁移类型中。Settings 的“测试系统通知”使用独立 same-origin Renderer policy，不得借旧 channel 伪装 consumer | notification claim policy + notify claim/ack/test routes |
 
-## 3. 关键文件 + 责任
-
-| 文件 | 责任 |
-|------|------|
-| `electron/default-assistant-home.ts` | 默认目录纯解析函数 |
-| `electron/main.ts`, `electron/preload.ts` | fixed-path IPC、native delivery owner 与点击 ready handshake |
-| `src/lib/assistant-default-workspace.ts` | single-flight、初始化和 commit-time CAS |
-| `src/lib/assistant-workspace.ts` | 模板、canonical/legacy resolver、原子 state 写入 |
-| `src/lib/assistant-heartbeat.ts` | desired read、reconcile、task/desired 一致性与 outcome |
-| `src/lib/task-scheduler.ts` | single task、cadence、manual/due 统一 run lock |
-| `src/lib/agent-task-runner.ts` | pre-provider desired/empty gate、silent/speak-up 行为 |
-| `src/app/api/settings/workspace/route.ts` | bootstrap、PATCH 顺序和 breadcrumbed summary |
-| `src/lib/notification-manager.ts` | priority-to-channel policy 与 durable event creation |
-| `src/lib/chat-collect-stream-response.ts`, `src/lib/interactive-chat-notifications.ts` | 三 Runtime 统一的审批/完成触发、truthful terminal gate、锁屏安全文案与会话点击路由 |
-| `src/app/api/tasks/notify/**` | Main-only native claim/ack 与独立 same-origin test mutation boundary |
-
-## 4. 改动检查表
+## 3. 改动检查表
 
 - [ ] default bootstrap fixture 使用临时 Documents 和隔离 DB，绝不触碰真实 `~/Documents`。
 - [ ] 非空、无效、离线旧路径仍保持选中，文件 hash 不变。
@@ -80,7 +64,7 @@
 - [ ] Settings 不使用单个日期或客户端推断值表达 scheduler 健康。
 - [ ] 文案不把 OS accepted 写成“用户已读”。
 
-## 5. 常见坑
+## 4. 常见坑
 
 - 先检查 setting 为空再无条件 `setSetting`，会在初始化期间覆盖用户刚选的目录。
 - 把目录初始化成功等同于用户已经完成 onboarding，或顺手创建一条假 session。
@@ -97,7 +81,7 @@
 - 为保留 Settings 测试按钮而继续让通用 claim/ack policy 接受 `renderer-toast`；测试动作应有独立 same-origin policy。
 - 把助理 workspace 当作普通 recent-project 下拉框；它是用户 Harness 的身份与记忆边界，切换必须显式确认，不能把历史聊天 cwd 混成候选助理目录。
 
-## 6. 测试覆盖
+## 5. 测试覆盖
 
 | 契约 | 测试 |
 |------|------|
@@ -110,7 +94,7 @@
 | 全 priority native、legacy renderer queued 迁移、交互任务完成/审批/stale owner | `bridge-delivery-visibility.test.ts`, `notification-channel-retirement.test.ts`, `interactive-chat-notifications.test.ts`, `bg-poller-channel-parity.test.ts` |
 | 全量门禁 | `npm run test`, `npm run build` |
 
-## 7. 设计决策日志
+## 6. 设计决策日志
 
 - 2026-08-03 — 新用户获得 Electron Documents 下的默认助理；旧用户任意非空路径 no-touch。
 - 2026-08-03 — 新规则文件改为 `instructions.md`，legacy 文件只读兼容；真实 Claude CLI 证明 project `CLAUDE.md` 会由 SDK 原生加载，因此只在该精确 owner 条件下省略 CodePilot rules。

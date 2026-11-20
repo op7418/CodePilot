@@ -3,7 +3,7 @@
 > 创建时间：2026-07-21
 > 最后更新：2026-08-15
 > 状态：🟡 Claude 第三轮复审已通过（附条件），代码 blocker 全部闭环，尚待真实凭据 smoke：Grok 4.6 UI 只展示锁定 SDK 可承载的 Low/Medium/High，动态 `redirect_uri`、媒体真源/失败语义/实际工具挂载与四入口取消均有确定性回归。v0.67.0 发布快照全量为 5246 pass / 0 fail / 1 skipped（5247 tests），production build 通过，production `@smoke` 22/22；smoke 还捕获并闭环了真实 ChatGPT.app `Codex Desktop/<release>` user-agent 被严格版本门误拒的问题。但第三轮复审曾观测 5242/2/1，两个失败均为已跨机器复现的 `telemetry-native-stream-loop` 真 flake，现登记 tech-debt #86，不能用本次绿色覆盖其存在。authenticated `/v1/models`、真实 4.6/Imagine entitlement 与 fresh 资产 smoke 仍待跑。
-> 事实基线：[千问 Token Plan 与 Grok OAuth 接入调研](../../research/qwen-token-plan-grok-oauth-2026-07-21.md)
+> 事实基线：[外部事实手册](../../external-facts.md)
 
 ## 用户问题与争议
 
@@ -403,7 +403,7 @@ Grok Build 登录后，聊天模型列表来自该账号的 proxy `/v1/models`�
 ## 依赖与相邻计划
 
 - [模型目录与推理强度统一适配](./model-capability-reasoning-refresh.md)：拥有模型级 effort/capability 统一合同；本计划拥有 provider/product identity 与 SKU 白名单。
-- [MiMo UltraSpeed + OpenAI-compatible 三方 API](./mimo-ultraspeed-openai-compatible-provider.md)：拥有通用 OpenAI-compatible 基础；xAI 因 Responses + native SDK 建议使用 branded protocol，不复用 Chat Completions 假兼容。
+- MiMo UltraSpeed + OpenAI-compatible 三方 API（已完成并删除，见 git 历史）：拥有通用 OpenAI-compatible 基础；xAI 因 Responses + native SDK 建议使用 branded protocol，不复用 Chat Completions 假兼容。
 - [tech-debt tracker #16](../tech-debt-tracker.md)：套餐 catalog 主动核准；千问部分由本计划接管。
 - [tech-debt tracker #40](../tech-debt-tracker.md)：API key/OAuth 凭据统一加密仍是独立工程；本轮沿用现有 OAuth 存储架构并如实记录，不再把它设成 xAI 接入前置。
 

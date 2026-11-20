@@ -14,9 +14,6 @@
  *
  * Scope guard: codex-only. Claude Code / Native keep the full union for
  * Anthropic Opus tiers — they do NOT import from ./effort.
- *
- * See docs/research/packaged-preview-runtime-diagnosis-2026-05-31.md
- * and docs/research/foundation-experience-refresh-2026-07-17.md
  */
 
 import { describe, it } from 'node:test';

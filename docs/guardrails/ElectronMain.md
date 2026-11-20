@@ -62,35 +62,8 @@
 | 38 | Browser guest 只能使用 Main 为 canonical 64-hex workspace id 签发的 `persist:codepilot-browser-*` partition；`will-attach-webview` 必须核对已签发 partition 与允许 URL、删除 preload，并强制 `sandbox/contextIsolation/webSecurity=true`、Node/subframe Node/Worker Node/nested webview/insecure content=false。Preload 不得暴露 Main WebContents/Session/CDP/通用 execute bridge；DOM `<webview>` 的 host 控制面按下文残余风险处理 | `browser-surface-security.ts` + Main/Preload + BrowserPanel |
 | 39 | Browser 顶层导航只允许 HTTPS、loopback HTTP 和 exact `about:blank`；remote HTTP、credentials、file/data/javascript/未知 scheme fail closed。guest permission check/request 默认全部拒绝，download 当前全部阻断并显示诚实 UI；popup 只能转受控 tab，不能创建未管理窗口 | `browser-url-policy.ts` + Main handlers + BrowserPanel |
 | 40 | CLI maintenance 与 app updater install 必须竞争同一个 Main-owned lifecycle latch；latch 对同 owner 也不可重入，CLI duplicate guard + starting 占位 + acquire 必须在首个 await 前同步完成。utility recovery fork 前注入 active provider+opaque lease id，正常 Renderer/后台任务恢复前完成 lease reconcile。普通 quit 在 CLI update active 时必须等待或走取消→进程树清理→post-verify；详见 `CliMaintenance.md` / `Updater.md` UP-06 | `cli-maintenance.ts` + `install-lifecycle-coordinator.ts` + Main quit/recovery |
-
-## 关键文件 + 责任
-
-| 文件 | 责任 |
-|---|---|
-| `electron/main.ts` | 主窗口生命周期、导航拦截、原生编辑右键、托盘与系统集成 |
-| `electron/html-thumbnail-security.ts` | HTML 缩略图 strict URL 解析、精确 request scope 与串行 deadline |
-| `scripts/clean-electron-build.mjs` | 清理边界与 standalone allowlist |
-| `scripts/build-electron.mjs` | Next standalone 复制与脱敏 |
-| `scripts/after-pack.js` | better-sqlite3 ABI rebuild |
-| `scripts/after-sign.js` | macOS 签名后处理 |
-| `electron-builder.yml` | DMG / NSIS / arm64 + x64 打包配置 |
-| `electron/preload.ts` + `src/components/layout/ThemeProvider.tsx` | app 主题到 `nativeTheme.themeSource` 的窄 IPC 桥 |
-| `src/lib/xai-oauth-manager.ts` | loopback server 生命周期与端口策略 |
-| `src/lib/env-proxy-fetch.ts` | packaged server 上游 HTTP(S) system-proxy bridge |
-| `src/lib/process-proxy-env.ts` | child-process proxy 优先级、Windows key 归一与 bypass |
-| `src/lib/local-path-security.ts` | 主进程/Next fallback 共用的绝对路径、bundle、HTML 扩展与固定 argv 策略 |
-| `src/lib/local-path-navigation.ts` + `/api/files/inspect` | Renderer 本地路径 file/directory 分流；服务端从 session/home 推导 scope 并返回 canonical `realPath` |
-| `electron/default-assistant-home.ts` | 默认助理 Documents 路径的无副作用纯解析 |
-| `electron/notification-lifecycle.ts` | 平台 notification options 与 show/error/timeout 终态 |
-| `electron/notification-click-queue.ts` | 点击 action 校验、有界 pending queue 与 event-id 去重 |
-| `electron/external-navigation.ts` | HTTP(S) system-browser Promise 所有权、本地化失败提示与隐私边界 |
-| `electron/browser-surface-security.ts` + `src/lib/browser-url-policy.ts` | workspace partition、固定 guest preferences 与共享 URL policy |
-| `src/components/layout/WorkspaceSidebar/BrowserPanel.tsx` | 单个 Browser tab 的 guest 生命周期、实际导航/loading 事件、错误/崩溃 UI；tab 身份由 Workspace Sidebar 持有，preload 不暴露 Main `WebContents`/Session/CDP handle |
-| `electron/server-supervisor.ts` | crash window、有限 backoff、safe-mode ownership 与健康重置 |
-| `electron/server-descendant-registry.ts` + `src/lib/server-lifecycle-contract.ts` | generation/identity 校验与 single-owner restart gate |
-| `electron/server-recovery-page.ts` | 不依赖 Next 的本地化错误面与 CSP |
-| `electron/cli-maintenance.ts` + `electron/install-lifecycle-coordinator.ts` | CLI update owner、utility recovery lease bootstrap 与 app updater/quit 排他生命周期 |
-| `src/lib/macos-keychain-guard.ts` + `resources/macos-keychain-guard/security` | default-keychain 只读探测、Claude credential 非交互降级与 packaged shim |
+| 41 | 本地恢复页不得依赖 Next utility 提供的任何资源；文案在 Main 内本地化，页面自带 `default-src 'none'` 的限制性 CSP | `server-recovery-page.ts` |
+| 42 | HTML 缩略图捕获必须串行排队，每次带硬超时；超时后释放该次捕获并让队列继续，单个卡住的页面不能阻塞后续缩略图 | `html-thumbnail-security.ts` `SerializedDeadlineQueue` |
 
 ## 改动检查表
 

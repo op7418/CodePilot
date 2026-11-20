@@ -30,24 +30,11 @@
 | ST-16 | packaged Next utility 的运行期 fatal/error/unexpected exit 每个 generation 最多上报一个 normalized product-fault event。事件只允许稳定 reason、平台定义的有界整数退出码和 utility/host memory 数值；退出码接受 signed int32 至 Windows DWORD 范围，内存指标仍只接受非负有限数。已知 Windows logoff/OS teardown 状态（当前 `0x40010004`、`0xC000026B`）是 expected lifecycle：0 event；但退出码本身不拥有 recovery 决策，Main 未进入独立 `isQuitting` 门禁时仍启动既有 bounded recovery，防止同码外部终止留下死后端。其他 unexpected exit 只按 clean/nonzero/platform-termination 等低基数 class 分组，精确 exit code 仅作数值 extra。Electron diagnostic report 原文、argv、env、路径和 server stdout/stderr 禁止进入 Sentry。SDK `ChildProcess` 必须保留 breadcrumb 但以 `events:[]` 关闭自动 message event，避免 `abnormal-exit` 与自定义边界双报。启动探测失败、dev、正常 quit 与 telemetry opt-out 必须为 0 event。 |
 | ST-17 | exception/message/breadcrumb 中出现 POSIX 或 Windows 用户目录时，必须把整个剩余本地路径替换为固定 `[local-path]`，包括空格与多语言目录，不能只隐藏用户名后保留项目/文件名。stack frame 与 debug_meta 走独立 source-path canonicalization，可保留用户名后的源码相对结构与行列/debug ID 以支持 symbolication。 |
 | ST-18 | `AI_LoadAPIKeyError`、Native 缺凭据/仅 Claude settings 可用与 OAuth 过期的固定 code 必须归 `credentials` 且为 0 event。连接重置/拒绝/EPIPE/UND_ERR_SOCKET 等固定 transport code 归 retry-exhausted transient；受控事件增加 allow-listed `failure.kind` / `call.scene`，不能为恢复诊断上传原始 message/cause。跨请求预算仅限制已知 transient：每进程、kind/scene/protocol/provider-class/runtime 组合每 15 分钟保留前 3 个；unknown/protocol/product-fault 不受此预算抑制。最多 256 组本地状态，抑制计数封顶 1,000,000，下一窗口首个受控事件仅携带数值 `telemetrySuppressedCount`。这是客户端进程预算，不是组织配额保证，也不影响旧版本。 |
+| ST-19 | 诊断维度 `call.scene` 只能从 `provider-call-policy.ts` 的 `PROVIDER_CALL_SCENES` 单一枚举派生。遥测上报预算只决定是否发 Sentry 事件，不承担业务冷却或功能恢复；业务冷却由 `auxiliary-provider.ts` 独立负责，不能把“不再上报”当成功能已恢复。 |
 
 后台 chat collector 的 rejected Promise 由单一边界上报 `chat.collection_failed`，renderer detach 后仍有效。只保留安全栈与固定产品分类，不发送 DB message/SQL/回复/cause；SDK import 仍在显式 `NODE_ENV !== development` block 内，防止 Turbopack dev 引入遥测依赖图。dev/preview/遥测关闭时同样输出固定本地日志码：只有精确匹配的 `CODEPILOT_MESSAGE_PERSISTENCE_FAILED` 可以作为具体码，其余统一 `CHAT_COLLECTION_FAILED`，不得透传 error/message/cause。上报同步失败也必须在 finally 中执行 lock cleanup。真实 SDK transport 的 stable 阳性与 dev/preview 阴性、一次上报、本地码和敏感内容排除由 `chat-collection-telemetry.test.ts` 覆盖（2026-09-07）。
 
-## 3. 关键文件与责任
-
-- `src/lib/telemetry/contract.ts`：ST-01/02/06/07/08/15。
-- `src/lib/telemetry/sanitize.ts`：ST-03/04/05/17。
-- `src/lib/telemetry/root-cause.ts`：ST-08/09/15 的共享有界 normalizer 与安全 stack 副本。
-- `src/lib/telemetry/diagnostics.ts` + `report-budget.ts`：ST-18 的`provider-call-policy.ts` 的 `PROVIDER_CALL_SCENES` 单一枚举派生诊断维度与有界 transient 上报预算；业务冷却由 `auxiliary-provider.ts` 独立负责，不能把静音当功能恢复。
-- `src/lib/telemetry/provider-failure.ts` + `provider-marker.ts` + `media-failure.ts`：ST-08/09/15。
-- `src/lib/telemetry/native-stream-boundary.ts`：每 step 保存 in-band structured error，并在 resolved terminal / catch 之间提供 one-shot capture 与去重。
-- `src/lib/telemetry/utility-process-failure.ts`：ST-16 的稳定分类、normalized fingerprint 与纯数值 payload。
-- `src/lib/agent-loop.ts` + `src/lib/experimental/agent-loop-toolloop-poc.ts`：`onError` 只保留结构化 root cause 并提前 marker；在 response/finish-step 或 catch 确认 terminal 后统一 capture。
-- `src/instrumentation.ts`、`SentryInit.tsx`、`electron/main.ts`：三层 adapter 与 session policy。
-- `scripts/build-electron.mjs`、`scripts/sentry-source-maps.mjs`、`.github/workflows/build.yml`、`electron-builder.yml`：ST-11/12/14。
-- `src/lib/telemetry/smoke.ts` 与 `.github/workflows/build.yml`：ST-13 的测试专用错误与双门禁。
-
-## 4. 改动检查表
+## 3. 改动检查表
 
 - [ ] 新 tag/extra 是否是低基数枚举，且已加入 sanitizer allow-list？
 - [ ] 新 capture 是否在共享边界，是否可能与 SDK auto-capture 重复？
@@ -72,7 +59,7 @@
 - [ ] 普通 message/exception 的用户目录是否整体替换为 `[local-path]`，含空格与多语言后缀；没有误用 source-frame canonicalization 泄露项目名？
 - [ ] 真实 smoke 仍是手动 macOS-only；正式 tag 的 compile flag 为 `0`，因此不启用 minidump integration；native crash 无运行时 flag 时不可触发。
 
-## 5. 常见坑
+## 4. 常见坑
 
 - `sendDefaultPii:false` 不是完整脱敏；server event 删除 `user` 后 Relay 仍可能按连接补 IP/Geo，必须保留 null tombstone，并把 project IP scrubbing 作为纵深防御。
 - Electron `MainProcessSession` 默认可只在退出/异常时发送；长驻托盘应用不能把“最终会退出”当及时 Release Health 证据，也不能为修复空数据并存两个 session producer。
@@ -92,7 +79,7 @@
 - map 上传成功也不代表安全；electron-builder 每个 FileSet 都要排除 `.map`。
 - source-map upload 可以对临时网络/API 故障做有界重试，但不得跳过失败继续 package；测试可用 `SENTRY_UPLOAD_RETRY_DELAY_MS=0` 取消等待，生产固定保留退避。
 
-## 6. 测试覆盖
+## 5. 测试覆盖
 
 - `telemetry-contract.test.ts`：enable、main-only eager session、breadcrumb-only ChildProcess、outcome、fingerprint。
 - `telemetry-sanitizer.test.ts`：PII/content/完整本地路径/debug_meta 清洗与真实 Node transport null-IP tombstone。
@@ -109,7 +96,7 @@
 - `electron-packaging-hygiene.test.ts`：所有 package FileSet 排除 map。
 - `instrumentation-shape.test.ts` + `sentry-dev-guard.test.ts`：dev 不加载 Node SDK。
 
-## 7. 决策日志
+## 6. 决策日志
 
 - 2026-09-21：线上 environment/anthropic 的辅助 unknown 样本与离线复现证明：shared hasCredentials 包含 Claude settings，但 Native 不具备读取这类凭据的能力。Native 工厂先拒绝，辅助任务返回明确不可用状态；新增结构化错误与 enum 诊断，并仅对已分类 transient 加进程预算。unknown/product 保留，历史 unknown 不追溯假定单一根因；旧版需升级或另行管理 ingest 才会止血。
 

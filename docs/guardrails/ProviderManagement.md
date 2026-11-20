@@ -97,6 +97,10 @@ Qwen Token Plan 个人版与团队版共享 endpoint，稳定身份分别是 `qw
 - Chat route 返回 typed 409，现有会话与新会话都显示本地化说明和 `/settings/providers` 恢复动作；被拒绝的消息不得落库或留下错误 assistant bubble。
 - `hasCodePilotProvider()` 是全局粗检查，不能抢在 session-aware credential gate 前把“唯一 Provider 凭据不可读”误报成“未配置服务商”。
 
+### 3.6 连接测试与诊断走真实解析链路
+
+不变量：连接测试与 Provider Doctor（`provider-doctor.ts`）必须通过 `provider-resolver` 的 `resolveProvider()` 得到 base URL、凭据与 header，与真实聊天同一条解析链路；不得另拼一套请求参数。否则会出现“诊断失败但聊天正常”或反之的误报（B-013 教训）。
+
 ## 4. provider_models 表关系
 
 ### 4.1 三层 model 来源
@@ -168,25 +172,7 @@ UI 展示在 Models 页 row 上的 source badge。删除按钮**仅**对 `source
 
 为什么：provider_type 决定 protocol / SDK 路径 / wire format。从 `'anthropic'` 改成 `'openrouter'` 等于换协议，role_models / extra_env 全都失效。
 
-## 6. 关键文件 + 责任
-
-| 模块 | 文件 | 不变量 |
-|---|---|---|
-| Provider list 主组件 | `src/components/settings/ProviderManager.tsx` | 5 段分组 + Add Service 5 类入口；分组判定走共享 identity resolver |
-| Provider 卡片 | `src/components/settings/ProviderCard.tsx` | 头部 2 行：name+actions / 2 个 pill；compat pill `whitespace-nowrap` |
-| Renderer 预设适配 | `src/components/settings/provider-presets.tsx` | 只适配共享 identity resolver 的结果，不复制匹配规则 |
-| Catalog + identity | `src/lib/provider-catalog.ts` | `VENDOR_PRESETS`、identity 合同、歧义/非法状态；`meta.claudeCodeVerified` 仅给实测稳定的 |
-| Catalog model identity | `src/lib/catalog-model-identity.ts` | 五态 presence classifier；legacy fingerprint 必须全字段精确匹配，冲突 fail-closed |
-| Verified wire resolver | `src/lib/provider-catalog.ts:getVerifiedProviderWireCapabilities()` | preset identity + exact model；第一方能力不外溢到聚合渠道 |
-| Runtime transport config | `src/lib/provider-resolver.ts:toAiSdkConfig()` | 只消费 verified wire；runtime/model 不匹配时保留默认协议 |
-| Provider credential gate | `src/lib/provider-resolver.ts:resolveProviderForSession()` + `sdk-subprocess-env.ts` + `ai-provider.ts` | 显式 DB Provider 无可用凭据时，Chat/Claude SDK/Native 三层均 fail closed，禁止 ambient OAuth 串线 |
-| Provider DB ops | `src/lib/db.ts` `createProvider/updateProvider/deleteProvider` | 删除联动 active_image_provider；不允许改 provider_type |
-| Provider models DB ops | `src/lib/db.ts` `upsertProviderModel/applyDiscoveryDiff/updateProviderModelUserFields/mergeCatalogManagedModels` | 保留 user_edited 行的用户字段；catalog seed 与 plan 目录非破坏升级分开 |
-| API: providers CRUD | `src/app/api/providers/route.ts` + `[id]/route.ts` | DELETE 不动 chat_sessions；PUT 拒绝 provider_type 变更 |
-| Add Service Modal | `ProviderManager.tsx` | 5 类入口对齐已连接分组；OAuth 已登录置灰不隐藏；xAI 两渠道分离 |
-| Provider Doctor | `src/components/settings/ProviderDoctorDialog.tsx` + `src/lib/provider-doctor.ts` | 测试连接走 `provider-resolver.resolveProvider()` 同一链路（B-013 教训） |
-
-## 7. 改 / 加新功能必须检查
+## 6. 改 / 加新功能必须检查
 
 - 新增 preset：
   - 加进 `VENDOR_PRESETS`，定义稳定 key、protocol/base URL identity 合同
@@ -206,7 +192,7 @@ UI 展示在 Models 页 row 上的 source badge。删除按钮**仅**对 `source
   - 在已连接服务 Section 1 加对应分组
   - 两边逻辑必须**对齐**（同一判定函数）
 
-## 8. 常见坑
+## 7. 常见坑
 
 1. **Add Service 隐藏已登录的 OAuth** — 用户找不到 OAuth 入口以为没登录过。必须显示置灰 + "已登录"标签
 2. **删 provider 时清 chat_sessions.provider_id** — 用户误删恢复后 session 接不回。让 hook 的 `providerWasFilteredOut` 机制处理
@@ -229,7 +215,7 @@ UI 展示在 Models 页 row 上的 source badge。删除按钮**仅**对 `source
 19. **Conflict 只有徽章没有恢复路径** — current canonical 存在时仍按 current 可用；真正 CAS conflict 必须在写后重读并返回冲突 model ids，前端展示解释和进入 Models 的动作，不能乐观改本地状态或让用户卡死
 20. **Provider 密钥不可读时继续启动 SDK** — `provider` 仍存在不等于凭据可用；若让 `provider && !hasCredentials` 进入 Claude SDK，ambient Claude OAuth 会接管请求，把所有同 Provider 模型伪装成供应商故障。必须 session-aware 阻断并引导重新填写 Key
 
-## 9. 测试覆盖
+## 8. 测试覆盖
 
 | 测试文件 | 覆盖 |
 |---|---|
@@ -254,13 +240,13 @@ UI 展示在 Models 页 row 上的 source badge。删除按钮**仅**对 `source
 
 加新 provider 字段 / 新 preset 时至少跑 provider-preset.test.ts + provider-resolver.test.ts。
 
-## 10. 设计决策日志
+## 9. 设计决策日志
 
 - **2026-09-04** Windows 用户反馈经 macOS 隔离复现后，只修确定的冲突恢复 UI 缺口：原按钮只关闭弹窗，hidden 行仍被默认 enabled 筛选挡住。新增清筛选、滚动、聚焦与短暂高亮，双语文案说明角色映射与模型记录独立；用户真实旧行来源待确认，身份判定与数据迁移保护保持原合同。
 
 - **2026-04-25** 已连接服务默认页**不**展示未添加 — 解决"用户分不清自己连了哪些"。Add Service 单独入口
 - **2026-04-25** Add Service / 已连接服务建立对齐分组；**2026-07-21** 随独立 OAuth/Code Plan 信息架构更新为 **5 段分组**。
-- **2026-04-26** 拆 verified vs experimental tier — 见 `Runtime.md` §7
+- **2026-04-26** 拆 verified vs experimental tier — 见 `Runtime.md` §6
 - **2026-04-26** brand preset 必须排在 anthropic-thirdparty 之前 — 否则 wildcard 吞匹配
 - **2026-04-26** OAuth 已登录 entry 在 Add Service 仍显示（置灰 + "已登录"） — 用户能复习 OAuth 入口存在
 - **2026-04-26** 删 provider 不动 chat_sessions — 误删可恢复，session 自动接回

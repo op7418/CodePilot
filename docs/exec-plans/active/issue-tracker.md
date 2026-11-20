@@ -334,7 +334,7 @@ GitHub milestone `v0.56.x Stability / Trust`（#1）+ P0/P1 label 体系已建�
 - **下一步:** 合并后排查 runtime MCP 注入来源 vs 运行状态 UI 来源；若不修则降级文案，别让设置页假承诺"已启用"。
 
 #### B-024 Codex Runtime 终止后无法拉起新任务
-- **计划:** [codex-stop-recovery.md](codex-stop-recovery.md)
+- **计划:** `codex-stop-recovery.md`（已完成并删除，见 git 历史）
 - **状态:** 🔴 下版发布前阻断 / 需复现与修复（P1-P3 代码和单测已完成，但真实 Stop smoke 一直未完成；2026-08-25 新 Signal 使发布门禁重新打开）
 - **现象:** Codex Runtime 正在执行任务时点击 Stop / 终止后，同一会话后续无法发送新指令，像是进程或 session 挂死；用户需要新建会话、重启或等待未知时间才能继续。
 - **2026-08-25 新 Signal（用户原始路径）:** 在“Codex 渠道 → Codex 连接 → GPT-5.6”跑任务时点击一次“终止”，随后整个页面崩溃，刷新也不能恢复。用户紧接着重试未能复现，因此目前只有一次真实用户观察；App 版本、任务所处阶段、session id、`render-process-gone` / `child-process-gone` / utility exit 与错误栈尚未取得。**不得把单次未复现写成已修复，也不得在无日志时断言仍是旧 session lock 根因。**

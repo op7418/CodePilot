@@ -27,6 +27,7 @@
 - Trigger 显示当前 Runtime 图标 + 当前模型；Composer 中不得再渲染第二个独立 `RuntimeSelector`。
 - Provider 品牌图标统一由 `ProviderBrandIcon` + `getProviderIconKey()` 渲染；业务组件不得复制一套 name/URL 品牌猜测。
 - capability 菜单消费当前 group/model 已返回的能力字段，并用 `selectable / fixed / unsupported / unknown` 四态表达。`fixed`（例如默认 1M）只能只读展示；`unknown` 不得变成可点击开关。
+- capability 四态按 Runtime + protocol + model 粒度判定，不能只看 model id；`fixed` / `unknown` 不得生成请求 wire 字段。
 - provider option 是共享 requested preference，当前 composer 另有 session-effective capability 值。模型切换归一化只能更新 effective display/request；不得自动 PUT `context_1m` 等共享 option。只有用户显式操作能力菜单才允许持久化 requested 值。
 - Composer footer 的参数与权限菜单必须使用显式宽度和 viewport `max-width`；解释文案保持一行短句，动态不可用原因允许换行。不得让 i18n 文案决定弹层的 intrinsic width，也不得通过删掉真实权限/降级原因来换取紧凑布局。
 
@@ -198,21 +199,7 @@ if (!resolvedProviderId || !resolvedModel) return;
 
 不变量：welcome / heartbeat 这种 auto-trigger 也走 resolved pair，不能用 raw `currentModel/currentProviderId`。Auto-trigger 是 backend route 的入口之一，必须跟 user-typed send 同样的 gate。
 
-## 9. 关键文件 + 责任
-
-| 模块 | 文件 | 不变量 |
-|---|---|---|
-| Hook 主体 | `src/hooks/useProviderModels.ts` | 五字段契约 + AbortController + 三态 fetchState + undefined/'' 区分 |
-| Composer 顶层 | `src/components/chat/MessageInput.tsx` | 传 concrete Runtime；只渲染统一 Runtime+Model Picker；auto-correct fallback 用 modelOptions[0] 不用 globalDefault |
-| ChatView 顶层 | `src/components/chat/ChatView.tsx` line 142+ | 调 hook + 同步 useEffect + 三道 gate + sendMessage 头部 gate |
-| New Chat Page init | `src/app/chat/page.tsx` line 110+ + line 295+ | `?runtime=auto`；空集合不走 localStorage；sendFirstMessage 防御 |
-| Auto-trigger | `src/hooks/useAssistantTrigger.ts` | 接收 resolved pair；三道 gate；startStream 用 resolved pair |
-| Route picker / favorites | `src/components/chat/ModelSelectorDropdown.tsx`, `RuntimeSelector.tsx`, `src/lib/model-route-favorites.ts` | 左栏 Runtime、右栏可用 provider+model 复合 identity、失效收藏 fail closed |
-| Capability menu | `src/components/chat/ModelCapabilityDropdown.tsx`, `src/lib/model-option-support.ts` | Runtime+protocol+model 粒度四态；fixed/unknown 不产生假 wire |
-| Brand icon | `src/components/ui/provider-brand-icon.tsx`, `src/lib/provider-icon-rule.ts` | Settings 与 Composer 共用同一品牌规则 |
-| ChatView state init | `ChatView.tsx` line 130-138 | `providerId !== undefined ? providerId : localStorage` 不能用 truthy |
-
-## 10. 改 / 加新功能必须检查
+## 9. 改 / 加新功能必须检查
 
 - 新增 chat 入口（除 chat-route / bridge / new chat / chat[id] 外）：
   - 必须吃 resolved pair，不要用 raw saved provider/model
@@ -241,7 +228,7 @@ if (!resolvedProviderId || !resolvedModel) return;
   - 在 append user message 之前 gate
   - 或者让 doStartStream 返回 boolean，caller 据此决定是否 append
 
-## 11. 常见坑
+## 10. 常见坑
 
 1. **`providerId || localStorage.getItem(...)`** — env session 被 localStorage 抢
 2. **`if (providerId)` 同步 effect** — env session 的 prop '' 不被同步
@@ -260,7 +247,7 @@ if (!resolvedProviderId || !resolvedModel) return;
 15. **模型切换时把 effective 1M 回写 provider option** — 一次 session 的兼容性归一化污染同 provider 的其他会话
 16. **用长解释撑开 footer 菜单** — capability/permission 说明应为短句；完整安全告警留在确认弹窗，动态诊断原因在受限宽度内换行
 
-## 12. 测试覆盖
+## 11. 测试覆盖
 
 | 测试文件 | 覆盖 |
 |---|---|
@@ -278,7 +265,7 @@ if (!resolvedProviderId || !resolvedModel) return;
 
 加 / 改本文涉及任何契约时，至少跑 chat-runtime.test.ts + provider-resolver.test.ts；理想是把 useProviderModels 的 hook test 补上。
 
-## 13. 设计决策日志
+## 12. 设计决策日志
 
 - **2026-04-26** Resolved pair 抽成 hook 契约 — Codex review 指出"旧 provider 被过滤但仍发送"；统一让所有 chat 入口吃同一对
 - **2026-04-26** undefined vs '' 严格区分 — Codex review 指出 env 旧会话被 localStorage 抢

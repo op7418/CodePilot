@@ -24,7 +24,7 @@
 | WP5 | GitHub 模板与工作流的过时口径 | Gemini | 待开始 |
 | WP6 | 永久跳过的 E2E 用例 | Gemini | 待开始 |
 | WP7 | 设置页内联中英文迁到 i18n 字典 | Gemini | 待开始 |
-| WP8 | `docs/research/` 与 `docs/guardrails/` 按新标准分流 | Opus | 待开始 |
+| WP8 | `docs/research/` 与 `docs/guardrails/` 按新标准分流 | Opus | 完成（`v0.56.x-stability-trust` 留待所有者决定） |
 
 ## 本机环境注意
 
@@ -159,3 +159,10 @@
   - `@streamdown/math` 锁在 1.0.1。1.0.3 改成只支持 ESM，7 个测试文件加载失败，也不修漏洞。`package.json` 里仍是 `^1.0.1`，以后 `npm install` 可能把它带上去。
   - mermaid 的 high 要升到 12.x 才修，跨大版本，没动；katex 的 low 上游没有修复。剩下的 high 是 `electron`，留给 WP3。
   - 打包验证：本机 `electron-builder` 经 `@electron/get` 下载 Electron 和 dmg/zip 工具链时走不通本地代理，用 `-c.electronDist=node_modules/electron/dist` 跳过 Electron 下载。正式签名会卡在 Apple 时间戳服务，所以用 ad-hoc 签名（`CODEPILOT_ALLOW_ADHOC_SIGNING=1`）打出 arm64 `.app`：afterPack 原生模块替换和 afterSign 校验都通过，用隔离数据目录启动后能进主界面。dmg/zip 两个产物因为工具链下载失败没生成。universal 包（含新加的 sharp `x64ArchFiles`）只能靠 CI 验证。
+- 2026-11-20：WP8 完成。`docs/research/` 删 42 个文件：12 份服务商/模型适配记录的事实先并入 `external-facts.md`（顺带修正两条旧条目：千问 Coding Plan 与 Token Plan 不是同一个 host；智谱"高峰 3 倍"已被 08-14 的积分规则取代），其余是本项目的审计、诊断、复审和已执行的设计稿（含"脱离 Claude Code"七篇）。诊断文档里夹带的上游 SDK / CLI / Sentry 事实也一并提取。保留了竞品、上游调研和 POC 目录。与计划的出入：
+  - `AGENTS.md` 对 `docs/research/` 的描述包括"历史诊断记录"，与本计划"诊断删除"不一致；按计划删了，`AGENTS.md` 这句话没改，由所有者决定是否同步。
+  - `provider-model-discovery.md` 没删：tech-debt #16 规定每次核对套餐目录都要更新它，`ModelDiscovery.md` 和源码也引用它作决策表。它混有代码描述，要拆分需另起一项。
+  - `harness-home-v0.62-inventory`（两份进行中的 harness 计划依赖）和 `mobile-remote-control-overall-plan`（未执行的方案）保留。
+  - guardrails：19 份删掉"关键文件 + 责任"小节，其中 23 条别处没写的约束改写后迁入各自的不变量节；README 写作规范同步去掉这一节。唯一失效的文件引用是 `ProviderDoctorDialog.tsx`（已随表删除）。
+  - 三份旧计划：`codex-stop-recovery` 和 `mimo-ultraspeed-openai-compatible-provider` 代码已全部落地（后者唯一未勾的"模型来源标识"已由 `ModelsSection` 的 source badge 实现），删除，剩下的真实凭据 smoke 记为 tech-debt #101。`v0.56.x-stability-trust` 还有约 30 个未勾选项，无法确认全部做完，没删。
+  - 指向已删文档的源码注释和其他文档链接已改指 `external-facts.md` 或标注"已删除，见 git 历史"。

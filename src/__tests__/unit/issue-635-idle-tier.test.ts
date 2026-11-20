@@ -4,7 +4,7 @@
  * the "blind keepalive masks a real hang" risk (the SDK is silent while queueing
  * — its keep_alive is filtered before the app iterator, so there's no liveness
  * signal to fake; we just give a longer fuse before the first token and keep a
- * real upper bound). Design: docs/research/issue-635-stream-idle-liveness-design.md
+ * real upper bound).
  *
  * Codex P2: "first token" must map to the actual SSE event names — `text` /
  * `thinking` / `tool_use` count; `status`/init, `tool_result`/`tool_output` and

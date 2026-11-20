@@ -4,7 +4,7 @@
 
 ## 文件清单
 
-### 已成稳定契约（七节完整填充）
+### 已成稳定契约
 
 - [`Runtime.md`](./Runtime.md) — Provider / Model / Composer 的 runtime 过滤契约。改 `chat-runtime.ts` / `runtime-compat.ts` / `useProviderModels.ts` / `ChatView` 任意一个前必读
 - [`ProviderManagement.md`](./ProviderManagement.md) — Settings > Providers 信息架构、preset 匹配、provider_models 表关系、删除安全。改 `ProviderManager.tsx` / `ProviderCard.tsx` / `provider-presets.tsx` / `provider-catalog.ts` / `/api/providers/*` 前必读
@@ -34,11 +34,12 @@
 每份护栏文档至少包含：
 1. **词汇表** — 这块代码用的所有专有名词 + 来源
 2. **不变量 / 契约表** — 行为规则，越严格越好
-3. **关键文件 + 责任** — 哪个不变量由哪个文件守
-4. **改动检查表** — 加新功能时必须想到的点
-5. **常见坑** — 被踩过的 / review 指出过的反模式
-6. **测试覆盖** — 每条契约对应哪个 test，回归时跑哪个文件
-7. **设计决策日志** — 关键变更的日期 + 理由（为后人解释"为什么不那样做"）
+3. **改动检查表** — 加新功能时必须想到的点
+4. **常见坑** — 被踩过的 / review 指出过的反模式
+5. **测试覆盖** — 每条契约对应哪个 test，回归时跑哪个文件
+6. **设计决策日志** — 关键变更的日期 + 理由（为后人解释"为什么不那样做"）
+
+不写"哪个文件负责什么"的清单：文件职责代码里读得出来，而且会随重构过期。
 
 ## 跟其他 docs 的关系
 

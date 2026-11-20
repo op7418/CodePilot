@@ -31,7 +31,6 @@
  *
  * Related:
  * - docs/exec-plans/active/phase-6-context-visualization.md
- * - docs/research/phase-6-context-breakdown-data-audit.md
  */
 
 export type ContextBreakdownKind =

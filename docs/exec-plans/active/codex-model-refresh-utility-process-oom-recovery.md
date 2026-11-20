@@ -73,7 +73,7 @@ Server process exited with code 5
 6. **同一错误在上游 Codex 有公开同类反馈。** [openai/codex#34397](https://github.com/openai/codex/issues/34397) 记录了完全相同的 models-manager 行、周期性重复、任务挂起且不自愈；[openai/codex#15596](https://github.com/openai/codex/issues/15596) 记录了 macOS 更新后“先正常一段时间，再持续 timeout，重启/新会话不可靠恢复”。这些只作为症状旁证，不直接采信其根因推测。
 7. **当前 Electron Main 运行期不监督 server。** child `exit` handler 只记录退出码、把 `serverProcess` 置空；窗口仍指向死亡端口，native notification poll 继续请求旧端口并刷 `ECONNREFUSED`。
 8. **旧日志暴涨问题不是本次直接根因。** `codepilot-main.log` rotation、`serverErrors` ring、Codex tracing 降噪已经落地；本次四个 crash breadcrumb 中 `serverErrors` 只有 25–80 行、约 1.2–8.8KB。
-9. **仓库已有同类恢复债记录。** [stability-fluency-runtime-audit-2026-07-04.md](../../research/stability-fluency-runtime-audit-2026-07-04.md) §1.8 已指出 Next `utilityProcess` 运行期崩溃后无自愈会导致 connection refused / 白屏。
+9. **仓库已有同类恢复债记录。** `docs/research/stability-fluency-runtime-audit-2026-07-04.md`（已删除，见 git 历史） §1.8 已指出 Next `utilityProcess` 运行期崩溃后无自愈会导致 connection refused / 白屏。
 
 ### 当前高置信判断
 
@@ -449,7 +449,7 @@ CodePilot 公开 Issues 中没有第二份带 `Zone Allocation failed` / exit 5 
 | stdout partial-line buffer 无界 | ✅ `src/lib/codex/app-server-manager.ts:70,98-107`：`buffer += chunk` 无任何 cap；每次 `data` 事件 `indexOf('\n')` 会触发 V8 rope flatten，放大常数大。stderr 路径（`:115`）是逐 chunk split、无跨 chunk 累积，**cap 只需覆盖 stdout** |
 | Main 运行期不监督 server（已确认事实 7） | ✅ `electron/main.ts:1023-1028` exit handler 只记 code、置空引用；`serverPort` 不清空 → native delivery poll（`:543-612`，2s interval）永续打死端口；全文件无任何 restart/relaunch 逻辑 |
 | B-025 日志边界已落地（已确认事实 8） | ✅ `serverErrors = BoundedLineRing`（`electron/main.ts:150`） |
-| 审计 §1.8 已有同类记录（已确认事实 9） | ✅ `docs/research/stability-fluency-runtime-audit-2026-07-04.md:74` |
+| 审计 §1.8 已有同类记录（已确认事实 9） | ✅ `docs/research/stability-fluency-runtime-audit-2026-07-04.md`（已删除，见 git 历史） |
 
 需要修正/补充的事实陈述（偏差不推翻结论，但影响 Phase 1/3 设计）：
 

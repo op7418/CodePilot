@@ -24,8 +24,7 @@
  * Scope: codex_runtime ONLY. Claude Code / Native runtimes keep the full
  * union for Anthropic models — do NOT route their effort through here.
  *
- * Root-cause + POC: docs/research/packaged-preview-runtime-diagnosis-2026-05-31.md
- * Schema drift + 5.6 tiers: docs/research/foundation-experience-refresh-2026-07-17.md
+ * Per-version CLI effort behavior: docs/external-facts.md.
  */
 
 import { codexReleaseAtLeast } from './release-version';

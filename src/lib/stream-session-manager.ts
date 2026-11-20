@@ -124,8 +124,8 @@ const LISTENERS_KEY = '__streamSessionListeners__' as const;
 // during that wait — its keep_alive is filtered before the app iterator), so we
 // give a longer fuse; once the model has started emitting we tighten it (a stream
 // that opened then went silent is more likely truly stuck). NOT an unconditional
-// keepalive — a dead upstream still aborts after the PRE budget. See
-// docs/research/issue-635-stream-idle-liveness-design.md.
+// keepalive — a dead upstream still aborts after the PRE budget. SDK liveness
+// facts: docs/external-facts.md.
 const STREAM_IDLE_PRE_FIRST_TOKEN_MS = 600_000; // 10min — waiting for first model output
 const STREAM_IDLE_POST_FIRST_TOKEN_MS = 330_000; // 5.5min — mid-stream silence (unchanged)
 const GC_DELAY_MS = 5 * 60 * 1000; // 5 minutes

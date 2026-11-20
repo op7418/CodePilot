@@ -64,7 +64,7 @@
 
 **降低"清 id 会丢上下文"风险的事实：**
 
-- `docs/research/session-management-and-context-compaction.md:68`：CodePilot 已有完整 DB-based fallback（`buildFallbackContext`），SDK resume 只是优化非必需。清掉坏 `sdk_session_id` 后下一轮用 DB 历史（最近 200 条）重建——**大部分上下文仍在**，损失的是 SDK 端增量/压缩态。这降低（但未消除）误清 transient 的代价，故仍需判别、不可无脑清。
+- `docs/research/session-management-and-context-compaction.md`（已删除，见 git 历史）：CodePilot 已有完整 DB-based fallback（`buildFallbackContext`），SDK resume 只是优化非必需。清掉坏 `sdk_session_id` 后下一轮用 DB 历史（最近 200 条）重建——**大部分上下文仍在**，损失的是 SDK 端增量/压缩态。这降低（但未消除）误清 transient 的代价，故仍需判别、不可无脑清。
 
 ## C. 推断与设计（待 POC-B 验证后落地）
 

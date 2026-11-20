@@ -1,7 +1,7 @@
 # 竞品聊天滚动 / 流式性能做法对照(OpenCode / Codex / CraftAgent,2026-07-04)
 
 > 类型:竞品源码调研。为 CodePilot 虚拟滚动与流式性能改造提供参考。
-> 关联:本调研直接支撑 [stability-fluency-runtime-audit-2026-07-04.md](./stability-fluency-runtime-audit-2026-07-04.md) 的 §4.2(虚拟滚动)与 §4.3(初始滚动动画)。
+> 关联:本调研直接支撑 `docs/research/stability-fluency-runtime-audit-2026-07-04.md`（已删除，见 git 历史） 的 §4.2(虚拟滚动)与 §4.3(初始滚动动画)。
 > 方法:把三个项目**拉到最新版**(旧本地副本已过时 2.5–3 个月)后只读精读聊天滚动/流式相关源码。所有结论附 `文件:行号`。
 
 ## 拉取的版本(均为最新)
