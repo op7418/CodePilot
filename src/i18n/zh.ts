@@ -2588,6 +2588,11 @@ const zh: Record<TranslationKey, string> = {
   'announcement.oauthAfter': '，ChatGPT Plus/Pro 用户可在服务商设置中登录后直接使用 GPT-5.5 等模型。',
   'announcement.goToSettings': '前往设置',
   'announcement.gotIt': '知道了',
+
+  // Run Cockpit Popover Content
+  'runStatus.issueNoProviders': '尚未配置任何服务商',
+  'runStatus.issueNoModels': '未启用任何模型',
+  'runStatus.issueNoCompatibleProvider': '当前执行引擎下没有可用的服务商',
 };
 
 export default zh;

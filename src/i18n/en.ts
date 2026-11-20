@@ -2617,6 +2617,11 @@ const en = {
   'announcement.oauthAfter': ' — ChatGPT Plus/Pro users can sign in under Providers to use GPT-5.5 and more.',
   'announcement.goToSettings': 'Go to Settings',
   'announcement.gotIt': 'Got it',
+
+  // Run Cockpit Popover Content
+  'runStatus.issueNoProviders': 'No providers configured',
+  'runStatus.issueNoModels': 'No models enabled',
+  'runStatus.issueNoCompatibleProvider': 'No compatible provider under the current Runtime',
 } as const;
 
 export type TranslationKey = keyof typeof en;

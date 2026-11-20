@@ -94,7 +94,6 @@ export function RunCockpitPopoverContent({
 }: RunCockpitPopoverContentProps) {
   void upstreamModelId;
   const { t } = useTranslation();
-  const isZh = t("nav.chats") === "对话";
   const state = useOverviewData();
   const { status: claudeStatus } = useClaudeStatus();
   // Settings is route-level split — cross-section CTAs router.push the
@@ -169,23 +168,21 @@ export function RunCockpitPopoverContent({
   const issues: RunStatusIssue[] = [];
   if (state.providersConfigured === 0) {
     issues.push({
-      message: isZh ? "尚未配置任何服务商" : "No providers configured",
+      message: t("runStatus.issueNoProviders"),
       actionLabel: t("runStatus.fixIssue" as TranslationKey),
       onAction: () => navToSection("providers"),
     });
   }
   if (state.modelsEnabled === 0 && state.providersConfigured > 0) {
     issues.push({
-      message: isZh ? "未启用任何模型" : "No models enabled",
+      message: t("runStatus.issueNoModels"),
       actionLabel: t("runStatus.fixIssue" as TranslationKey),
       onAction: () => navToSection("models"),
     });
   }
   if (state.noCompatibleProvider) {
     issues.push({
-      message: isZh
-        ? "当前执行引擎下没有可用的服务商"
-        : "No compatible provider under the current Runtime",
+      message: t("runStatus.issueNoCompatibleProvider"),
       actionLabel: t("runStatus.fixIssue" as TranslationKey),
       onAction: () => navToSection("runtime"),
     });
