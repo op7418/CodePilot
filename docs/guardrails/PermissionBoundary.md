@@ -2,7 +2,6 @@
 
 > **Status: Active** — 2026-07-20 因 Claude/Codex auto reviewer 接线与旧版本降级完成首次真实填充。
 > **为什么先读**：`mutationLevel` + `PERMISSION_SAFE_TOOLS` 是 Phase 5e 修掉的安全洞（`codepilot_*` 权限前缀曾被默认放行）。改一处必须考虑**全部 Runtime**（claude_code / native / codex_proxy）的暴露一致性，否则会绕过权限框。
-> **已知关键文件**：`src/lib/permission/*`、`src/lib/agent-sdk-capabilities.ts`（mutationLevel 派生）、`harness-capability-contract.test.ts`（契约测试）。
 
 ## 词汇表
 

@@ -34,21 +34,21 @@
 
 ### 3.1 模型选择不是单纯按 provider kind 分组
 
-- [`ProviderModelPicker.tsx`](../../资料/t3code/apps/web/src/components/chat/ProviderModelPicker.tsx) 的 trigger 同时显示当前 provider instance 图标与模型。
-- [`ModelPickerSidebar.tsx`](../../资料/t3code/apps/web/src/components/chat/ModelPickerSidebar.tsx) 左侧 rail 的单位是 provider **instance**，另有 favorites 入口。不可用 instance 仍会 disabled；现有 thread 锁定 provider 时，其他 provider 也可能显示“新开 thread 才能切换”。因此“整合后完全不再有置灰”并不成立，正确目标是把不可用原因放在渠道层，而不是让每个模型行重复置灰。
-- [`ModelPickerContent.tsx`](../../资料/t3code/apps/web/src/components/chat/ModelPickerContent.tsx) 跨 provider 搜索、favorites、legacy 折叠与虚拟列表都在同一选择器内。
-- [`modelOrdering.ts`](../../资料/t3code/apps/web/src/modelOrdering.ts) 通过 `providerModelKey(instanceId, slug)` 建组合键。收藏设置也以 `{ provider: ProviderInstanceId, model }` 持久化，避免同名模型跨渠道串线。
+- `apps/web/src/components/chat/ProviderModelPicker.tsx` 的 trigger 同时显示当前 provider instance 图标与模型。
+- `apps/web/src/components/chat/ModelPickerSidebar.tsx` 左侧 rail 的单位是 provider **instance**，另有 favorites 入口。不可用 instance 仍会 disabled；现有 thread 锁定 provider 时，其他 provider 也可能显示“新开 thread 才能切换”。因此“整合后完全不再有置灰”并不成立，正确目标是把不可用原因放在渠道层，而不是让每个模型行重复置灰。
+- `apps/web/src/components/chat/ModelPickerContent.tsx` 跨 provider 搜索、favorites、legacy 折叠与虚拟列表都在同一选择器内。
+- `apps/web/src/modelOrdering.ts` 通过 `providerModelKey(instanceId, slug)` 建组合键。收藏设置也以 `{ provider: ProviderInstanceId, model }` 持久化，避免同名模型跨渠道串线。
 
 ### 3.2 参数菜单来自能力描述，不是写死的三段菜单
 
-- [`TraitsPicker.tsx`](../../资料/t3code/apps/web/src/components/chat/TraitsPicker.tsx) 调用 [`getProviderOptionDescriptors`](../../资料/t3code/packages/shared/src/model.ts)，把 reasoning、context window、fast mode 等 descriptor 渲染到同一菜单。
+- `apps/web/src/components/chat/TraitsPicker.tsx` 调用 `packages/shared/src/model.ts`，把 reasoning、context window、fast mode 等 descriptor 渲染到同一菜单。
 - trigger 只汇总当前模型实际可选的 descriptor；不支持的能力不出现。
 - 这套模式值得借鉴的核心是“descriptor contract”，不是 `High · 1M` 这一条具体文案。
 
 ### 3.3 右侧 surface 有持久化，但未发现项目级 pin
 
-- [`RightPanelTabs.tsx`](../../资料/t3code/apps/web/src/components/RightPanelTabs.tsx) 在空态提供 Browser、Terminal、Files、Diff、Agents 卡片。
-- [`rightPanelStore.ts`](../../资料/t3code/apps/web/src/rightPanelStore.ts) 管理多个 browser/terminal/file surface，并按 thread key 持久化。
+- `apps/web/src/components/RightPanelTabs.tsx` 在空态提供 Browser、Terminal、Files、Diff、Agents 卡片。
+- `apps/web/src/rightPanelStore.ts` 管理多个 browser/terminal/file surface，并按 thread key 持久化。
 - 在右侧 panel store、tab 和 layout control 中未发现 `pin` / `pinned` 的项目偏好实现。项目级 pin 是用户提出的 CodePilot 产品扩展，不应归因于 T3 已有能力。
 - T3 并非所有状态都按 thread：surface 列表按 thread，浏览历史按 project，站点数据按 environment partition，panel 宽度是全局状态。CodePilot 应按状态语义拆 scope，而不是复制单一持久化层级。
 
@@ -56,12 +56,12 @@
 
 T3 不是 iframe，也不是另起一个 Playwright Chromium：
 
-- Web 层 [`ElectronBrowserHost.tsx`](../../资料/t3code/apps/web/src/browser/ElectronBrowserHost.tsx) 为每个浏览器 tab 托管一个 [`HostedBrowserWebview.tsx`](../../资料/t3code/apps/web/src/browser/HostedBrowserWebview.tsx)，后者渲染 Electron `<webview>`。
+- Web 层 `apps/web/src/browser/ElectronBrowserHost.tsx` 为每个浏览器 tab 托管一个 `apps/web/src/browser/HostedBrowserWebview.tsx`，后者渲染 Electron `<webview>`。
 - `BrowserSurfaceSlot` 只负责测量 React 面板矩形，host 再用 fixed position 把 guest webview 覆盖到对应区域，从而绕过 webview 不能自然嵌进普通 DOM stacking 的问题。
-- [`DesktopWindow.ts`](../../资料/t3code/apps/desktop/src/window/DesktopWindow.ts) 开启 `webviewTag`，并通过 `will-attach-webview` 强制 guest partition / preload / webPreferences。
-- [`BrowserSession.ts`](../../资料/t3code/apps/desktop/src/preview/BrowserSession.ts) 以 scope 哈希生成 `persist:t3code-preview-*` partition，处理缓存、站点数据、User-Agent 与权限策略。
-- [`Manager.ts`](../../资料/t3code/apps/desktop/src/preview/Manager.ts) 在主进程注册 guest `webContents`，统一负责导航、favicon、诊断和 CDP。
-- [`PlaywrightInjectedRuntime.ts`](../../资料/t3code/apps/desktop/src/preview/PlaywrightInjectedRuntime.ts) 从 `playwright-core` 提取 selector runtime 后注入页面；Agent 可使用 role/text 等 locator，但没有启动第二个浏览器进程。
+- `apps/desktop/src/window/DesktopWindow.ts` 开启 `webviewTag`，并通过 `will-attach-webview` 强制 guest partition / preload / webPreferences。
+- `apps/desktop/src/preview/BrowserSession.ts` 以 scope 哈希生成 `persist:t3code-preview-*` partition，处理缓存、站点数据、User-Agent 与权限策略。
+- `apps/desktop/src/preview/Manager.ts` 在主进程注册 guest `webContents`，统一负责导航、favicon、诊断和 CDP。
+- `apps/desktop/src/preview/PlaywrightInjectedRuntime.ts` 从 `playwright-core` 提取 selector runtime 后注入页面；Agent 可使用 role/text 等 locator，但没有启动第二个浏览器进程。
 - T3 还包含 native guest 常见的补偿机制：guest 非激活时移到 `-100000` 离屏、把关键快捷键回传主窗口、重新附着时恢复独立 zoom，并对 crash 做退避恢复。CodePilot 的 `WebContentsView` POC 需要自行验证同类问题。
 
 风险也必须一起看：T3 为页面内 React hook / 元素选择器让 guest `contextIsolation` 关闭，依赖 sandbox 阻断 Node 泄露。这是针对其预览/标注功能做的特殊取舍，不适合在 CodePilot 的“完整浏览器”里无条件照搬。

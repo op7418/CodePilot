@@ -1,7 +1,7 @@
 # Craft Agents 内部 Markdown 实现调研
 
 > 调研日期：2026-04-16
-> 对标仓库：`/Users/op7418/Documents/code/资料/craft-agents-oss-main`（craft-agents-oss）
+> 对标项目：craft-agents-oss（本地快照已不保留；文中路径相对上游仓库根目录）
 > 姊妹文档：
 > - [markdown-editor-tiptap-evaluation.md](./markdown-editor-tiptap-evaluation.md) — CodePilot 自己的 Markdown 栈与 Tiptap 可行性
 > - [artifact-preview-ai-elements.md](./artifact-preview-ai-elements.md) — Artifact 预览（本文发现的"代码块 language 拦截"是另一条轻量路径）

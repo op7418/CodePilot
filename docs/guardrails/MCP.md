@@ -2,7 +2,6 @@
 
 > **Status: Stub** — 七节模板占位。首次真实改动触发时由实施 Agent 按 [`README.md`](./README.md) 的七节模板填充。
 > **为什么先读**：MCP server 加载 / provider resolution / 持久化跨多个 API 路由；`/api/plugins/mcp/status?sessionId=xxx` 自动从 session.provider_id 解析，前端不需要显式传 providerId（memory 已固化的关键模式）。
-> **已知关键文件**：`src/app/api/plugins/mcp/*`、MCP server 加载相关 lib、`src/lib/db.ts` MCP 配置表。
 
 ## 词汇表
 

@@ -75,9 +75,6 @@ apps/site/node_modules/
 /skills/
 skills-lock.json
 
-# Codex Runtime reference material — clone locally per Phase 5 plan
-# (git clone --depth 1 https://github.com/openai/codex.git 资料/codex)
-资料/codex/
-
-# T3 Code reference checkout used by the CLI maintenance research plan.
-资料/t3code/
+# Local checkouts of reference projects (e.g. openai/codex for protocol schemas).
+# Never tracked; code comments citing `资料/codex/...` mean paths in that upstream repo.
+资料/

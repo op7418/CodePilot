@@ -22,7 +22,7 @@
  * before dispatching to tool.execute.
  *
  * Reference: docs/research/hermes-agent-analysis.md §1.3, §3.1
- * Upstream:  /Users/op7418/Documents/code/资料/hermes-agent-main/run_agent.py:213-336
+ * Upstream:  Hermes Agent run_agent.py:213-336
  */
 
 import path from 'path';

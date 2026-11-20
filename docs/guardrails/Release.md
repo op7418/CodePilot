@@ -2,7 +2,6 @@
 
 > **Status: Active contract** — 已覆盖版本 source of truth、tag/资产不可变、stable 三平台分发、macOS signed updater、Windows unsigned updater、真实 ABI/server-health、attestation 与失败后的补丁版本策略。
 > **为什么先读**：发版有严格顺序（RELEASE_NOTES → package.json version → npm install → 提交推送 → tag → CI 自动构建发布）；**不能删 tag**——一旦 tag 被删再重建，已发布的 Release 会变 Draft（`feedback_never_delete_release_tags.md`）。CI 会自动建 Release 并上传产物，不要手动建。
-> **已知关键文件**：`RELEASE_NOTES.md`、`package.json`（version 字段）、`package-lock.json`、`.github/workflows/*`（CI 发版流程）。
 
 ## 词汇表
 

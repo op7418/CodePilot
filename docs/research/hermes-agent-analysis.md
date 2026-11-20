@@ -10,7 +10,7 @@
 ## 来源钉定
 
 **Hermes 本地快照**
-- 路径：`/Users/op7418/Documents/code/资料/hermes-agent-main`
+- 项目：Hermes Agent（本地快照已不保留；下文路径均相对上游仓库根目录）
 - 快照时点：2026-04-09（对应仓内 `RELEASE_v0.8.0.md` 发布窗口）
 - 非 git 仓库（ZIP 解压），无 commit SHA；只能按路径 + 行号引用
 - Hermes 上游真正的 tag 是日期制（`v2026.4.8` 等），**不存在 `v0.8.0` tag**，只有 `RELEASE_v0.8.0.md` 这个文件名

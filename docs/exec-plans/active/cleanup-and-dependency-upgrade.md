@@ -20,7 +20,7 @@
 | WP1 | 三处实际缺陷：上传路由路径检查、MCP 连接管理、定时任务并发 | Opus | 完成 |
 | WP2 | 依赖：lock 同步、漏洞修复、删无用依赖 | Opus | 完成（mac universal 包未在本机验证） |
 | WP3 | Node 与 Electron 大版本升级 | Opus | 待开始 |
-| WP4 | 第二轮死代码：路由、IPC、模块、`资料/` | Gemini | 完成（`资料/` 按用户决定暂不取消跟踪） |
+| WP4 | 第二轮死代码：路由、IPC、模块、`资料/` | Gemini | 完成（`资料/` 后续已按用户决定整体删除） |
 | WP5 | GitHub 模板与工作流的过时口径 | Gemini | 完成 |
 | WP6 | 永久跳过的 E2E 用例 | Gemini | 完成（`visual-regression.spec.ts` 因基线截图未入库保持 skip） |
 | WP7 | 设置页内联中英文迁到 i18n 字典 | Gemini | 完成 |
@@ -191,3 +191,4 @@
   - 5 个组件（`ModelsSection`、`RuntimePanel`、`OverviewHeatmap`、`PresetConnectDialog`、`TasksSection`）存在既有 React 19 ESLint 规则报错（`react-hooks/set-state-in-effect` / `react-hooks/preserve-manual-memoization`），为通过 pre-commit 按仓库既有惯例（同 `useOverviewData.ts` / `McpServerDetailDialog.tsx`）添加了定向 `eslint-disable-next-line` / `eslint-disable` 注释，未改业务逻辑。
   - 同步更新了 5 个直接正则断言组件源码中英文字面量的源码钉单测（`codex-phase-6-wiring.test.ts`、`codex-binary-discovery.test.ts`、`codex-windows-recovery.test.ts`、`pin-incomplete-ui.test.ts`、`xai-oauth-ui.test.ts`），改为同时断言组件内的 i18n 键引用与 `src/i18n/{en,zh}.ts` 中的精确原文。
   - 发现但按“文案一字不改”原则未改动：`HealthSection.tsx` 原英文/中文均为 `"执行引擎 / CLI"`（已原样迁入 `health.runtime.title`）；`UsageStatsSection.tsx` 仍有一处未涉及内联文案的 `t('nav.chats') === '对话'`（仅传给 `<OverviewHeatmap isZh={isZh} />`）。
+- 2026-11-20：WP4–WP7 审查通过（全量单测 5686 通过；i18n 删除的 478 个键与新增的 499 个键经脚本核对无遗漏、文案未变）。随后按用户决定删除整个 `资料/` 目录并改为整体忽略；research 文档里指向本地参考项目源码的链接改为上游相对路径的纯文本；删掉 guardrails 文件头的“已知关键文件”引用块。源码注释里的 `资料/codex/...` 保留，表示上游 openai/codex 仓库内的路径。

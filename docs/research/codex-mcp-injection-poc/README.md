@@ -16,7 +16,7 @@
 | 对象 | 版本 / 日期 | 来源 |
 |------|------------|------|
 | **live Codex 二进制** | `codex-cli 0.133.0-alpha.1`（app-server 上报 cliVersion `0.133.0`） | `/Applications/Codex.app/Contents/Resources/codex`（用户机器现有，未下载新二进制） |
-| vendored Codex 源码 | 文件日期 2026-05-13；version 占位 `0.0.0-dev` | `资料/codex/` |
+| vendored Codex 源码 | 文件日期 2026-05-13；version 占位 `0.0.0-dev` | openai/codex 本地克隆（不入库） |
 | `@modelcontextprotocol/sdk` | 1.29.0 | `package.json` |
 | node | v22.22.0（`/opt/homebrew/Cellar/node@22/...`） | 运行环境 |
 

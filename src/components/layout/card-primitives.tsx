@@ -175,7 +175,7 @@ interface ResizeGutterProps {
  * Hover paints a cursor-following gradient (the cursor row is the
  * brightest, fading to transparent toward the top/bottom of the card).
  * Mirrors Craft Agent's `useResizeGradient` (see
- * `资料/craft-agents-oss-main/apps/electron/src/renderer/hooks/useResizeGradient.ts`).
+ * craft-agents-oss `apps/electron/src/renderer/hooks/useResizeGradient.ts`).
  */
 export const RESIZE_GUTTER_WIDTH_PX = 8;
 

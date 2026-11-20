@@ -43,7 +43,7 @@ T3 Code 最值得 CodePilot 借鉴的不是 UI，也不是把 Next.js / better-s
 
 ## 2. 拉取结果与分析边界
 
-T3 Code 已完整克隆到仓库根目录的 `资料/t3code`，保留 Git 历史：
+分析时使用的是 T3 Code 的完整本地克隆（现已不保留在本仓库；下文路径均相对上游仓库根目录）：
 
 | 项目 | 结果 |
 |---|---|
@@ -67,8 +67,6 @@ T3 Code 已完整克隆到仓库根目录的 `资料/t3code`，保留 Git 历史
 | `packages/shared` | 99 | 16,433 | 43 |
 
 这说明它不是一个适合按页面快速扫一遍的小项目。本文优先审阅了 server / contracts / client-runtime 的状态所有权，以及与 CodePilot 当前高风险面直接相关的 checkpoint、terminal、remote/auth、provider、timeline、preview、VCS、Sub-agent 和 telemetry。
-
-注意：`资料/t3code` 是嵌套 Git 仓库，目前在 CodePilot 中只是未跟踪的本地参考资料。不要直接执行 `git add 资料/t3code`，否则容易把它作为嵌套仓库 / gitlink 误提交；它也不应进入 Electron 打包资源。
 
 ### 反幻觉复核结果
 
@@ -105,11 +103,11 @@ T3 Code 已完整克隆到仓库根目录的 `资料/t3code`，保留 Git 历史
 
 ### T3 Code 做对了什么
 
-T3 的 [`CheckpointStore`](../../资料/t3code/apps/server/src/checkpointing/CheckpointStore.ts) 把检查点作为 VCS driver 的可选能力；Git 实现在 [`GitVcsDriver.ts`](../../资料/t3code/apps/server/src/vcs/GitVcsDriver.ts)：
+T3 的 `apps/server/src/checkpointing/CheckpointStore.ts` 把检查点作为 VCS driver 的可选能力；Git 实现在 `apps/server/src/vcs/GitVcsDriver.ts`：
 
-- 每轮使用 `refs/t3/checkpoints/<thread>/turn/<count>` 隐藏 ref；ref 规则在 [`checkpointing/Utils.ts`](../../资料/t3code/apps/server/src/checkpointing/Utils.ts)。
+- 每轮使用 `refs/t3/checkpoints/<thread>/turn/<count>` 隐藏 ref；ref 规则在 `apps/server/src/checkpointing/Utils.ts`。
 - 捕获时创建临时 `GIT_INDEX_FILE`，执行 `read-tree`、`git add -A`、`write-tree`、`commit-tree`、`update-ref`，不会改动用户当前 index。
-- [`CheckpointDiffQuery`](../../资料/t3code/apps/server/src/checkpointing/CheckpointDiffQuery.ts) 可计算任意两轮之间和整个线程的 patch。
+- `apps/server/src/checkpointing/CheckpointDiffQuery.ts` 可计算任意两轮之间和整个线程的 patch。
 - checkpoint metadata、workspace restore、Provider conversation rollback 分层，由 reactor 协调，而不是把“删消息”当成回退完成。
 
 这个方案的关键价值不是“Git 技巧”，而是让一轮 Agent 工作拥有可验证的输入 / 输出边界：轮次开始前是什么状态、轮次结束后改了什么、回退要恢复到哪里，都有独立事实源。
@@ -165,12 +163,12 @@ CodePilot 必须增加：
 
 ### T3 Code 的参考价值
 
-T3 的 [`terminal` contracts](../../资料/t3code/packages/contracts/src/terminal.ts) 把终端当成线程资源，而非 React 组件附属品：
+T3 的 `packages/contracts/src/terminal.ts` 把终端当成线程资源，而非 React 组件附属品：
 
 - snapshot 包含 terminal id、状态、PID、label、history 和 sequence；
 - 事件覆盖 started/output/exited/closed/error/cleared/restarted/activity；
 - attach 先给 snapshot，再接 live events，客户端重连不会丢掉窗口期间输出；
-- [`terminal/Manager.ts`](../../资料/t3code/apps/server/src/terminal/Manager.ts) 有历史上限、持久化 coalescing、真实 resize、多 terminal、进程事件串行化与闲置回收；
+- `apps/server/src/terminal/Manager.ts` 有历史上限、持久化 coalescing、真实 resize、多 terminal、进程事件串行化与闲置回收；
 - 终端进程还能登记到 port discovery，使“这个 dev server 来自哪个线程 / 终端”成为可展示事实。
 
 ### CodePilot 当前事实：没有产品终端
@@ -216,7 +214,7 @@ T3 的 [`terminal` contracts](../../资料/t3code/packages/contracts/src/termina
 
 ### T3 Code 的模式
 
-[`OrchestrationEngine`](../../资料/t3code/apps/server/src/orchestration/Layers/OrchestrationEngine.ts) 的核心路径是：
+`apps/server/src/orchestration/Layers/OrchestrationEngine.ts` 的核心路径是：
 
 1. command 携带稳定 `commandId` 和 aggregate identity；
 2. 先查 command receipt；同 id + 同 aggregate 返回原结果，同 id + 不同 aggregate 报冲突；
@@ -245,7 +243,7 @@ T3 的 [`terminal` contracts](../../资料/t3code/packages/contracts/src/termina
 
 ### 最适合直接采用的测试思想
 
-T3 的 [`DrainableWorker`](../../资料/t3code/packages/shared/src/DrainableWorker.ts) 用 `drain()` 代替测试里的固定 sleep；[`KeyedCoalescingWorker`](../../资料/t3code/packages/shared/src/KeyedCoalescingWorker.ts) 保留每个 key 的最新值并支持 `drainKey()`。它们依赖 Effect，CodePilot 不宜逐文件复制，但应在 Promise/queue 体系中实现同等原语，用于：
+T3 的 `packages/shared/src/DrainableWorker.ts` 用 `drain()` 代替测试里的固定 sleep；`packages/shared/src/KeyedCoalescingWorker.ts` 保留每个 key 的最新值并支持 `drainKey()`。它们依赖 Effect，CodePilot 不宜逐文件复制，但应在 Promise/queue 体系中实现同等原语，用于：
 
 - stream checkpoint 写入；
 - 未来若建设终端：terminal history 持久化；
@@ -259,16 +257,16 @@ T3 的 [`DrainableWorker`](../../资料/t3code/packages/shared/src/DrainableWork
 
 ### T3 Code 的抽象
 
-[`ProviderAdapter`](../../资料/t3code/apps/server/src/provider/Services/ProviderAdapter.ts) 不只定义输出流，还定义：start session、send turn、interrupt、respond approval、respond structured input、stop/list/has session、read thread、rollback thread、stop all 和 canonical events。
+`apps/server/src/provider/Services/ProviderAdapter.ts` 不只定义输出流，还定义：start session、send turn、interrupt、respond approval、respond structured input、stop/list/has session、read thread、rollback thread、stop all 和 canonical events。
 
-[`ProviderDriver`](../../资料/t3code/apps/server/src/provider/ProviderDriver.ts) 进一步区分：
+`apps/server/src/provider/ProviderDriver.ts` 进一步区分：
 
 - Driver：静态类型、config schema、默认配置和实例工厂；
 - Provider instance：一份具体配置和独立资源作用域；
 - Adapter：该实例的会话协议；
 - Snapshot/text generation：该实例的可用性、模型、skills、命令等能力。
 
-同一个 driver 可以有多个 instance，实例之间不能共享可变 session/process state。当前内置 Codex、Claude、Cursor、Grok 和 OpenCode，见 [`builtInDrivers.ts`](../../资料/t3code/apps/server/src/provider/builtInDrivers.ts)。
+同一个 driver 可以有多个 instance，实例之间不能共享可变 session/process state。当前内置 Codex、Claude、Cursor、Grok 和 OpenCode，见 `apps/server/src/provider/builtInDrivers.ts`。
 
 ### CodePilot 当前基础与缺口
 
@@ -327,7 +325,7 @@ Bridge 应成为 `ControllerAdapter` / channel surface：它消费 Remote Core �
 
 ### 认证必须先于监听地址变化
 
-T3 的 `environment-auth.md` 和 [`RpcAuthorization.ts`](../../资料/t3code/apps/server/src/auth/RpcAuthorization.ts) 有四个值得直接采用的原则：
+T3 的 `environment-auth.md` 和 `apps/server/src/auth/RpcAuthorization.ts` 有四个值得直接采用的原则：
 
 - 每个 RPC method 都必须在一个穷尽 scope map 中登记；漏登记是类型错误或 fail closed；
 - pairing credential 一次性，设备 session 可撤销；
@@ -342,10 +340,10 @@ CodePilot 的 `WorkspaceSidebar → TabPanel → PreviewPanel` 挂载链成立�
 
 T3 值得借的是另一类产品面：
 
-- [`PortScanner`](../../资料/t3code/apps/server/src/preview/PortScanner.ts) 按需发现监听端口，并通过有界 HTTP(S) probe 确认它真的是可访问 HTML，而不是把任意端口显示成 web app；
-- [`preview contracts`](../../资料/t3code/packages/contracts/src/preview.ts) 用 `(threadId, tabId)` 管理多 tab、server epoch 和单调 revision，防止 list 与 event 乱序覆盖；
-- [`previewAutomation`](../../资料/t3code/packages/contracts/src/previewAutomation.ts) 提供 open/navigate/snapshot/click/type/press/scroll/evaluate/wait/record/resize/color scheme；
-- [`PreviewAutomationBroker`](../../资料/t3code/apps/server/src/mcp/PreviewAutomationBroker.ts) 将 Agent session 固定到一个可用 desktop host/tab，连接替换或断开时清理 pending request，而不是每次任意挑一个浏览器；
+- `apps/server/src/preview/PortScanner.ts` 按需发现监听端口，并通过有界 HTTP(S) probe 确认它真的是可访问 HTML，而不是把任意端口显示成 web app；
+- `packages/contracts/src/preview.ts` 用 `(threadId, tabId)` 管理多 tab、server epoch 和单调 revision，防止 list 与 event 乱序覆盖；
+- `packages/contracts/src/previewAutomation.ts` 提供 open/navigate/snapshot/click/type/press/scroll/evaluate/wait/record/resize/color scheme；
+- `apps/server/src/mcp/PreviewAutomationBroker.ts` 将 Agent session 固定到一个可用 desktop host/tab，连接替换或断开时清理 pending request，而不是每次任意挑一个浏览器；
 - environment-relative port 让远程 Host 的 `localhost:5173` 能被当前客户端正确映射，而不是误指向手机自己的 localhost。
 
 建议在 Workspace Sidebar 中保留两类清晰 surface：
@@ -359,7 +357,7 @@ Agent 自动化第一阶段只需 status/open/navigate/snapshot/click/type/wait�
 
 ## 10. P1：消息流性能只做结构共享和写入合并
 
-T3 的 [`MessagesTimeline.tsx`](../../资料/t3code/apps/web/src/components/chat/MessagesTimeline.tsx) 使用 LegendList，但真正值得参考的是：
+T3 的 `apps/web/src/components/chat/MessagesTimeline.tsx` 使用 LegendList，但真正值得参考的是：
 
 - derived rows 经 `useStableRows` 做 id-based structural sharing；
 - 未变化 row 保持对象引用，流式新增一条 work event 不让整个列表 row props 全变；
@@ -378,7 +376,7 @@ CodePilot 的 [`MessageList.tsx`](../../src/components/chat/MessageList.tsx) 源
 
 ## 11. P1/P2：VCS driver、工作树隔离和任务结果面
 
-T3 的 [`VcsDriver`](../../资料/t3code/apps/server/src/vcs/VcsDriver.ts) 把 repository detection、workspace files、remotes、ignore filtering、init、diff preview 和 checkpoint 能力收进 SPI，并用 [`VcsDriverContractHarness`](../../资料/t3code/apps/server/src/vcs/testing/VcsDriverContractHarness.ts) 对所有 driver 跑同一套契约。
+T3 的 `apps/server/src/vcs/VcsDriver.ts` 把 repository detection、workspace files、remotes、ignore filtering、init、diff preview 和 checkpoint 能力收进 SPI，并用 `apps/server/src/vcs/testing/VcsDriverContractHarness.ts` 对所有 driver 跑同一套契约。
 
 CodePilot 的 Workspace Sidebar 已挂载 Git Tab，源码中存在 status/branch/checkout/log/commit/push/worktree derive 的 UI/API/service 链；本轮未手动执行这些写操作，因此证据止于 E1/E2，不宣称所有 Git 路径生产可用。架构上仍不需要为 T3 重新做第二个 Git 面板，更值得调整的是：
 
@@ -390,7 +388,7 @@ CodePilot 的 Workspace Sidebar 已挂载 Git Tab，源码中存在 status/branc
 
 ## 12. Sub-agent：CodePilot 源码合同较丰富，但不能宣称领先
 
-T3 的 Sub-agent 源码包含一组值得参考的合同：[`subagentRuntime.ts`](../../资料/t3code/packages/client-runtime/src/state/subagentRuntime.ts) 从持久 task/tool activity 容错折叠 roster，区分 reusable agent identity 和 activation，处理迟到/乱序 start/complete、idle 非 terminal、provider-specific usage、nested agent attribution 和最近活动 ring；[`ThreadBackgroundLiveness`](../../资料/t3code/apps/server/src/orchestration/ThreadBackgroundLiveness.ts) 则区分后台 monitor/shell 与真实 Sub-agent 对主回合存活状态的影响。本轮没有运行 T3，不能据此评价其产品成熟度。
+T3 的 Sub-agent 源码包含一组值得参考的合同：`packages/client-runtime/src/state/subagentRuntime.ts` 从持久 task/tool activity 容错折叠 roster，区分 reusable agent identity 和 activation，处理迟到/乱序 start/complete、idle 非 terminal、provider-specific usage、nested agent attribution 和最近活动 ring；`apps/server/src/orchestration/ThreadBackgroundLiveness.ts` 则区分后台 monitor/shell 与真实 Sub-agent 对主回合存活状态的影响。本轮没有运行 T3，不能据此评价其产品成熟度。
 
 CodePilot 源码与针对性测试已经覆盖：
 
@@ -497,15 +495,15 @@ T3 仓库最稳定、最可迁移的资产其实是一组工程约束：
 ### 建议重点精读
 
 - `docs/internals/overview.md`：server-authoritative + orchestration 总览。
-- [`OrchestrationEngine.ts`](../../资料/t3code/apps/server/src/orchestration/Layers/OrchestrationEngine.ts)：receipt、transaction、commit 后广播和失败 reconcile。
-- [`ProviderAdapter.ts`](../../资料/t3code/apps/server/src/provider/Services/ProviderAdapter.ts) / [`ProviderDriver.ts`](../../资料/t3code/apps/server/src/provider/ProviderDriver.ts)：控制面与多实例边界。
-- [`CheckpointStore.ts`](../../资料/t3code/apps/server/src/checkpointing/CheckpointStore.ts) / [`GitVcsDriver.ts`](../../资料/t3code/apps/server/src/vcs/GitVcsDriver.ts)：isolated index + hidden ref。
-- [`terminal.ts`](../../资料/t3code/packages/contracts/src/terminal.ts) / [`terminal/Manager.ts`](../../资料/t3code/apps/server/src/terminal/Manager.ts)：snapshot/live attach 与历史所有权。
-- `connection-runtime.md` / [`supervisor.ts`](../../资料/t3code/packages/client-runtime/src/connection/supervisor.ts)：单一 retry owner。
-- `environment-auth.md` / [`RpcAuthorization.ts`](../../资料/t3code/apps/server/src/auth/RpcAuthorization.ts)：配对、ticket、scope fail-closed。
-- [`previewAutomation.ts`](../../资料/t3code/packages/contracts/src/previewAutomation.ts) / [`PreviewAutomationBroker.ts`](../../资料/t3code/apps/server/src/mcp/PreviewAutomationBroker.ts)：Agent 与人共享 browser surface。
-- [`MessagesTimeline.logic.ts`](../../资料/t3code/apps/web/src/components/chat/MessagesTimeline.logic.ts)：derived row structural sharing。
-- [`DrainableWorker.ts`](../../资料/t3code/packages/shared/src/DrainableWorker.ts) / [`KeyedCoalescingWorker.ts`](../../资料/t3code/packages/shared/src/KeyedCoalescingWorker.ts)：确定性异步与最新值合并。
+- `apps/server/src/orchestration/Layers/OrchestrationEngine.ts`：receipt、transaction、commit 后广播和失败 reconcile。
+- `apps/server/src/provider/Services/ProviderAdapter.ts` / `apps/server/src/provider/ProviderDriver.ts`：控制面与多实例边界。
+- `apps/server/src/checkpointing/CheckpointStore.ts` / `apps/server/src/vcs/GitVcsDriver.ts`：isolated index + hidden ref。
+- `packages/contracts/src/terminal.ts` / `apps/server/src/terminal/Manager.ts`：snapshot/live attach 与历史所有权。
+- `connection-runtime.md` / `packages/client-runtime/src/connection/supervisor.ts`：单一 retry owner。
+- `environment-auth.md` / `apps/server/src/auth/RpcAuthorization.ts`：配对、ticket、scope fail-closed。
+- `packages/contracts/src/previewAutomation.ts` / `apps/server/src/mcp/PreviewAutomationBroker.ts`：Agent 与人共享 browser surface。
+- `apps/web/src/components/chat/MessagesTimeline.logic.ts`：derived row structural sharing。
+- `packages/shared/src/DrainableWorker.ts` / `packages/shared/src/KeyedCoalescingWorker.ts`：确定性异步与最新值合并。
 
 ### 参考时必须带着 CodePilot 现有事实对照
 
@@ -527,7 +525,7 @@ T3 Code 是 MIT，概念、算法和源码都可以参考或复用；若复制�
 - checkpoint hidden-ref 流程、scope map、contract shape 可以近距离适配；
 - `DrainableWorker`、`KeyedCoalescingWorker`、connection supervisor、Provider registry 大量依赖 Effect，应移植语义和测试，不要为了复制几份代码把 Effect 引入 CodePilot 主链；
 - 对直接复制的文件建立 `THIRD_PARTY_NOTICES` 或文件头 attribution；
-- 不把整个 `资料/t3code` 当 vendor dependency 或打包资产。
+- 不把 T3 Code 源码当 vendor dependency 或打包资产。
 
 ## 19. 最终判断
 

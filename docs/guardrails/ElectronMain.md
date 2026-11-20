@@ -2,7 +2,6 @@
 
 > **Status: Active contract** — 覆盖主窗口安全与原生菜单、Electron 构建清理、standalone 内容边界、extraResources 互斥、native ABI 与 packaged server 启动门禁。
 > **为什么先读**：主进程缺少完整 UI 自动化覆盖（tech-debt #6）；外链拦截、窗口管理、原生编辑菜单、better-sqlite3 ABI rebuild 和 packaged server 都在此边界，改错会让安全策略或发布产物失效。
-> **已知关键文件**：`electron/*`、`scripts/build-electron.mjs`、`scripts/after-pack.js`、`scripts/after-sign.js`、`electron-builder.yml`。
 
 ## 词汇表
 

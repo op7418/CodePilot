@@ -182,7 +182,7 @@
 
 - GitHub 是 unsigned Windows 更新链的唯一信任根。Immutable Releases 的状态只有管理员能读，Actions token 读不到。
 - ruleset 的 `bypass_actors` 字段对没有写权限的调用者是隐藏的，字段缺失不能当成空数组。
-- electron-updater 6.8.3 的差分下载任一环节失败会自动回退完整包。`blockMapSize` 只描述嵌入式 blockmap，不适用于外置的 sidecar 文件。
+- electron-updater 的差分下载（6.8.3 时核实）任一环节失败会自动回退完整包。`blockMapSize` 只描述嵌入式 blockmap，不适用于外置的 sidecar 文件。
 - 没有内置 updater provenance 的旧安装包无法被远端开启自动更新，首个带 updater 的版本必须手动安装。
 
 完整的发版门禁见 [rules/release.md](rules/release.md)。

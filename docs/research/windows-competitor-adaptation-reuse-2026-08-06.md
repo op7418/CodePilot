@@ -10,7 +10,7 @@
 
 本轮只把源码、官方仓库/设计文档和本仓库已有源码调研当作事实证据：
 
-- 本地快照 `资料/feishu-openclaw-plugin/`：`@larksuiteoapi/feishu-openclaw-plugin@2026.3.7`。
+- npm 包 `@larksuiteoapi/feishu-openclaw-plugin@2026.3.7`（解包件已不保留在本仓库）。
 - [Craft Agents OSS](https://github.com/craft-ai-agents/craft-agents-oss)：Windows PowerShell installer、`.exe` debug 入口、`%APPDATA%` 日志；架构细节同时引用本仓库已固定 commit 的 [竞品 Runtime / 安全调研](./competitor-runtime-security-solutions-2026-07-04.md)。
 - [OpenCode](https://github.com/anomalyco/opencode)：Scoop/Chocolatey、Windows Desktop 安装包；Runtime/状态/安全细节引用上述既有源码调研。
 - [OpenAI Codex config source](https://github.com/openai/codex/blob/main/codex-rs/config/src/config_toml.rs)：Windows path comparison、project trust、credential store mode、Windows config；沙盒结构引用 [OpenAI Windows sandbox design](https://openai.com/index/building-codex-windows-sandbox/)。

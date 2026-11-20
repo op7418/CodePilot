@@ -1,1 +1,0 @@
-{"version":3,"file":"tools-config.d.ts","sourceRoot":"","sources":["../../../src/core/tools-config.ts"],"names":[],"mappings":"AAAA;;;;;;;;;GASG;AAEH,OAAO,KAAK,EAAE,iBAAiB,EAAE,MAAM,YAAY,CAAC;AAMpD;;;;;;;GAOG;AACH,eAAO,MAAM,oBAAoB,EAAE,QAAQ,CAAC,iBAAiB,CAS5D,CAAC;AAMF;;;;;GAKG;AACH,wBAAgB,kBAAkB,CAChC,GAAG,CAAC,EAAE,iBAAiB,GACtB,QAAQ,CAAC,iBAAiB,CAAC,CAa7B"}

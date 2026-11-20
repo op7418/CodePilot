@@ -97,7 +97,7 @@ GitHub milestone `v0.56.x Stability / Trust`（#1）+ P0/P1 label 体系已建�
   - `src/lib/openai-oauth.ts`: `exchangeCodeForTokens` 改为最多 3 次重试，对 403/408/429/5xx 和网络级错误（ECONNRESET / ETIMEDOUT / ENOTFOUND / ECONNREFUSED）做指数退避（1s/2s/4s）
   - 不重试 400/401/404/422 等真正的 auth/config 错误（避免无谓重试）
   - 错误消息改用 `JSON.stringify(j)` 替代 toString，根治 `[object Object]` 序列化 bug
-  - 对照参考项目 OpenCode（`资料/opencode-dev/codex.ts:580`）的 polling 容错语义：`if (status !== 403 && status !== 404) return failed`，OpenCode 也把 403 当可重试处理
+  - 对照参考项目 OpenCode（`codex.ts:580`）的 polling 容错语义：`if (status !== 403 && status !== 404) return failed`，OpenCode 也把 403 当可重试处理
   - 新增 `openai-oauth-retry.test.ts`（14 个单测）覆盖 retry 分类逻辑
 - **根因结论：**
   - 用户在不稳定网络（VPN / 跨境）+ OpenAI auth code 边缘节点 propagation 延迟时，单次请求容易撞 403

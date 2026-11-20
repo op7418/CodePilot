@@ -2,9 +2,7 @@
 
 > 调研时间：2026-03-22
 > 调研方式：静态拆包 + 本地架构比对，未做真实微信账号登录联调
-> 样本位置：
-> - `资料/weixin-openclaw-cli/package/`
-> - `资料/weixin-openclaw-package/package/`
+> 样本：npm 包 `@tencent-weixin/openclaw-weixin` 及其 CLI 的解包件（已不保留在本仓库）
 
 ## 一句话结论
 

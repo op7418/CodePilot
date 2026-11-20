@@ -4,7 +4,6 @@
 
 > **Status: Active** — 2026-07-22 因同 Runtime 子 Agent 的 tool stream、历史配对与侧栏 transcript 接线完成首次 on-touch 激活。
 > **为什么先读**：聊天主路径——双入口（`/chat` page.tsx 首消息 + `/chat/[id]` ChatView.tsx 后续）必须**独立**管理 effort / thinking / runtime override 并各自向 `/api/chat` 传递。这是上一次 SDK 0.2.111 接入的重灾区，也是即将到来的 Phase 6 上下文可视化的主要触及点。
-> **已知关键文件**：`src/lib/claude-client.ts`、`src/lib/stream-session-manager.ts`、`src/hooks/useSSEStream.ts`、`src/app/chat/page.tsx`、`src/components/chat/ChatView.tsx`。
 
 ## 词汇表
 

@@ -2,7 +2,6 @@
 
 > **Status: Active contract** — 覆盖 SQLite schema 初始化、增量加列、保守 backfill、幂等与测试隔离。
 > **为什么先读**：用户真实数据在 `~/.codepilot/codepilot.db`；schema 迁移**必须 backfill，不能 DELETE 用户数据**（`feedback_db_migration_safety.md`）。一次错误的 migration 可能让用户丢失所有历史会话 / Provider 配置。
-> **已知关键文件**：`src/lib/db.ts`（schema + migration runner）；`src/types/index.ts`（DB 行类型）。
 
 ## 词汇表
 

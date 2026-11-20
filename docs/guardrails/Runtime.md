@@ -43,7 +43,7 @@ CodePilot 有三条 chat 运行路径：**Claude Code Runtime**（SDK 子进程�
 | Settings → Providers 全局默认模型选择器 | `fetch('/api/providers/models')`（**不传** `?runtime=`） | 完整 catalog，所有 provider 所有 enabled 模型 |
 | Settings → Models 页 | 直接 fetch + 自己 filter，不通过 hook | 完整 catalog，按用户操作（runtime filter dropdown / 搜索 / enabled tab）筛 |
 | Composer / chat picker | `useProviderModels(providerId, modelName)` 默认 `runtime: 'auto'` → `?runtime=auto` | 服务端按 active runtime 过滤后的 enabled 模型 |
-| chat 主入口 send 路径 | `resolveProvider({ ..., runtime: getActiveChatRuntime() })`（`/api/chat/route.ts` + `bridge/conversation-engine.ts`） | server 端按 runtime gate 选 default model + availableModels |
+| chat 主入口 send 路径 | `resolveProvider()` 传入该会话的生效 Runtime（`resolveRuntimeForSession(session)`） | server 端按 runtime gate 选 default model + availableModels |
 
 **不变量**：Composer / chat send 路径**永远**带 active runtime；Settings 全局默认选择器**永远**不带（避免 user 看不到他想设为默认的 codepilot_only 模型）。这两条对调过任何一次都会出 bug。
 
@@ -195,7 +195,7 @@ Provider 或模型切换后，descriptor 必须从同一 runtime-filtered group 
   - 想看全集才显式传 `null`，并在代码里写注释说明为什么需要全集
   - chat 首次进入必须能独立发现 Codex Account 模型；不能把 Settings 页面 mount 当成隐式初始化步骤
 - 新增 chat 入口（除现有 chat-route / bridge 外）：
-  - 调 `resolveProvider()` 时**必须**传 `runtime: getActiveChatRuntime()`
+  - 调 `resolveProvider()` 时**必须**传 `runtime`：有会话时用 `resolveRuntimeForSession(session)`，没有会话时才用 `getActiveChatRuntime()`
   - send 路径前必须 gate `noCompatibleProvider` + `fetchState`
 - 改 Codex model discovery / transport：覆盖 frame chunk/CRLF/multibyte/exact-cap/oversize/no-newline、RPC deadline、10 caller single-flight、cooldown/force 与 unhealthy-idle recycle；日志 fixture 中不得出现 frame/prompt/path/token 内容。
 - 新增任何 Codex app-server 直达入口时必须复用 `getCodexAppServer()` 的 recovery-safe-mode gate，不得自行 spawn 绕过 Main owner。

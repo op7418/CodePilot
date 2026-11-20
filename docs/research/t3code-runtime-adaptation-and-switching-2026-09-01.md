@@ -61,7 +61,7 @@
 
 ### 3.1 它把“共同规则”和“各家怪脾气”隔开了
 
-T3 Code 的共同适配器只规定一组稳定动作：开始会话、发送一轮、中断、响应批准、响应用户输入、停止、读取、回滚和输出统一事件。具体 Claude、Codex、Grok、Cursor、OpenCode 怎么做，留在各自适配器里。[ProviderAdapter.ts](../../资料/t3code/apps/server/src/provider/Services/ProviderAdapter.ts)
+T3 Code 的共同适配器只规定一组稳定动作：开始会话、发送一轮、中断、响应批准、响应用户输入、停止、读取、回滚和输出统一事件。具体 Claude、Codex、Grok、Cursor、OpenCode 怎么做，留在各自适配器里。`apps/server/src/provider/Services/ProviderAdapter.ts`
 
 这次更新最有说服力的地方不是接口长什么样，而是变化分布：
 
@@ -75,7 +75,7 @@ T3 Code 的共同适配器只规定一组稳定动作：开始会话、发送一
 
 ### 3.2 它明确区分“驱动类型”和“同类型的多个实例”
 
-T3 Code 的一个 Driver 可以创建多个相互隔离的实例。每个实例拥有自己的进程、状态、配置、显示名和账号，但共同遵守相同适配器接口。[ProviderDriver.ts](../../资料/t3code/apps/server/src/provider/ProviderDriver.ts)
+T3 Code 的一个 Driver 可以创建多个相互隔离的实例。每个实例拥有自己的进程、状态、配置、显示名和账号，但共同遵守相同适配器接口。`apps/server/src/provider/ProviderDriver.ts`
 
 这解决了一个很容易混乱的问题：
 
@@ -94,7 +94,7 @@ T3 Code 在聊天开始后会锁定 Provider Driver。模型选择器只展示�
 - 同一个 Driver；
 - 并且属于同一个 `continuationGroupKey`，即确实能访问同一份底层会话状态的实例。
 
-不兼容的项会直接提示“请新建聊天后切换 Provider”。这个限制同时存在于前端和服务端，不是只把按钮变灰。[ChatView.logic.ts](../../资料/t3code/apps/web/src/components/ChatView.logic.ts) · [ModelPickerContent.tsx](../../资料/t3code/apps/web/src/components/chat/ModelPickerContent.tsx) · [ProviderCommandReactor.ts](../../资料/t3code/apps/server/src/orchestration/Layers/ProviderCommandReactor.ts)
+不兼容的项会直接提示“请新建聊天后切换 Provider”。这个限制同时存在于前端和服务端，不是只把按钮变灰。`apps/web/src/components/ChatView.logic.ts` · `apps/web/src/components/chat/ModelPickerContent.tsx` · `apps/server/src/orchestration/Layers/ProviderCommandReactor.ts`
 
 例如：
 

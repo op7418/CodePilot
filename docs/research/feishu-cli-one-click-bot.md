@@ -1,7 +1,7 @@
 # 飞书 CLI 一键创建机器人逆向调研
 
 > 调研时间：2026-04-13
-> 源码位置：`/Users/op7418/Documents/code/资料/larksuite-cli`
+> 分析对象：飞书官方 CLI（larksuite-cli；本地快照已不保留）
 > 状态：**POC 已完成，全链路验证通过，可进入实现阶段**
 
 ## 核心结论
