@@ -104,8 +104,8 @@ function deliveryStatusToTone(status: string): string {
 }
 
 export function TasksSection() {
-  const { t } = useTranslation();
-  const isZh = t("nav.chats") === "对话";
+  const { t, locale } = useTranslation();
+  const isZh = locale === "zh";
   const router = useRouter();
   const searchParams = useSearchParams();
   const focusId = searchParams.get("focus");
@@ -131,6 +131,7 @@ export function TasksSection() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     refresh();
   }, [refresh]);
 
@@ -247,7 +248,7 @@ export function TasksSection() {
 
       {loading ? (
         <div className="rounded-lg border border-dashed border-border/50 bg-card/50 p-10 text-center">
-          <p className="text-xs text-muted-foreground">{isZh ? "加载中…" : "Loading…"}</p>
+          <p className="text-xs text-muted-foreground">{t("tasks.loading")}</p>
         </div>
       ) : sortedTasks.length === 0 ? (
         <div className="rounded-lg border border-dashed border-border/50 bg-card/50 p-10 text-center space-y-2">
@@ -373,7 +374,7 @@ export function TasksSection() {
                     </p>
                     {runs.length === 0 ? (
                       <p className="text-[11px] text-muted-foreground/70">
-                        {isZh ? "暂无执行记录" : "No execution history yet"}
+                        {t("tasks.noHistory")}
                       </p>
                     ) : (
                       <div className="space-y-2">
@@ -416,7 +417,7 @@ export function TasksSection() {
                                   href={`/chat/${task.session_id}`}
                                   className="ml-auto text-foreground/70 hover:text-foreground hover:underline"
                                 >
-                                  {isZh ? "打开执行会话" : "Open session"}
+                                  {t("tasks.openSession")}
                                 </a>
                               )}
                             </div>
@@ -440,7 +441,7 @@ export function TasksSection() {
                               </ul>
                             ) : (
                               <p className="mt-1 text-muted-foreground/70">
-                                {isZh ? "无通知通道记录" : "No delivery rows"}
+                                {t("tasks.noDeliveries")}
                               </p>
                             )}
                             {run.error && (

@@ -2583,6 +2583,12 @@ const en = {
   'models.codexAccount.countMany': '{count} models',
   'models.codexAccount.manageAccount': 'Manage account',
   'models.codexAccount.desc': 'Codex Account models are covered by your ChatGPT plan — no API key required. They run only under Settings → Runtime → Codex. The list is maintained by Codex; nothing to toggle here.',
+
+  // Settings — Tasks Section
+  'tasks.loading': 'Loading…',
+  'tasks.noHistory': 'No execution history yet',
+  'tasks.openSession': 'Open session',
+  'tasks.noDeliveries': 'No delivery rows',
 } as const;
 
 export type TranslationKey = keyof typeof en;

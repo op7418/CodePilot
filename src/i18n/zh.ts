@@ -2554,6 +2554,12 @@ const zh: Record<TranslationKey, string> = {
   'models.codexAccount.countMany': '{count} 个模型',
   'models.codexAccount.manageAccount': '管理账户',
   'models.codexAccount.desc': 'Codex 账户模型由 ChatGPT 套餐承担，无需 API Key；只在「执行引擎 → Codex」下可用。模型列表由 Codex 自动维护，无需在这里启用/隐藏。',
+
+  // Settings — Tasks Section
+  'tasks.loading': '加载中…',
+  'tasks.noHistory': '暂无执行记录',
+  'tasks.openSession': '打开执行会话',
+  'tasks.noDeliveries': '无通知通道记录',
 };
 
 export default zh;
