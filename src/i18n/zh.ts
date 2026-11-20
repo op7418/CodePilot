@@ -2566,6 +2566,12 @@ const zh: Record<TranslationKey, string> = {
 
   // CLI Tools — Prefill Prompts
   'cliTools.tryToolPrefill': '我想用 {name} 工具完成：',
+  'cliTools.installPrefillTitle': '帮我安装 {name} 并添加到工具库。',
+  'cliTools.installPrefillCmd': '安装命令：{cmd}',
+  'cliTools.installPrefillSudo': '如果权限不足请用 sudo 重试。',
+  'cliTools.installPrefillPost': '安装后还需要执行：',
+  'cliTools.installPrefillAuthNote': '注意：这个工具安装后需要登录或配置认证才能使用，请安装完成后引导我完成认证设置。',
+  'cliTools.addToolPrefill': '我想安装一个新的 CLI 工具并添加到工具库。\n工具名称：\n安装命令（如 brew install xxx）：',
 };
 
 export default zh;

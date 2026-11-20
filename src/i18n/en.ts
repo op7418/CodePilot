@@ -2595,6 +2595,12 @@ const en = {
 
   // CLI Tools — Prefill Prompts
   'cliTools.tryToolPrefill': 'I want to use {name} to: ',
+  'cliTools.installPrefillTitle': 'Install {name} and add it to the tool library.',
+  'cliTools.installPrefillCmd': 'Install command: {cmd}',
+  'cliTools.installPrefillSudo': 'If permission denied, retry with sudo.',
+  'cliTools.installPrefillPost': 'After installing, also run:',
+  'cliTools.installPrefillAuthNote': 'Note: This tool requires login or auth configuration after installation. Please guide me through the setup after installing.',
+  'cliTools.addToolPrefill': 'I want to install a new CLI tool and add it to my tool library.\nTool name: \nInstall command (e.g. brew install xxx): ',
 } as const;
 
 export type TranslationKey = keyof typeof en;

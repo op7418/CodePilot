@@ -188,40 +188,33 @@ export const CliToolsManager = forwardRef<CliToolsManagerHandle, CliToolsManager
   const handleInstall = (tool: CliToolDefinition, method: string) => {
     const installMethod = tool.installMethods.find(m => m.method === method);
     const installCmd = installMethod?.command || `${method} install ${tool.id}`;
-    const isZh = locale === 'zh';
 
     const lines: string[] = [];
-    lines.push(isZh
-      ? `帮我安装 ${tool.name} 并添加到工具库。`
-      : `Install ${tool.name} and add it to the tool library.`);
-    lines.push(isZh ? `安装命令：${installCmd}` : `Install command: ${installCmd}`);
-    lines.push(isZh ? '如果权限不足请用 sudo 重试。' : 'If permission denied, retry with sudo.');
+    lines.push(t('cliTools.installPrefillTitle', { name: tool.name }));
+    lines.push(t('cliTools.installPrefillCmd', { cmd: installCmd }));
+    lines.push(t('cliTools.installPrefillSudo'));
 
     // Include required post-install commands (e.g. skills install) that AI can't discover from --help
     if (tool.postInstallCommands && tool.postInstallCommands.length > 0) {
       lines.push('');
-      lines.push(isZh ? '安装后还需要执行：' : 'After installing, also run:');
+      lines.push(t('cliTools.installPrefillPost'));
       tool.postInstallCommands.forEach(cmd => lines.push(cmd));
     }
 
     // For tools that need auth, hint that setup is needed — let AI determine steps from --help
     if (tool.setupType === 'needs_auth') {
       lines.push('');
-      lines.push(isZh
-        ? '注意：这个工具安装后需要登录或配置认证才能使用，请安装完成后引导我完成认证设置。'
-        : 'Note: This tool requires login or auth configuration after installation. Please guide me through the setup after installing.');
+      lines.push(t('cliTools.installPrefillAuthNote'));
     }
 
     window.location.href = `/chat?prefill=${encodeURIComponent(lines.join('\n'))}`;
   };
 
   const handleAddTool = useCallback(() => {
-    const prefill = locale === 'zh'
-      ? '我想安装一个新的 CLI 工具并添加到工具库。\n工具名称：\n安装命令（如 brew install xxx）：'
-      : 'I want to install a new CLI tool and add it to my tool library.\nTool name: \nInstall command (e.g. brew install xxx): ';
+    const prefill = t('cliTools.addToolPrefill');
     // Use hard navigation to ensure the new page reads the prefill param fresh
     window.location.href = `/chat?prefill=${encodeURIComponent(prefill)}`;
-  }, [locale]);
+  }, [t]);
 
   // Imperative API consumed by ExtensionsPage's create dropdown.
   useImperativeHandle(ref, () => ({ addTool: handleAddTool }), [handleAddTool]);
