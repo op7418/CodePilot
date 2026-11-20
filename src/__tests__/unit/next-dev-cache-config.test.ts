@@ -27,8 +27,7 @@ describe('next.config.ts dev-server guardrails', () => {
     assert.match(NEXT_CONFIG, /experimental:\s*\{[\s\S]*?turbopackFileSystemCacheForDev:\s*false/);
   });
 
-  it('caps Turbopack dev memory pressure from Settings compilation', () => {
-    assert.match(NEXT_CONFIG, /turbopackMemoryLimit:\s*1536\s*\*\s*1024\s*\*\s*1024/);
+  it('keeps Turbopack source maps opt-in to limit dev memory pressure', () => {
     assert.match(NEXT_CONFIG, /turbopackSourceMaps:\s*process\.env\.CODEPILOT_SOURCE_MAPS\s*===\s*['"]1['"]/);
     assert.match(NEXT_CONFIG, /turbopackInputSourceMaps:\s*false/);
   });

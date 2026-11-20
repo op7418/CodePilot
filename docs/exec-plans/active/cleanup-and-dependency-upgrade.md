@@ -18,7 +18,7 @@
 | 工作包 | 内容 | 建议执行者 | 状态 |
 |---|---|---|---|
 | WP1 | 三处实际缺陷：上传路由路径检查、MCP 连接管理、定时任务并发 | Opus | 完成 |
-| WP2 | 依赖：lock 同步、漏洞修复、删无用依赖 | Opus | 待开始 |
+| WP2 | 依赖：lock 同步、漏洞修复、删无用依赖 | Opus | 完成（mac universal 包未在本机验证） |
 | WP3 | Node 与 Electron 大版本升级 | Opus | 待开始 |
 | WP4 | 第二轮死代码：路由、IPC、模块、`资料/` | Gemini | 待开始 |
 | WP5 | GitHub 模板与工作流的过时口径 | Gemini | 待开始 |
@@ -29,7 +29,7 @@
 ## 本机环境注意
 
 - 本机默认 Node 是 25，项目 CI 是 20。`better-sqlite3` 已按 Node 25 重编译；切换 Node 版本后要 `npm rebuild better-sqlite3`，否则约 700 个测试报 `database_unavailable`。
-- `npm ci` 目前失败（lock 缺 7 个条目），WP2 第一步修。在那之前用 `npm install` 后还原 lock。
+- lock 已在 WP2 同步。本机 `electron-builder` 要走代理（`HTTPS_PROXY=http://127.0.0.1:10987`），且加 `-c.electronDist=node_modules/electron/dist`；打包会把 `node_modules/better-sqlite3` 重编译成 Electron ABI，跑测试前要再 `npm rebuild better-sqlite3`。
 - 全量 `npm run test` 约 5 分钟。
 
 ## WP1 两处缺陷
@@ -151,3 +151,11 @@
 - 2026-11-20：第一轮清理完成（未提交）。删除 handover 目录、`ARCHITECTURE.md`、45 个无引用源文件、6 个无调用路由；修复 `stopScheduler`。全量单测 5698 通过。
 - 2026-11-20：`media/[id]/tags` 路由曾被误判为无调用方，实际有测试在用，已恢复，归入 WP4 重新判断。
 - 2026-11-20：WP1 完成。上传目录挂在各会话工作目录下，没有单一根目录，所以取路径里最内层的允许目录段（不含文件名本身）作为 `assertRealPathInBase` 的 base。MCP 冷却期 60 秒；额外处理了 toggle 路由对已连接 server 再次 `connectServer` 时旧 client 不关闭的泄漏。定时任务上限 2 只作用于轮询和启动补跑，手动"立即运行"不计入也不受限；补跑通知仍对所有错过的任务立即发出，超出上限的任务在之后的轮询（10 秒一次）里执行。
+- 2026-11-20：WP2 完成。`npm audit` 98 → 34（high 3、critical 0）；所有新增或变动的版本都按 `npm install --before=2026-11-13` 满足 7 天。与计划的出入：
+  - `postcss` 代码里没有 import，只有 Tailwind 的 postcss 配置用到，所以放进 devDependencies。
+  - 主应用 `next` 升到 16.4.6（用户确认）。16.4 删掉了 `turbopackMemoryLimit`，没有替代项，已从 `next.config.ts` 和对应测试移除。16.4 的 Next 自带一份嵌套的 sharp 0.35.5，mac universal 打包要同时有两种架构，所以 `prepare-macos-universal-runtime.mjs` 和 `x64ArchFiles` 都加上了 `next/node_modules/@img/*`。
+  - `apps/site` 的 next 升到 15.5.29（用户确认）。它连带锁住的 postcss 8.4.31 和顶层 sharp 0.34.5 仍报 high，同一大版本内没有修复。
+  - `@anthropic-ai/claude-agent-sdk` 锁在 0.2.111。`audit fix` 想升到 0.2.141，但那个版本改成按平台拆二进制包，牵涉 Runtime 和打包，而它只修一条 moderate。
+  - `@streamdown/math` 锁在 1.0.1。1.0.3 改成只支持 ESM，7 个测试文件加载失败，也不修漏洞。`package.json` 里仍是 `^1.0.1`，以后 `npm install` 可能把它带上去。
+  - mermaid 的 high 要升到 12.x 才修，跨大版本，没动；katex 的 low 上游没有修复。剩下的 high 是 `electron`，留给 WP3。
+  - 打包验证：本机 `electron-builder` 经 `@electron/get` 下载 Electron 和 dmg/zip 工具链时走不通本地代理，用 `-c.electronDist=node_modules/electron/dist` 跳过 Electron 下载。正式签名会卡在 Apple 时间戳服务，所以用 ad-hoc 签名（`CODEPILOT_ALLOW_ADHOC_SIGNING=1`）打出 arm64 `.app`：afterPack 原生模块替换和 afterSign 校验都通过，用隔离数据目录启动后能进主界面。dmg/zip 两个产物因为工具链下载失败没生成。universal 包（含新加的 sharp `x64ArchFiles`）只能靠 CI 验证。

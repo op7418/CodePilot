@@ -119,6 +119,10 @@ describe('release signing and update asset contracts', () => {
       'sharp-darwin-x64/lib/sharp-darwin-x64.node',
       'sharp-libvips-darwin-arm64/lib/libvips-cpp.8.17.3.dylib',
       'sharp-libvips-darwin-x64/lib/libvips-cpp.8.17.3.dylib',
+      'next/node_modules/@img/{sharp-darwin-arm64/lib/sharp-darwin-arm64-0.35.5.node',
+      'sharp-darwin-x64/lib/sharp-darwin-x64-0.35.5.node',
+      'sharp-libvips-darwin-arm64/lib/libvips-cpp.8.18.7.dylib',
+      'sharp-libvips-darwin-x64/lib/libvips-cpp.8.18.7.dylib',
       'trash/lib/macos-trash',
       '.next/server/assets/macos-trash.*',
     ]) assert.ok(x64ArchFiles.includes(expected), `x64ArchFiles must include ${expected}`);
@@ -129,6 +133,8 @@ describe('release signing and update asset contracts', () => {
       '@img/sharp-darwin-x64',
       '@img/sharp-libvips-darwin-arm64',
       '@img/sharp-libvips-darwin-x64',
+      'node_modules/next/node_modules/@img/sharp-darwin-x64',
+      'node_modules/next/node_modules/@img/sharp-libvips-darwin-x64',
     ]) assert.ok(universalRuntimePrep.includes(packageName), `runtime prep must include ${packageName}`);
     assert.match(universalRuntimePrep, /createHash\('sha512'\)/);
     assert.doesNotMatch(universalRuntimePrep, /npm['"], \['install|--force/);
@@ -140,8 +146,8 @@ describe('release signing and update asset contracts', () => {
     assert.match(builder, /verifyUpdateCodeSignature:\s*true/);
     assert.match(builder, /rfc3161TimeStampServer:/);
     assert.match(builder, /nsis:[\s\S]*?differentialPackage:\s*true/);
-    assert.equal(packageJson.dependencies['electron-updater'], '6.8.3');
-    assert.equal(packageJson.devDependencies['electron-builder'], '26.8.1');
+    assert.equal(packageJson.dependencies['electron-updater'], '6.8.11');
+    assert.equal(packageJson.devDependencies['electron-builder'], '26.18.0');
 
     for (const workflow of [stable, previewBuild, previewRelease]) {
       assert.match(workflow, /APPLE_NOTARIZATION_KEY_BASE64/);

@@ -20,11 +20,17 @@ import { fileURLToPath } from 'node:url';
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const projectDir = path.resolve(scriptDir, '..');
 
+// Lockfile keys, not bare names: Next ships its own nested Sharp major, and
+// both the hoisted copy and Next's copy are traced into the standalone output.
 const REQUIRED_PACKAGES = [
-  ['@img/sharp-darwin-arm64', 'lib/sharp-darwin-arm64.node'],
-  ['@img/sharp-darwin-x64', 'lib/sharp-darwin-x64.node'],
-  ['@img/sharp-libvips-darwin-arm64', 'lib/libvips-cpp.8.17.3.dylib'],
-  ['@img/sharp-libvips-darwin-x64', 'lib/libvips-cpp.8.17.3.dylib'],
+  ['node_modules/@img/sharp-darwin-arm64', 'lib/sharp-darwin-arm64.node'],
+  ['node_modules/@img/sharp-darwin-x64', 'lib/sharp-darwin-x64.node'],
+  ['node_modules/@img/sharp-libvips-darwin-arm64', 'lib/libvips-cpp.8.17.3.dylib'],
+  ['node_modules/@img/sharp-libvips-darwin-x64', 'lib/libvips-cpp.8.17.3.dylib'],
+  ['node_modules/next/node_modules/@img/sharp-darwin-arm64', 'lib/sharp-darwin-arm64-0.35.5.node'],
+  ['node_modules/next/node_modules/@img/sharp-darwin-x64', 'lib/sharp-darwin-x64-0.35.5.node'],
+  ['node_modules/next/node_modules/@img/sharp-libvips-darwin-arm64', 'lib/libvips-cpp.8.18.7.dylib'],
+  ['node_modules/next/node_modules/@img/sharp-libvips-darwin-x64', 'lib/libvips-cpp.8.18.7.dylib'],
 ];
 
 function fail(message) {
@@ -60,14 +66,14 @@ function installedPackageIsUsable(destination, version, requiredFile) {
   }
 }
 
-function installLockedPackage(packageName, requiredFile, lockfile, tempRoot) {
-  const lockKey = `node_modules/${packageName}`;
+function installLockedPackage(lockKey, requiredFile, lockfile, tempRoot) {
+  const packageName = lockKey.slice(lockKey.lastIndexOf('node_modules/') + 'node_modules/'.length);
   const locked = lockfile.packages?.[lockKey];
   if (!locked?.version || !locked?.integrity) fail(`missing exact lock entry for ${lockKey}`);
 
-  const destination = path.join(projectDir, 'node_modules', ...packageName.split('/'));
+  const destination = path.join(projectDir, ...lockKey.split('/'));
   if (installedPackageIsUsable(destination, locked.version, requiredFile)) {
-    console.log(`[prepare-macos-universal-runtime] ready: ${packageName}@${locked.version}`);
+    console.log(`[prepare-macos-universal-runtime] ready: ${lockKey}@${locked.version}`);
     return;
   }
 
@@ -102,7 +108,7 @@ function installLockedPackage(packageName, requiredFile, lockfile, tempRoot) {
   fs.rmSync(destination, { recursive: true, force: true });
   fs.mkdirSync(path.dirname(destination), { recursive: true });
   fs.cpSync(extractedPackage, destination, { recursive: true, dereference: false });
-  console.log(`[prepare-macos-universal-runtime] installed: ${packageName}@${locked.version}`);
+  console.log(`[prepare-macos-universal-runtime] installed: ${lockKey}@${locked.version}`);
 }
 
 if (process.platform !== 'darwin') {
@@ -113,8 +119,8 @@ if (process.platform !== 'darwin') {
 const lockfile = JSON.parse(fs.readFileSync(path.join(projectDir, 'package-lock.json'), 'utf8'));
 const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'codepilot-macos-universal-runtime-'));
 try {
-  for (const [packageName, requiredFile] of REQUIRED_PACKAGES) {
-    installLockedPackage(packageName, requiredFile, lockfile, tempRoot);
+  for (const [lockKey, requiredFile] of REQUIRED_PACKAGES) {
+    installLockedPackage(lockKey, requiredFile, lockfile, tempRoot);
   }
 } finally {
   fs.rmSync(tempRoot, { recursive: true, force: true });

@@ -46,11 +46,8 @@ const nextConfig: NextConfig = {
     // cause severe memory pressure when `next dev` restores it. Production
     // builds keep their default behavior; this only disables the dev cache.
     turbopackFileSystemCacheForDev: false,
-    // Keep local dev from taking down the machine when compiling the large
-    // Settings route graph. Dev source maps are useful but expensive here;
-    // production builds still emit their normal artifacts.
-    turbopackMemoryLimit: 1536 * 1024 * 1024,
-    // This remains false in dev. Official release builds enable output maps
+    // Dev source maps are expensive when compiling the large Settings route
+    // graph. This remains false in dev. Official release builds enable output maps
     // with productionBrowserSourceMaps so Turbopack emits real renderer/server
     // maps instead of debug IDs pointing at empty placeholder maps. Consuming
     // dependency input maps stays off: the POC showed it more than doubled
