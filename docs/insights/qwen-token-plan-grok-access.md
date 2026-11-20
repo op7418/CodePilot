@@ -1,7 +1,5 @@
 # 千问 Token Plan 与 xAI Grok 接入：产品取舍
 
-> 技术实现见 [docs/handover/qwen-token-plan-grok-access.md](../handover/qwen-token-plan-grok-access.md)
-
 ## 用户真正遇到的问题
 
 这次不是简单地“多加几个模型”。用户购买的是有明确身份、目录、条款和计费边界的产品，但旧 Provider 体系主要靠 URL 识别服务商：

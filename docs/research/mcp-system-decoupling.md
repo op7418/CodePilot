@@ -1,7 +1,7 @@
 # MCP 系统脱离 claude-agent-sdk 独立实现 — 深度调研
 
 > 创建时间：2026-04-06
-> 关联执行计划：[decouple-claude-code](../exec-plans/completed/decouple-claude-code.md)
+> 关联执行计划：decouple-claude-code
 
 ## 1. CodePilot 内置 MCP Server 功能清单
 

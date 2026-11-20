@@ -1,8 +1,7 @@
 # 图标体系与表意校准 — 产品思考
 
-> 技术实现见 [docs/handover/icon-system.md](../handover/icon-system.md)
 >
-> 对应执行计划：[docs/exec-plans/completed/phase-7-icon-system.md](../exec-plans/completed/phase-7-icon-system.md)（Phase 7 第一刀，已归档）
+> 对应执行计划：docs/exec-plans/completed/phase-7-icon-system.md（Phase 7 第一刀，已归档）
 
 ## 解决的用户问题
 

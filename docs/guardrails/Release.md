@@ -18,7 +18,7 @@
 |---|--------|--------|
 | 1 | 不能删 release tag——删了再建会让已发布 Release 变 Draft，丢失下载链接 | 人 + CI |
 | 2 | 必须等用户明确指示才 `git push` + `git tag`；commit 可以正常进行 | 人（执行 Agent） |
-| 3 | RELEASE_NOTES.md 格式必须严格遵循 CLAUDE.md "Release Notes 格式" 一节 | 人 |
+| 3 | RELEASE_NOTES.md 格式必须严格遵循 `docs/rules/release.md`「Release Notes 格式」一节 | 人 |
 | 4 | 更新内容必须用用户能理解的语言，不要出现 commit hash / 函数名 / 文件路径 | 人 |
 | 5 | 下载链接必须是完整 GitHub release download URL，用户点击即可下载 | 人 |
 | 6 | tag CI 任一平台失败时不得删除/重建该 tag；修复后递增 patch 版本重新发布 | 人 + CI |

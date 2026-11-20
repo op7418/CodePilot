@@ -1,6 +1,5 @@
 # 为什么我们需要 "New Runtime Playbook"
 
-> 技术实现见 [docs/handover/new-runtime-playbook.md](../handover/new-runtime-playbook.md)
 >
 > 关联：[harness-capability-contract.md](./harness-capability-contract.md)（本 playbook 服务的底座）
 
@@ -12,7 +11,7 @@
 
 接 Codex Runtime 持续三天才稳，这个数字看起来像是 Codex 协议复杂。其实不是。复盘下来：
 
-1. Codex 协议本身并不比 Claude Code SDK 复杂；多了一层 Responses proxy 翻译，但翻译层的 8 个 hook 写一遍就清楚（见 [provider-proxy-bridge.md](../handover/provider-proxy-bridge.md)）。
+1. Codex 协议本身并不比 Claude Code SDK 复杂；多了一层 Responses proxy 翻译，但翻译层的 8 个 hook 写一遍就清楚（见 provider-proxy-bridge.md）。
 2. 大部分时间花在**反复发现 CodePilot 自己的能力散落在三处**。比如 widget：MCP 一份 prompt、Native AI SDK ToolSet 一份 prompt、Codex bridge 又一份 prompt——每发现一处漂移就在该处补字段，然后 smoke 又揭露下一处。
 3. 救火 30+ 次。每次都是"smoke 失败 → 加日志 → 看模型行为 → 推理可能原因 → 改一处 → 跑下一轮 smoke"。烧的不是 Codex，烧的是这个**循环**。
 

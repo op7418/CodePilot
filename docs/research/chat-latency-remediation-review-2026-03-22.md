@@ -2,7 +2,7 @@
 
 > Date: 2026-03-22
 > Author: Claude (implementation) / pending Codex review
-> Related: [investigation](./chat-latency-investigation-2026-03-20.md) | [exec plan](../exec-plans/superseded/chat-latency-remediation.md)
+> Related: [investigation](./chat-latency-investigation-2026-03-20.md) | exec plan
 
 ## Summary
 

@@ -85,7 +85,7 @@ const eslintConfig = defineConfig([
               message:
                 "Use CodePilotIcon from @/components/ui/semantic-icon (semantic layer → HugeIcons). " +
                 "For structural icons not yet aliased (CaretDown, status badges), import from @/components/ui/icon. " +
-                "See docs/handover/icon-system.md.",
+                "See docs/design.md.",
             },
           ],
         },

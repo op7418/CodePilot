@@ -8,7 +8,3 @@
 - `telegram-bot.ts`（通知模式）与 bridge adapter 互斥，通过 `globalThis` 上的 `bridgeModeActive` 标志协调，防止 HMR 重置
 - Offset 安全水位：`fetchOffset`（API 调用）与 `committedOffset`（持久化）分离，仅 handleMessage 完成后才推进 committed
 - 新增 adapter 只需实现 `BaseChannelAdapter` + 调用 `registerAdapterFactory()` 自注册 + `adapters/index.ts` 加 import
-
-## 详细架构
-
-见 `docs/handover/bridge-system.md`

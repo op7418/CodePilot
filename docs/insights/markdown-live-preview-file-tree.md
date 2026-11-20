@@ -1,7 +1,5 @@
 # Markdown Live Preview × Explorer 文件树：产品取舍
 
-> 技术实现见 [docs/handover/markdown-live-preview-file-tree.md](../handover/markdown-live-preview-file-tree.md)。
-
 ## 为什么取消“主题选择”
 
 预览区的五套 presentation 样式制造了一个假命题：用户看见的 Markdown 到底是聊天里的版本、预览里的某个主题，还是导出模板。它增加选择，却没有增加编辑价值。

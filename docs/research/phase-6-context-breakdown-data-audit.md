@@ -1,7 +1,7 @@
 # Phase 6 Context Breakdown — 数据审计
 
 > 创建：2026-05-19
-> 关联执行计划：[`docs/exec-plans/completed/phase-6-context-visualization.md`](../exec-plans/completed/phase-6-context-visualization.md)
+> 关联执行计划：`docs/exec-plans/completed/phase-6-context-visualization.md`
 > 数据契约实现：[`src/lib/context-breakdown.ts`](../../src/lib/context-breakdown.ts)
 > 单元测试：[`src/__tests__/unit/context-breakdown.test.ts`](../../src/__tests__/unit/context-breakdown.test.ts)
 

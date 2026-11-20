@@ -2,7 +2,7 @@
 
 > 创建时间：2026-04-06
 > 源码位置：/Users/op7418/Documents/code/资料/pi-mono-main
-> 关联执行计划：[decouple-claude-code](../exec-plans/completed/decouple-claude-code.md)
+> 关联执行计划：decouple-claude-code
 
 ## 1. 架构概览
 

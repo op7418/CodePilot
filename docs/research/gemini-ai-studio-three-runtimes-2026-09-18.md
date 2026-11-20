@@ -116,4 +116,4 @@ Interactions 默认存储请求；`store:false` 时需自行完整重放状态�
 
 “写作不错”暂时是用户转述，未形成独立证据。建议用同一批真实题材盲测 3.8 Flash 与当前常用模型：中文文章、品牌语气、局部润色、长文续写；分别比较原生中性写作提示与各 Runtime 自身系统提示，记录约束遵循、套话、事实准确性、修改稳定性、延迟及成本。Runtime 的编程提示可能影响文风，不能将其差异全部归因于模型。
 
-以上是调研阶段结论。2026-09-18 用户随后授权先接 Native，现已完成产品代码与离线回归、本地 UI fixture smoke；详见 [Native 执行计划](../exec-plans/active/gemini-native-ai-studio.md)。仍未达到真实 API Smoke passed，未发版；其他 Runtime 不在本轮实现范围。
+以上是调研阶段结论。2026-09-18 用户随后授权先接 Native，现已完成产品代码与离线回归、本地 UI fixture smoke；详见 Native 执行计划。仍未达到真实 API Smoke passed，未发版；其他 Runtime 不在本轮实现范围。

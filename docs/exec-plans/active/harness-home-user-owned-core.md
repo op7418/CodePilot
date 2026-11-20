@@ -11,11 +11,11 @@
 | Program | 内容 | 状态 | 权威计划 |
 |---------|------|------|----------|
 | Shared Phase 0 | 基线、事实 inventory、enforcement anchors 与跨计划 contract 边界 | ✅ 完成；见 `docs/research/harness-home-v0.62-inventory-2026-07-30.md` | 本文件 |
-| 当前 P0 纵向切片 | 默认用户自有助理、heartbeat desired/actual 自愈、Electron 系统通知与点击闭环 | 🟡 Code complete + Tests pass + Review passed（本地范围）；packaged native/sound/click smoke 待验收 | [default-assistant-heartbeat-system-notification.md](default-assistant-heartbeat-system-notification.md) |
+| 当前 P0 纵向切片 | 默认用户自有助理、heartbeat desired/actual 自愈、Electron 系统通知与点击闭环 | 🟡 Code complete + Tests pass + Review passed（本地范围）；packaged native/sound/click smoke 待验收 | default-assistant-heartbeat-system-notification.md |
 | Program A | Harness Core、Canonical Repository、Harness/Runtime Adapter | 🟡 A1–A4 code/tests + review hardening 完成；真实凭据 Tier 2 smoke 待最终验收 | [harness-home-core-adapters.md](harness-home-core-adapters.md) |
 | Program B | 通用 Asset Library、materialization 与 lineage | 🟡 B0–B3 code/tests + 真实本地 Browser UI smoke + review hardening 完成；packaged app / 用户 human gate 待最终验收 | [harness-home-asset-library.md](harness-home-asset-library.md) |
 | Program C | Assistant service binding、统一 Capability Package/Broker、三 Runtime bridge 与 `creative` media/model reference package | 📋 按用户纠正与竞品调研重写，待 Claude Code 审查；P0 只门控自动服务，不限制文件读取 | [harness-home-context-capability-routing.md](harness-home-context-capability-routing.md) |
-| 历史 Design foundation | Method/Taste/creative-project schema/API/tests | 🗃️ foundation 保留；独立 Method v0/golden/human-gate 产品路线已被接管，不再从旧计划领任务 | [superseded/harness-home-design-method.md](../superseded/harness-home-design-method.md) |
+| 历史 Design foundation | Method/Taste/creative-project schema/API/tests | 🗃️ foundation 保留；独立 Method v0/golden/human-gate 产品路线已被接管，不再从旧计划领任务 | superseded/harness-home-design-method.md |
 | UI 信息架构 | Harness Home 不新增独立页面；素材继续在素材库，Assistant services 从助理入口激活；推荐/安装/来源暂缓 | ⏸️ 推荐页不在当前关键路径，等 Package/Broker smoke 后由用户重新排期 | Program C Deferred |
 
 ## 实施 commit 映射

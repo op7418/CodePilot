@@ -1,7 +1,5 @@
 # Agentic Architecture Map — Why
 
-> 技术边界见 [docs/handover/agentic-architecture-map.md](../handover/agentic-architecture-map.md)
-
 ## 为什么需要这份映射
 
 这次重构同时碰到了 Provider、Models、Runtime、Plugins、Chat、Health、Logs、Memory、Tasks。每个点单独看都是一个局部问题，但用户感受到的是同一件事：**系统到底会怎么执行我的任务，我应该在哪里管理能力，出问题时我该看哪里。**

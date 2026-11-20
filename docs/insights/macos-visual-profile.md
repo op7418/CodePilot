@@ -1,8 +1,7 @@
 # macOS 平台视觉层 — 产品思考
 
-> 技术实现见 [docs/handover/macos-visual-profile.md](../handover/macos-visual-profile.md)
 >
-> 对应执行计划：[docs/exec-plans/completed/phase-7b-macos-native-visual-profile.md](../exec-plans/completed/phase-7b-macos-native-visual-profile.md)（macOS 平台视觉）+ [docs/exec-plans/completed/phase-7c-card-primitive.md](../exec-plans/completed/phase-7c-card-primitive.md)（浮动卡片 primitive，已归档）
+> 对应执行计划：docs/exec-plans/completed/phase-7b-macos-native-visual-profile.md（macOS 平台视觉）+ docs/exec-plans/completed/phase-7c-card-primitive.md（浮动卡片 primitive，已归档）
 
 ## 解决的用户问题
 

@@ -1,7 +1,5 @@
 # 为什么聊天不再原地切 Runtime
 
-> 技术实现见 [docs/handover/runtime-thread-ownership-and-handoff.md](../handover/runtime-thread-ownership-and-handoff.md)
-
 ## 表面自由与真实结果不是一回事
 
 原来的交互很自由：聊天中随时点 Claude Code、CodePilot 或 Codex。但用户以为自己只是“换个引擎继续聊”，底层发生的事并不一致。

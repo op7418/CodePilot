@@ -1,7 +1,5 @@
 # 为什么先把遥测变可信，而不是先做用户分析
 
-> 技术实现见 [docs/handover/sentry-error-reporting.md](../handover/sentry-error-reporting.md)。
-
 用户最初看到的是“Sentry 报错很多”，但总量混合了开发环境、旧 release、衍生产品、用户配置错误和真实产品缺陷。此时增加更多采集只会让数字更大，不会让判断更准。
 
 这轮选择先做 U0：只回答“当前官方 stable 版本是否健康”。同一次应用运行只保留 Electron main 的一个 session，因此 crash-free sessions 与版本采用趋势有了相对稳定的分母；但它不代表真实用户，更不代表活跃用户。CodePilot 是托盘常驻应用，启动、驻留和有意义使用天然不是一回事，所以产品文案必须明确“不追踪功能使用、不识别用户”。

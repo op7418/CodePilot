@@ -2,7 +2,7 @@
 
 > 日期：2026-07-17；2026-07-20 按用户真实 UI smoke、Claude 独立审查与最新厂商文档复核
 > 性质：当前代码 + 官方资料 + 本地只读 POC 的调研基线；实现进度以关联 active plans 为准。
-> 关联计划：[模型目录与推理强度](../exec-plans/active/model-capability-reasoning-refresh.md) · [跨 Runtime 权限模式](../exec-plans/active/runtime-permission-modes.md) · [自动会话命名](../exec-plans/active/automatic-chat-titles.md)
+> 关联计划：[模型目录与推理强度](../exec-plans/active/model-capability-reasoning-refresh.md) · [跨 Runtime 权限模式](../exec-plans/active/runtime-permission-modes.md) · 自动会话命名
 
 ## 结论摘要
 

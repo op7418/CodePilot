@@ -1,7 +1,5 @@
 # 性能与内存优化 — 产品思考
 
-> 技术实现见 [docs/handover/performance-memory.md](../handover/performance-memory.md)
-
 ## 解决了什么用户问题
 
 ### 长对话卡顿

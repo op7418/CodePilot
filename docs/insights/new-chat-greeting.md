@@ -1,7 +1,5 @@
 # New-chat Greeting — Why
 
-> 技术实现见 [docs/handover/new-chat-greeting.md](../handover/new-chat-greeting.md)
-
 ## 解决什么问题
 
 旧欢迎语虽然在 6 句里随机轮换，但都是通用问句、和当下无关，读起来"死板"。希望首屏

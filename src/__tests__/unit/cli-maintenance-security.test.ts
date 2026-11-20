@@ -12,7 +12,6 @@ describe('CLI maintenance trust and lifecycle wiring', () => {
     const service = read('electron/cli-maintenance.ts');
     const runner = read('electron/cli-maintenance-runner.ts');
     const tombstone = read('src/app/api/claude-upgrade/route.ts');
-    const connection = read('src/components/layout/ConnectionStatus.tsx');
     const runtime = read('src/components/settings/RuntimePanel.tsx');
 
     assert.match(preload, /update:\s*\(provider:\s*CliProvider\)\s*=>\s*ipcRenderer\.invoke\('cli-maintenance:update', provider\)/);
@@ -20,7 +19,6 @@ describe('CLI maintenance trust and lifecycle wiring', () => {
     assert.doesNotMatch(preload, /cliMaintenance[\s\S]{0,900}(installType|binaryPath|executable|command:|args:|shell:|registry)/);
     assert.match(service, /trustedSender\(event\)[\s\S]*isCliProvider\(providerValue\)/);
     assert.match(runner, /shell:\s*false/);
-    assert.doesNotMatch(connection, /claude-upgrade|upgradeResult\.output|<pre/);
     assert.doesNotMatch(runtime, /claude-upgrade/);
     assert.match(tombstone, /status:\s*410/);
     assert.doesNotMatch(tombstone, /request\.json|execFile|spawn|getUpgradeCommand|stdout|stderr/);

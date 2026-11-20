@@ -1,6 +1,6 @@
 # Packaged 预览包运行时启动诊断（2026-05-31）
 
-> 关联执行计划：[`exec-plans/completed/preview-build-readiness.md`](../exec-plans/completed/preview-build-readiness.md) Phase 1 packaged P0（Codex app-server / ClaudeCode "准备运行环境"）。
+> 关联执行计划：`exec-plans/completed/preview-build-readiness.md` Phase 1 packaged P0（Codex app-server / ClaudeCode "准备运行环境"）。
 > 状态：**机制已从源码定位；根因待用户那台机器的「屏幕 reason 字符串 + app 日志」确认。** 本文给「症状 → 已确认机制 → 待确认点 → 需要哪几行日志」，确认后再决定改哪。
 
 在「打包新版、已装 Codex 的另一台 Mac」上复现两个问题：

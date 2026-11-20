@@ -43,7 +43,7 @@ T3 Code 最值得 CodePilot 借鉴的不是 UI，也不是把 Next.js / better-s
 
 ## 2. 拉取结果与分析边界
 
-T3 Code 已完整克隆到仓库根目录的 [`资料/t3code`](../../资料/t3code/README.md)，保留 Git 历史：
+T3 Code 已完整克隆到仓库根目录的 `资料/t3code`，保留 Git 历史：
 
 | 项目 | 结果 |
 |---|---|
@@ -292,7 +292,7 @@ CodePilot 的 [`runtime/contract.ts`](../../src/lib/runtime/contract.ts) 已定�
 
 ### T3 Code 的核心取舍
 
-[`Remote Architecture`](../../资料/t3code/docs/internals/remote.md) 把远程问题拆得很清楚：
+`Remote Architecture` 把远程问题拆得很清楚：
 
 - `ExecutionEnvironment` 是稳定身份，持有 Provider、项目、线程、终端、Git 和文件；
 - connection target 只有 primary / bearer / relay / SSH；Tailscale 是 endpoint provider，不是新 runtime 类型；
@@ -300,7 +300,7 @@ CodePilot 的 [`runtime/contract.ts`](../../src/lib/runtime/contract.ts) 已定�
 - RepositoryIdentity 只做跨环境分组，不用于路由；真正路由必须落到 environment-local project/thread；
 - server 是唯一执行事实源，远程不是另一套业务运行时。
 
-[`Connection Runtime`](../../资料/t3code/docs/internals/connection-runtime.md) 则把连接策略收口到一个 environment supervisor：
+`Connection Runtime` 则把连接策略收口到一个 environment supervisor：
 
 - transport 每次只尝试一次，supervisor 是唯一 retry owner；
 - offline 不消耗重试，transient failure 3/4/8/16 秒后持续重试，稳定 30 秒重置 backoff；
@@ -313,7 +313,7 @@ CodePilot 的 [`runtime/contract.ts`](../../src/lib/runtime/contract.ts) 已定�
 
 CodePilot 现有 [`mobile-remote-control-overall-plan.md`](./mobile-remote-control-overall-plan.md) 定义了 Host / Controller / Session / Lease、多读者单写者方向。Bridge 的 `/settings/bridge` 路由、多渠道 adapter、manager、permission broker 与流消费 owner gate 在源码中接线，相关针对性测试也存在；但本轮没有真实 IM 账号、真实 Provider 和移动设备验证，所以只能把它作为可复用候选，不能写成“已成熟 / 已验证远程消息、审批和流式回复”。
 
-但当前源码仍默认监听 `127.0.0.1`，API 假设本地可信 UI。更重要的是，[`ARCHITECTURE.md`](../../ARCHITECTURE.md) 声称存在 `src/lib/remote/types.ts`、`remote-manager.ts` 和 `index.ts`，当前检出中 `src/lib/remote/` 实际不存在。这应被视为文档漂移和 Remote Core 尚未形成生产事实，而不是“骨架已完成”。
+但当前源码仍默认监听 `127.0.0.1`，API 假设本地可信 UI。更重要的是，`ARCHITECTURE.md` 声称存在 `src/lib/remote/types.ts`、`remote-manager.ts` 和 `index.ts`，当前检出中 `src/lib/remote/` 实际不存在。这应被视为文档漂移和 Remote Core 尚未形成生产事实，而不是“骨架已完成”。
 
 ### 建议落地顺序
 
@@ -327,7 +327,7 @@ Bridge 应成为 `ControllerAdapter` / channel surface：它消费 Remote Core �
 
 ### 认证必须先于监听地址变化
 
-T3 的 [`environment-auth.md`](../../资料/t3code/docs/internals/environment-auth.md) 和 [`RpcAuthorization.ts`](../../资料/t3code/apps/server/src/auth/RpcAuthorization.ts) 有四个值得直接采用的原则：
+T3 的 `environment-auth.md` 和 [`RpcAuthorization.ts`](../../资料/t3code/apps/server/src/auth/RpcAuthorization.ts) 有四个值得直接采用的原则：
 
 - 每个 RPC method 都必须在一个穷尽 scope map 中登记；漏登记是类型错误或 fail closed；
 - pairing credential 一次性，设备 session 可撤销；
@@ -414,7 +414,7 @@ T3 的 denylist 分类也值得参考：Provider 对 agent-flavored task type �
 
 ## 13. P2：资源诊断按需增强，不立即复制 Rust sidecar
 
-T3 的 [`resource-telemetry.md`](../../资料/t3code/docs/internals/resource-telemetry.md) 是很完整的长期参考：独立 Rust sidecar 通过 `sysinfo` 采集进程树，使用 `(pid, startTime)` 识别进程，历史在 sidecar 内有界保存，只有诊断页打开才向 Node 流式传输；Electron `app.getAppMetrics()` 同样按需开启。sidecar 崩溃不会破坏 Node，且可以独立监督、重启和 version-check。
+T3 的 `resource-telemetry.md` 是很完整的长期参考：独立 Rust sidecar 通过 `sysinfo` 采集进程树，使用 `(pid, startTime)` 识别进程，历史在 sidecar 内有界保存，只有诊断页打开才向 Node 流式传输；Electron `app.getAppMetrics()` 同样按需开启。sidecar 崩溃不会破坏 Node，且可以独立监督、重启和 version-check。
 
 当前 HEAD 已提交 packaged utility 的 RSS/heap、Electron working set/CPU、host memory、fatal exit 诊断、safe-mode recovery 和 opt-in packaged smoke 脚本。它证明实现与验证入口存在，但本轮没有对应 CI run、发布包日志、Sentry 事件或真实异常退出产物，不能写成“生产退出证据已经覆盖”。在取得这些证据前，不应因看到 T3 就另开一套并行 telemetry 重写。
 
@@ -496,13 +496,13 @@ T3 仓库最稳定、最可迁移的资产其实是一组工程约束：
 
 ### 建议重点精读
 
-- [`docs/internals/overview.md`](../../资料/t3code/docs/internals/overview.md)：server-authoritative + orchestration 总览。
+- `docs/internals/overview.md`：server-authoritative + orchestration 总览。
 - [`OrchestrationEngine.ts`](../../资料/t3code/apps/server/src/orchestration/Layers/OrchestrationEngine.ts)：receipt、transaction、commit 后广播和失败 reconcile。
 - [`ProviderAdapter.ts`](../../资料/t3code/apps/server/src/provider/Services/ProviderAdapter.ts) / [`ProviderDriver.ts`](../../资料/t3code/apps/server/src/provider/ProviderDriver.ts)：控制面与多实例边界。
 - [`CheckpointStore.ts`](../../资料/t3code/apps/server/src/checkpointing/CheckpointStore.ts) / [`GitVcsDriver.ts`](../../资料/t3code/apps/server/src/vcs/GitVcsDriver.ts)：isolated index + hidden ref。
 - [`terminal.ts`](../../资料/t3code/packages/contracts/src/terminal.ts) / [`terminal/Manager.ts`](../../资料/t3code/apps/server/src/terminal/Manager.ts)：snapshot/live attach 与历史所有权。
-- [`connection-runtime.md`](../../资料/t3code/docs/internals/connection-runtime.md) / [`supervisor.ts`](../../资料/t3code/packages/client-runtime/src/connection/supervisor.ts)：单一 retry owner。
-- [`environment-auth.md`](../../资料/t3code/docs/internals/environment-auth.md) / [`RpcAuthorization.ts`](../../资料/t3code/apps/server/src/auth/RpcAuthorization.ts)：配对、ticket、scope fail-closed。
+- `connection-runtime.md` / [`supervisor.ts`](../../资料/t3code/packages/client-runtime/src/connection/supervisor.ts)：单一 retry owner。
+- `environment-auth.md` / [`RpcAuthorization.ts`](../../资料/t3code/apps/server/src/auth/RpcAuthorization.ts)：配对、ticket、scope fail-closed。
 - [`previewAutomation.ts`](../../资料/t3code/packages/contracts/src/previewAutomation.ts) / [`PreviewAutomationBroker.ts`](../../资料/t3code/apps/server/src/mcp/PreviewAutomationBroker.ts)：Agent 与人共享 browser surface。
 - [`MessagesTimeline.logic.ts`](../../资料/t3code/apps/web/src/components/chat/MessagesTimeline.logic.ts)：derived row structural sharing。
 - [`DrainableWorker.ts`](../../资料/t3code/packages/shared/src/DrainableWorker.ts) / [`KeyedCoalescingWorker.ts`](../../资料/t3code/packages/shared/src/KeyedCoalescingWorker.ts)：确定性异步与最新值合并。
@@ -515,7 +515,7 @@ T3 仓库最稳定、最可迁移的资产其实是一组工程约束：
 - [`electron/terminal-manager.ts`](../../electron/terminal-manager.ts) / [`useTerminal.ts`](../../src/hooks/useTerminal.ts)：仅作为遗留骨架审计；即使未来接入，仍有非 PTY 和组件卸载即 kill 的问题。
 - [`MessageList.tsx`](../../src/components/chat/MessageList.tsx)：已虚拟化，只补结构共享。
 - [`PreviewPanel.tsx`](../../src/components/layout/panels/PreviewPanel.tsx)：文件 Artifact 能力应保留，与 live app preview 并列。
-- [`same-runtime-multi-model-subagents.md`](../handover/same-runtime-multi-model-subagents.md)：Sub-agent 设计 / 交接基线；必须继续用源码、测试和真实 Provider 证据校验，不能单独作为可用性证明。
+- `same-runtime-multi-model-subagents.md`：Sub-agent 设计 / 交接基线；必须继续用源码、测试和真实 Provider 证据校验，不能单独作为可用性证明。
 - [`mobile-remote-control-overall-plan.md`](./mobile-remote-control-overall-plan.md)：Remote Core 方向正确，但需以实际源码状态重新标记阶段。
 
 ## 18. 许可证与复用边界

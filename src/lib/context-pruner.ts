@@ -226,22 +226,3 @@ export function estimateTokens(messages: ModelMessage[]): number {
   // Rough estimate: mix of English (~4 chars/token) and code (~3.5 chars/token)
   return Math.ceil(chars / 3.5);
 }
-
-/**
- * Check if the message history exceeds a token threshold.
- *
- * @deprecated This function is dead code — it was a placeholder for
- * wiring auto-compact into the agent loop, but never had a caller.
- * The actual auto-compact check lives in `context-compressor.ts` as
- * `needsCompression(estimatedTokens, contextWindow, sessionId)`, which
- * includes a circuit breaker for repeated compression failures and is
- * wired at the chat API route entry point (src/app/api/chat/route.ts).
- *
- * Kept for backwards compatibility. New code should use
- * `needsCompression` from `./context-compressor` instead.
- */
-export function shouldAutoCompact(messages: ModelMessage[], contextWindowTokens: number): boolean {
-  const estimated = estimateTokens(messages);
-  // Trigger at 80% of context window
-  return estimated > contextWindowTokens * 0.8;
-}

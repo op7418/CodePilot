@@ -262,40 +262,6 @@ for (const name of listMd(ACTIVE_DIR).filter((f) => f !== 'README.md')) {
   }
 }
 
-// Step 5 (development-harness-optimization): NEW active plans must carry a
-// `## Smoke Ledger` section so real-credential / UI / E2E results live in the
-// plan, not scattered in chat. Grandfather clause: every active plan that
-// existed when this rule landed (2026-06-28) is exempt — only plans added AFTER
-// must include it. A genuinely smoke-free new plan (pure tracker / meta) can be
-// added to SMOKE_LEDGER_GRANDFATHERED with a one-line reason.
-const SMOKE_LEDGER_GRANDFATHERED = new Set([
-  'codebase-health-audit-2026-06.md',
-  'codex-stop-recovery.md',
-  'development-harness-optimization.md', // meta plan about the harness itself; no runtime smoke
-  'issue-tracker.md', // long-lived board, not a phase plan
-  'log-bloat-codex-runtime-crash.md',
-  'mimo-ultraspeed-openai-compatible-provider.md',
-  'post-0.55.1-issue-triage.md',
-  'v0.56.x-stability-trust.md',
-]);
-// Inline self-check: the heading detector matches a real `## Smoke Ledger`
-// heading and stays silent on a prose mention.
-if (!/^##\s+Smoke Ledger/m.test('## Smoke Ledger\n\n| Date |')) {
-  errors.push('lint self-check FAILED: `## Smoke Ledger` heading was not detected');
-}
-if (/^##\s+Smoke Ledger/m.test('See the Smoke Ledger table below.')) {
-  errors.push('lint self-check FAILED: a prose mention of Smoke Ledger was matched as a heading');
-}
-for (const smokeName of listMd(ACTIVE_DIR).filter((f) => f !== 'README.md')) {
-  if (SMOKE_LEDGER_GRANDFATHERED.has(smokeName)) continue;
-  const text = fs.readFileSync(path.join(ACTIVE_DIR, smokeName), 'utf8');
-  if (!/^##\s+Smoke Ledger/m.test(text)) {
-    errors.push(
-      `New active plan missing Smoke Ledger: docs/exec-plans/active/${smokeName} must include a "## Smoke Ledger" section (Step 5 of development-harness-optimization — real smoke results belong in the plan, not chat). Copy it from the template in docs/exec-plans/README.md. If this plan genuinely needs no smoke (pure tracker / meta), add it to SMOKE_LEDGER_GRANDFATHERED with a reason.`,
-    );
-  }
-}
-
 if (errors.length > 0) {
   console.error('\n[lint:docs-drift] FAILED — docs/exec-plans is out of sync:\n');
   for (const e of errors) console.error('  - ' + e);

@@ -1,7 +1,6 @@
 # Chat Run Checkpoint — 产品思考（Round 1）
 
-> 技术实现见 [docs/handover/chat-run-checkpoint.md](../handover/chat-run-checkpoint.md)
-> 执行计划见 [docs/exec-plans/deferred/chat-run-checkpoint.md](../exec-plans/deferred/chat-run-checkpoint.md)
+> 执行计划见 docs/exec-plans/deferred/chat-run-checkpoint.md
 
 ## 用户问题
 
@@ -71,5 +70,5 @@ Round 1 不动 PermissionPrompt 的状态机，只是**承认"它跟 RunCheckpoi
 ## 参考
 
 - [Chat 页设计原则](./chat-composer-redesign.md#chat-页设计原则) §3：保护用户的硬性规则不要被用户关掉
-- [feedback_no_silent_auto_irreversible.md](../../../../.claude/projects/-Users-op7418-Documents-code-opus-4-6-test/memory/feedback_no_silent_auto_irreversible.md)：无 silent auto 操作
-- [feedback_pinned_default_hard_promise.md](../../../../.claude/projects/-Users-op7418-Documents-code-opus-4-6-test/memory/feedback_pinned_default_hard_promise.md)：Pinned 是硬约定
+- feedback_no_silent_auto_irreversible.md：无 silent auto 操作
+- feedback_pinned_default_hard_promise.md：Pinned 是硬约定

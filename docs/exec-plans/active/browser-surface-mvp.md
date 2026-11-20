@@ -5,7 +5,7 @@
 > 状态：🟡 **Code complete / macOS dev smoke passed**；packaged、Windows/Linux、下载与 tab 恢复仍待执行
 > 风险等级：Tier 2（Electron Main / 远端内容 / 权限 / IPC / 下载 / 持久化 session）
 > 事实基线：[T3 Code 模型输入区、统一侧边栏与内置浏览器专项调研](../../research/t3code-composer-sidebar-browser-ux-2026-08-25.md)
-> 上游依赖：[Workspace Surface Sidebar](workspace-surface-sidebar-pin-and-inspector.md) Phase 1；[Browser WebContentsView POC](browser-webcontentsview-poc.md) 保留为被路线取代的研究证据
+> 上游依赖：[Workspace Surface Sidebar](workspace-surface-sidebar-pin-and-inspector.md) Phase 1；Browser WebContentsView POC 保留为被路线取代的研究证据
 
 ## 用户问题与争议
 
@@ -211,7 +211,7 @@ CodePilot 的主窗口有 transparent/vibrancy、Renderer overlay、三 Runtime 
 
 - [x] 更新 [ElectronMain guardrail](../../guardrails/ElectronMain.md)：`<webview>` attach gate、窄 IPC、guest hardening、navigation/download。
 - [x] 更新 [PermissionBoundary guardrail](../../guardrails/PermissionBoundary.md)：网页权限与 Agent 权限隔离、默认拒绝。
-- [x] 更新 [ARCHITECTURE.md](../../../ARCHITECTURE.md)：Browser Main/Renderer 数据流、SurfaceRegistry、partition 与 state owner。
+- [x] 更新 ARCHITECTURE.md：Browser Main/Renderer 数据流、SurfaceRegistry、partition 与 state owner。
 - [x] 更新本计划状态、决策日志、Smoke Ledger；POC 保留为 superseded research breadcrumb。
 - [x] Browser availability 从 POC gate 改为 Electron bridge 后，同步回写 [WorkspaceSidebar guardrail](../../guardrails/WorkspaceSidebar.md)；其余 Sidebar 状态合同仍由上游计划认领。
 

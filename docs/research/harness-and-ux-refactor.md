@@ -1,6 +1,6 @@
 # Harness 思考与交互重构 — 事实输入文档
 
-> **本文档已不再承担排期职责。** 唯一执行入口为 [`docs/exec-plans/superseded/agent-trust-ownership-refactor.md`](../exec-plans/superseded/agent-trust-ownership-refactor.md)(Agent Trust & Ownership Refactor)。本文剩余内容仅作为该计划 Phase 0-4 的**事实输入**保留:
+> **本文档已不再承担排期职责。** 唯一执行入口为 `docs/exec-plans/superseded/agent-trust-ownership-refactor.md`(Agent Trust & Ownership Refactor)。本文剩余内容仅作为该计划 Phase 0-4 的**事实输入**保留:
 >
 > - §"事实速览" 1-10:Harness 各层代码现状、记忆系统 V3、Hermes 路线图进度——作为 Phase 2 / Phase 4 实施输入
 > - §"Google design.md 事实速览":作为 Phase 1 design.md 写作参考

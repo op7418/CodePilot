@@ -20,7 +20,7 @@
 - CodePilot Full Reference Implementation；
 - write model、SecretStore 和 conformance。
 
-Asset DB/Gallery 演进见 [harness-home-asset-library.md](harness-home-asset-library.md)；当前 Assistant service binding、统一 Capability Package/Broker 与 `creative` media/model reference package 见 [harness-home-context-capability-routing.md](harness-home-context-capability-routing.md)。旧 Design Method 独立产品化计划已移入 [superseded](../superseded/harness-home-design-method.md)，不得从中领取剩余任务。
+Asset DB/Gallery 演进见 [harness-home-asset-library.md](harness-home-asset-library.md)；当前 Assistant service binding、统一 Capability Package/Broker 与 `creative` media/model reference package 见 [harness-home-context-capability-routing.md](harness-home-context-capability-routing.md)。旧 Design Method 独立产品化计划已移入 superseded，不得从中领取剩余任务。
 
 ## 状态
 

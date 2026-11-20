@@ -147,6 +147,7 @@
 - 不要把 `JSON.parse(token_usage)` 的结果直接断言成 `TokenUsage`；数据库 JSON 可合法但缺字段，UI 会在 `toLocaleString()` 二次崩溃。缺真实输入/输出计数时隐藏统计。
 - 不要把 message insert、session timestamp 和回读拆成三个自动提交语句，再用 `as Message` 假定回读必有值；必须事务内验证真实 row，失败回滚并抛稳定产品错误。
 - 不要把 renderer fetch 的断连当成用户 Stop。页面切换会自然 abort 客户端请求，但 server collector 应继续完成并持久化；取消权必须来自显式 `/api/chat/interrupt`。
+- 排查 Codex Runtime 的 stop / abort 后卡死时先看四点（前两点常是同一根因：composer 的 `isStreaming` gate ≡ `snapshot.phase === 'active'`，见 `src/lib/stream-session-manager.ts`）：① Codex app-server 进程是否还活着（`src/lib/codex/app-server-manager.ts`）；② `streamSnapshot.phase` 是否停在 `active` 没翻到终态；③ `sendMessage` 是否被 `isStreaming` 队列 gate 卡住（GitHub #578）；④ interrupt 后 thread / turn 是否未关闭。
 - 不要假设 schema 模块初始化等于真正的进程启动；Next route/module duplication 会在活进程中重复执行初始化，restart recovery 必须由独立的进程 owner 守门。
 - 不要只把 parent sessionId 放进 child permission event；独立 subprocess 没有归属字段时，多个 child 的 Write/Bash 提示看起来完全相同。
 - 不要给活跃 child 使用固定墙钟 timeout；工具调用、assistant 消息等 SDK activity 都是仍在工作的事实。必须保留 hard cap，防止持续噪声让 run 永不终止。

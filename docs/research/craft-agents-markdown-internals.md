@@ -5,7 +5,7 @@
 > 姊妹文档：
 > - [markdown-editor-tiptap-evaluation.md](./markdown-editor-tiptap-evaluation.md) — CodePilot 自己的 Markdown 栈与 Tiptap 可行性
 > - [artifact-preview-ai-elements.md](./artifact-preview-ai-elements.md) — Artifact 预览（本文发现的"代码块 language 拦截"是另一条轻量路径）
-> - [craft-agents-docs-system-review.md](./craft-agents-docs-system-review.md) — craft 对外治理文档对标
+> - craft-agents-docs-system-review.md — craft 对外治理文档对标
 >
 > 三层结构：**[craft 事实]** 带 `file:line`；**[CodePilot 事实]** 带本仓库路径；**[推断]** 标注。
 

@@ -5,7 +5,7 @@
 > 状态：📋 按用户纠正与竞品调研重写完成，待 Claude Code 审查；尚未授权进入代码实施
 > 父计划：[harness-home-user-owned-core.md](harness-home-user-owned-core.md)
 > 研究依据：[harness-home-capability-creative-systems-2026-08-04.md](../../research/harness-home-capability-creative-systems-2026-08-04.md)
-> 接管：[旧 Design Method Program](../superseded/harness-home-design-method.md) 的未完成产品化方向；已落地的 Method/Taste/creative-project foundation 保留兼容，但不再作为独立产品主线
+> 接管：旧 Design Method Program 的未完成产品化方向；已落地的 Method/Taste/creative-project foundation 保留兼容，但不再作为独立产品主线
 > 实施基线：`main@979fda51`，`package.json=0.65.0`
 
 ## 1. 用户问题与本轮纠正

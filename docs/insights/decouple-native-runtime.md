@@ -1,4 +1,3 @@
-> 技术实现见 [docs/handover/decouple-native-runtime.md](../handover/decouple-native-runtime.md)
 
 # 脱离 Claude Code — 产品思考
 

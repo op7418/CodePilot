@@ -1,6 +1,6 @@
 # Models / Providers 体验收敛
 
-对应交接文档：[handover/models-provider-experience.md](../handover/models-provider-experience.md)
+对应交接文档：handover/models-provider-experience.md
 
 ## 背景
 

@@ -1,7 +1,5 @@
 # CodePilot Tool Bridge — Why
 
-> 技术实现见 [docs/handover/codex-tool-bridge.md](../handover/codex-tool-bridge.md)
-
 ## 问题信号
 
 2026-05-16 真实 smoke：

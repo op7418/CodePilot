@@ -19,10 +19,9 @@ v0.56.x 处于 Stability / Trust 阶段：优先合 P0/P1 bug 修复，功能 PR
 <!-- 截图或日志；响应式/主题相关给多态 -->
 
 ## 自查清单 / Checklist
-<!-- 改动自查见 CLAUDE.md「改动自查」与 AGENTS.md 角色边界，不在此复制一份维护 -->
 - [ ] 涉及 i18n → 已同步 `src/i18n/en.ts` 与 `zh.ts`
 - [ ] 涉及 DB → 已在 `src/lib/db.ts` 更新 schema 迁移（且不删用户数据）
 - [ ] 涉及类型 → 已更新 `src/types/index.ts`
 - [ ] 涉及文档 → 已更新 `docs/` 对应交接/索引
 - [ ] `npm run test` 通过（typecheck + 单元）
-- [ ] 已读 [CLAUDE.md](../CLAUDE.md) 验证分层与 [AGENTS.md](../AGENTS.md) 角色边界，本 PR 符合
+- [ ] 已读 [AGENTS.md](../AGENTS.md)，涉及的模块已对照 `docs/guardrails/`

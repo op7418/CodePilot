@@ -4,7 +4,7 @@
 > 最后更新：2026-08-07
 > 总状态：🟡 Code complete + Tests pass + Review passed；Windows packaged smoke 待执行
 > 触发信号：Windows 跨机改动进入 `main` 后，Claude 独立审查确认 4 个 P1：Provider 密钥迁移可阻断启动、无 ripgrep 的正则回退可阻塞服务、POSIX `//`/macOS `/mnt` 被误判为 Windows/WSL 路径、非 Windows Runtime 页面展示 PowerShell 安装指引。
-> 前序计划：[Windows Runtime 诊断、恢复与凭据加固](../completed/windows-runtime-recovery-hardening.md)；[Windows Runtime / 路径兼容性](../completed/windows-runtime-path-compatibility.md)
+> 前序计划：Windows Runtime 诊断、恢复与凭据加固；Windows Runtime / 路径兼容性
 
 ## 状态
 

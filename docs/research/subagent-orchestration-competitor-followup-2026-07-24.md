@@ -3,7 +3,7 @@
 > 调研日期：2026-07-24
 > 状态：调研归档；2026-07-24 根据真实依赖链事故追加 structured workflow 复核，落地事实以 active exec plan 为准
 > 承接：[多 Runtime / 多模型 Sub-agent 协作可行性调研](./cross-runtime-multi-agent-orchestration-2026-07-22.md)
-> 当前实现事实源：[同 Runtime 多模型 Sub-agent MVP 执行计划](../exec-plans/active/same-runtime-multi-model-subagents.md)
+> 当前实现事实源：同 Runtime 多模型 Sub-agent MVP 执行计划
 
 ## 一、结论
 
@@ -164,7 +164,7 @@ Cline Agent Teams 则是另一层：协调者、共享任务板、inter-agent ma
 
 ## 三、调研识别的问题与 P0 落地状态
 
-以下条目保留当时的设计判断，同时补充 2026-07-24 P0 已落地的事实。执行状态、验证证据与未结项以 [active exec plan](../exec-plans/active/same-runtime-multi-model-subagents.md) 为准，不能用 research 文档代替。
+以下条目保留当时的设计判断，同时补充 2026-07-24 P0 已落地的事实。执行状态、验证证据与未结项以 active exec plan 为准，不能用 research 文档代替。
 
 ### 3.1 逻辑任务与物理调用没有完全分层
 

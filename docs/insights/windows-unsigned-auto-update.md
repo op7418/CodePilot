@@ -1,7 +1,5 @@
 # 为什么 Windows 自动更新选择“无签名但不装作可信发布者”
 
-> 技术实现见 [Windows 无签名自动更新技术交接](../handover/windows-unsigned-auto-update.md)。
-
 ## 用户要解决的不是证书问题
 
 用户的核心目标是：Windows 版本能像 Mac 一样在应用内发现、下载并完成升级，但不想进入 Microsoft/Azure Trusted Signing 或 PFX 证书申请流程。这里最容易混淆的两件事是“安装器有写入权限”和“安装器是谁发布的”：per-user NSIS 可以在没有证书时更新文件，证书则为系统和客户端提供独立发布者身份。

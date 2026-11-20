@@ -1,7 +1,5 @@
 # 上下文管理系统 — 产品思考
 
-> 技术实现见 [docs/handover/context-management.md](../handover/context-management.md)
-
 ## 解决了什么问题
 
 长对话是 AI 编程助手的核心使用场景。用户在一个 session 里调试 bug、重构代码、讨论架构，往往需要几十甚至上百轮对话。但 LLM 的上下文窗口是有限的，超出后要么报错（PTL），要么丢失早期上下文导致 AI "失忆"。

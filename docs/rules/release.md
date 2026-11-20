@@ -1,9 +1,8 @@
 # 发版 / Release
 
-> 从 `CLAUDE.md` 顶层拆出的完整发版细则。顶层只留：发版流程一句话摘要 + **发版纪律**（硬规则）+ 指到这里。
-> 发版时读这份。
+> 发版时读这份。硬规则同时写在根目录 `AGENTS.md`。
 
-## 发版纪律（硬规则，顶层也保留）
+## 发版纪律（硬规则）
 
 - **禁止自动发版**：`git push` + `git tag` 必须等用户明确指示后才执行。commit 可以正常进行。
 - 不要手动创建 GitHub Release（CI 会自动创建并上传构建产物）。
@@ -30,7 +29,7 @@ electron-builder 与 electron-updater 都使用 exact pin。macOS job 必须上�
 3. `push tag` 只表示 CI 已触发，不表示 Shipped。发布者必须跟踪 workflow 终态，并在公开 Release 上复核：非 draft、非 prerelease、Latest=true、版本正确、Linux 手动包齐全、没有 `latest-linux*.yml`、两份 metadata 的 version/URL/sha512/size 与公开 installer 一致，且各自外置 blockmap 存在并进入 checksum。
 4. 任一检查失败时保留不可变失败 tag；修复后递增 patch 重新发布。禁止删除/移动 tag、覆盖同版本资产或手工改 metadata。
 5. Windows 已发布 `v0.67.7` 及更早版本没有 official updater provenance；首个 Windows updater 版本必须由用户手动 bootstrap，随后版本才允许记 RC-A→RC-B 自动/差分 smoke。
-6. 任何签名、更新 channel、平台资产图或自动更新能力变更，都必须同步本文件、根目录 `CLAUDE.md`、`AGENTS.md`、`README.md` 与当版 `RELEASE_NOTES.md`。
+6. 任何签名、更新 channel、平台资产图或自动更新能力变更，都必须同步本文件、`README.md` 与当版 `RELEASE_NOTES.md`。
 
 Linux AppImage/deb/rpm 当前提供 checksum/attestation 与手工安装，不宣称后台自动安装。建立受信 GPG repository 或独立签名 manifest、完成真实 upgrade smoke 前，应用不得静默执行包管理器或提权安装。
 

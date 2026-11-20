@@ -1,7 +1,5 @@
 # CLI 升级 + 代理透传 — 产品思考
 
-> 技术实现见 [docs/handover/cli-upgrade-proxy.md](../handover/cli-upgrade-proxy.md)
-
 ## 解决什么用户问题
 
 ### P0：CLI 版本过旧导致 exit code 1

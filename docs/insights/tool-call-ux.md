@@ -1,7 +1,5 @@
 # 工具调用 UX 优化 — 产品思考
 
-> 技术实现见 [docs/handover/tool-call-ux.md](../handover/tool-call-ux.md)
-
 ## 解决了什么用户问题
 
 ### 1. "AI 在干嘛我不知道"

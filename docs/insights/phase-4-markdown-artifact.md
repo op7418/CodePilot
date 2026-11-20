@@ -1,7 +1,6 @@
 # Phase 4 — Markdown 数据层 / Artifact 表现层 / 工程引用 — 产品思考
 
-> 技术实现见 [docs/handover/phase-4-markdown-artifact.md](../handover/phase-4-markdown-artifact.md)
-> 执行计划归档于 [docs/exec-plans/completed/phase-4-markdown-artifact.md](../exec-plans/completed/phase-4-markdown-artifact.md)
+> 执行计划归档于 docs/exec-plans/completed/phase-4-markdown-artifact.md
 > 前置批次的产品判断见 [markdown-artifact-overhaul.md](./markdown-artifact-overhaul.md)
 
 这份文档回答"为什么这样做，而不是其他方式"。技术细节看 handover；本文只写思路。

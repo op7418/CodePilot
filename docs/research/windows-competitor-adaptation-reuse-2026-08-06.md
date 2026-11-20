@@ -1,10 +1,10 @@
 # Windows 竞品适配可借鉴矩阵（2026-08-06）
 
-> 对应修复交接：[Windows Runtime / 路径兼容性修复交接与复查手册](../handover/windows-runtime-path-compatibility-review.md)
+> 对应修复交接：Windows Runtime / 路径兼容性修复交接与复查手册
 >
 > 本文目标不是罗列竞品功能，而是回答：哪些原则 CodePilot 已经吸收、哪些值得继续立项、哪些实现不能照搬。当前实现基线为 commit `b70c0c10`。
 
-> 2026-08-06 实施回写：本文列出的 P0/P1 已进入 [Windows Runtime 诊断、恢复与凭据加固交接](../handover/windows-runtime-recovery-hardening.md)：Path Identity、三 Runtime Doctor、Codex sandbox 分层状态、Provider secret envelope encryption，以及复制固定官方命令并打开 PowerShell 的恢复入口。真实 standalone Codex/sandbox child 和跨 OS keyring 仍按交接文档标为待真机复查，不能因代码落地改写为已验证。
+> 2026-08-06 实施回写：本文列出的 P0/P1 已进入 Windows Runtime 诊断、恢复与凭据加固交接：Path Identity、三 Runtime Doctor、Codex sandbox 分层状态、Provider secret envelope encryption，以及复制固定官方命令并打开 PowerShell 的恢复入口。真实 standalone Codex/sandbox child 和跨 OS keyring 仍按交接文档标为待真机复查，不能因代码落地改写为已验证。
 
 ## 一、证据范围
 

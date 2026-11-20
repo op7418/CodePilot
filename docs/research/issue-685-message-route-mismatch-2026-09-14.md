@@ -63,4 +63,4 @@
 
 ## 2026-09-14 实施回写
 
-用户随后明确授权修复，已落实停止覆盖与只读 legacy identity 兼容，详见 [执行记录](../exec-plans/completed/issue-685-route-identity.md)。上文“未修改产品代码”和临时期待 409 的 characterization 描述诊断时点；当前正式回归已断言新会话保持 route、旧会话同模型续聊成功。无 UI 变化，使用真实 POST 两回合验证服务端行为；没有把 HTTP handler fixture 声称为真实 Windows / SDK smoke。原建议中的数据库迁移未采用，选择不改 route/revision 的只读兼容。
+用户随后明确授权修复，已落实停止覆盖与只读 legacy identity 兼容，详见 执行记录。上文“未修改产品代码”和临时期待 409 的 characterization 描述诊断时点；当前正式回归已断言新会话保持 route、旧会话同模型续聊成功。无 UI 变化，使用真实 POST 两回合验证服务端行为；没有把 HTTP handler fixture 声称为真实 Windows / SDK smoke。原建议中的数据库迁移未采用，选择不改 route/revision 的只读兼容。

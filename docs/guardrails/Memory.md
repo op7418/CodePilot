@@ -1,6 +1,6 @@
 # Memory Guardrail
 
-> Active contract，2026-09-22。实现与验证进度见 [执行计划](../exec-plans/active/memory-runtime-decoupling.md)。修改查询、记忆工具、记录存储、自动抽取或管理 UI 前必读。
+> Active contract，2026-09-22。实现与验证进度见 执行计划。修改查询、记忆工具、记录存储、自动抽取或管理 UI 前必读。
 
 ## 1. 词汇表
 

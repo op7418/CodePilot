@@ -1,6 +1,5 @@
 # Windows Runtime 恢复为什么不能只做“多加几个路径”
 
-> 技术实现见 [Windows Runtime 诊断、恢复与凭据加固交接](../handover/windows-runtime-recovery-hardening.md)。
 > 竞品依据见 [Windows 竞品适配可借鉴矩阵](../research/windows-competitor-adaptation-reuse-2026-08-06.md)。
 
 ## 用户真正遇到的是一条执行链，而不是一个路径 bug

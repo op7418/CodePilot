@@ -221,7 +221,7 @@ CodePilot 的自我定位是 **"A desktop GUI for Claude Code"**，但数据显�
 
 ### 服务商适配问题归因（架构审查后修正）
 
-> 技术细节见 [docs/handover/provider-architecture.md](../handover/provider-architecture.md)
+> 技术细节见 docs/handover/provider-architecture.md
 
 原始数据显示 100+ 个 Issue 与服务商适配相关。经源码审查和官方文档对照，问题**并非全部是 CodePilot 的责任**，归因为三类：
 
@@ -250,7 +250,7 @@ CodePilot 的自我定位是 **"A desktop GUI for Claude Code"**，但数据显�
 | 项目 | 状态 | 说明 |
 |------|------|------|
 | README 重构 | **已完成** | 定位、badges、下载前置、服务商表格、Agent 叙事 |
-| 服务商架构文档 | **已完成** | 18 服务商对照、Claude Code 源码分析、preset 错配识别 → [handover/provider-architecture.md](../handover/provider-architecture.md) |
+| 服务商架构文档 | **已完成** | 18 服务商对照、Claude Code 源码分析、preset 错配识别 → handover/provider-architecture.md |
 | preset authStyle 修正 | **已完成** | 6 个 preset 对齐官方文档 + Zod Schema 防护 + 61 个回归测试 |
 | ~~`PROVIDER_MANAGED_BY_HOST` 接入~~ → per-request shadow HOME | **已修复（2026-04-15）** | 核查 SDK 0.2.62 死代码已删；改用 `src/lib/claude-home-shadow.ts` 在 DB provider 请求里建剥离 ANTHROPIC_* 的临时 `~/.claude/`，user-level MCP/plugins/hooks 全部保留 |
 | api_key 模式不再双注入 | **已完成** | api_key 只设 ANTHROPIC_API_KEY，不再设 AUTH_TOKEN |
@@ -268,4 +268,4 @@ CodePilot 的自我定位是 **"A desktop GUI for Claude Code"**，但数据显�
 
 - 项目由单人创始人独立运营，全部开发通过 AI 协助完成（Vibe Coding），创始人不直接编写代码
 - 功能层面已基本堆叠完毕，当前阶段重点是细节打磨、稳定性提升和品牌重塑
-- 服务商模块已完成系统级治理（6 Phase 全部完成）——后续改动应参照 [handover/provider-architecture.md](../handover/provider-architecture.md) 和 [exec-plans/completed/provider-governance.md](../exec-plans/completed/provider-governance.md)
+- 服务商模块已完成系统级治理（6 Phase 全部完成）——后续改动应参照 handover/provider-architecture.md 和 exec-plans/completed/provider-governance.md

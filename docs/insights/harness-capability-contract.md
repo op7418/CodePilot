@@ -1,6 +1,5 @@
 # Harness Capability Contract — Why
 
-> 技术实现见 [docs/handover/harness-capability-contract.md](../handover/harness-capability-contract.md)
 > 相关：[docs/insights/codex-tool-bridge.md](./codex-tool-bridge.md)（Phase 5c bridge 的产品视角）
 
 ## 为什么不再是"再补一条 prompt"

@@ -1,7 +1,5 @@
 # Chat Composer Redesign — Why（April 2026）
 
-> 技术实现见 [docs/handover/chat-composer-redesign.md](../handover/chat-composer-redesign.md)
-
 > **2026-08-26 T3 收口更新**：本文保留 April 的判断演化；其中“模型选择器不加搜索”“输入框外仍显示代码/计划”已被真实 catalog 与 T3 交互复核推翻。统一选择器左侧主体是 Runtime，Favorites 固定在其上方并保存 Runtime+Provider+Model 完整组合；右侧按 Provider 小标题分组列该 Runtime 可用模型。reasoning/context option 合成一个 capability 菜单，权限与 Run 状态收进 MessageInput footer，Run/上下文紧邻发送键，独立 Runtime selector 已移除。Plan 语义没有删除，而是作为 Permission 中的“只读规划”硬权限档位保留。
 
 ## 起点：Chat 页是工具集合，还是 Agent 工作入口

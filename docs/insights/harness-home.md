@@ -1,6 +1,5 @@
 # Harness Home：用户所有的 Harness，不是一张新页面
 
-> 技术交接：[../handover/harness-home.md](../handover/harness-home.md)
 > 执行计划：[../exec-plans/active/harness-home-user-owned-core.md](../exec-plans/active/harness-home-user-owned-core.md)
 
 ## 用户真正要拥有的是什么

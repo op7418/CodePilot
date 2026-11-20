@@ -6,7 +6,6 @@ import {
   pruneOldToolResults,
   pruneOldToolResultsByBudget,
   estimateTokens,
-  shouldAutoCompact,
 } from '../../lib/context-pruner';
 
 // ────────────────────────────────────────────────────────────────
@@ -253,23 +252,5 @@ describe('estimateTokens', () => {
     const msgs = [toolMsg('c1', 'this is a tool result with some content')];
     const tokens = estimateTokens(msgs);
     assert.ok(tokens > 0);
-  });
-});
-
-// ────────────────────────────────────────────────────────────────
-// shouldAutoCompact (deprecated)
-// ────────────────────────────────────────────────────────────────
-
-describe('shouldAutoCompact (deprecated, kept for backwards-compat)', () => {
-  it('returns false when messages are under 80% threshold', () => {
-    const msgs = [userMsg('short')];
-    assert.equal(shouldAutoCompact(msgs, 10_000), false);
-  });
-
-  it('returns true when estimated tokens exceed 80% of context window', () => {
-    // 10_000 tokens threshold * 0.8 = 8_000. Need > 8_000 estimated.
-    // Each char / 3.5 = tokens, so 8000 * 3.5 = 28_000 chars.
-    const msgs = [userMsg('x'.repeat(30_000))];
-    assert.equal(shouldAutoCompact(msgs, 10_000), true);
   });
 });

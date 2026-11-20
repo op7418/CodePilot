@@ -22,7 +22,7 @@
 - [x] R2：安全恢复历史图片，覆盖本轮图片、缺失/越界文件、无视觉能力和 resume 反例。
 - [x] 定向/全量验证与 guardrail、交接回写。
 
-- [审查记录与复现证据](../../research/gpt56-fixes-review-2026-09-05.md)：本轮复跑单测 5476 pass / 1 skip、相关 E2E 3/3，普通切换路径成立；以下边界未被昨晚短对话验证覆盖。
+- 审查记录与复现证据：本轮复跑单测 5476 pass / 1 skip、相关 E2E 3/3，普通切换路径成立；以下边界未被昨晚短对话验证覆盖。
 - R1 / P2：Codex 跨 Provider 重建底层 thread 时，300 条短消息仅传最近 199 条，即使总计约 4196 tokens、预算 100000；近期长消息也会在预算筛选前截断中间需求。需要按预算加载、保留必要历史并补长历史回归。
 - R2 / P2：历史图片元数据被 fallback 清除，仅本轮 files 进入新 thread；两条历史即可复现旧图片内容与路径均缺失。需要恢复历史附件续接并补视觉输入回归。
 - 两项初次审查均用隔离数据和生产输入构建函数确认；后续已获用户授权修改并补回归。未以真实视觉模型验证图片回答，也不将本次 Tests pass 升级为独立 Review passed。
@@ -56,10 +56,10 @@ T3 Code 的可参考点不是“支持更多随意切换”，而是把边界说
 | 本计划 | 会话 Runtime 所有权、路线变更服务端规则、跨 Runtime 新聊天、交接上下文、用量与压缩真实性 | — |
 | [Composer 收口](composer-model-route-permission-consolidation.md) | 本计划只给出“能否操作 / 应触发哪种动作”的规则 | Picker 左右栏、收藏、搜索、能力菜单和 footer 布局 |
 | [Runtime 权限](runtime-permission-modes.md) | Runtime 切换不得改变权限，交接目标继承明确的 canonical 权限档 | reviewer / bypass / Plan 的实际 wire 与降级 |
-| [默认助理 / 心跳 / 系统通知](default-assistant-heartbeat-system-notification.md) | 本计划规定 auto-trigger 只可在已绑定会话执行，并提供自动会话的原子绑定合同 | 相邻计划决定助理 / task session 何时创建、继承哪条明确 route，以及如何展示 blocked 原因 |
-| [同 Runtime 多模型 Sub-agent](same-runtime-multi-model-subagents.md) | 本计划守父聊天 Runtime owner，禁止 child 改写或触发父 route mutation | 相邻计划继续负责 child 的 exact Provider+Model route、durable lifecycle、权限和结果 |
-| [历史 Phase 2](../completed/refactor-phase-2-runtime-session.md) | 本计划接管“开始后还能原地切 Runtime”的旧产品语义 | 历史实现与迁移背景仍作参考 |
-| [历史 Phase 5](../completed/phase-5-codex-runtime.md) | 本计划接管 Codex 与其他 Runtime 之间的续接边界 | Codex transport、thread lifecycle 和工具桥保持原权威 |
+| 默认助理 / 心跳 / 系统通知 | 本计划规定 auto-trigger 只可在已绑定会话执行，并提供自动会话的原子绑定合同 | 相邻计划决定助理 / task session 何时创建、继承哪条明确 route，以及如何展示 blocked 原因 |
+| 同 Runtime 多模型 Sub-agent | 本计划守父聊天 Runtime owner，禁止 child 改写或触发父 route mutation | 相邻计划继续负责 child 的 exact Provider+Model route、durable lifecycle、权限和结果 |
+| 历史 Phase 2 | 本计划接管“开始后还能原地切 Runtime”的旧产品语义 | 历史实现与迁移背景仍作参考 |
+| 历史 Phase 5 | 本计划接管 Codex 与其他 Runtime 之间的续接边界 | Codex transport、thread lifecycle 和工具桥保持原权威 |
 
 本计划不重做统一 Picker，也不借 Runtime 所有权改权限语义。
 
@@ -281,7 +281,7 @@ PATCH /api/chat/sessions/:id/route
 managed child 的 physical attempt 属于父回合内部执行，不是父聊天的首次 execution，也不是 route mutation：
 
 - 父 `/api/chat` 回合必须先完成 `ThreadExecutionBinding` CAS，模型才可能发出 child tool call；`unbound / legacy_unbound` 父会话不得直接启动 child。
-- child 请求的 Runtime 必须等于父 owner。不同 Provider+Model 可以按 [同 Runtime 多模型 Sub-agent](same-runtime-multi-model-subagents.md) 的 exact catalog / entitlement / effective-route 合同执行，但不能借 child route 跨 Runtime。
+- child 请求的 Runtime 必须等于父 owner。不同 Provider+Model 可以按 同 Runtime 多模型 Sub-agent 的 exact catalog / entitlement / effective-route 合同执行，但不能借 child route 跨 Runtime。
 - child route 写入自己的 `subagent_runs` / lifecycle；不得修改父 `chat_sessions.runtime_pin / provider_id / model / runtime refs / route_revision`，也不调用本计划的 session route mutation endpoint。
 - child Provider+Model 与父 route 不同不触发 `replay_context` 或 handoff，因为 child 本来就是独立上下文；结果通过既有 durable child handoff 回到父回合。
 - 若 Runtime 不同、父 binding 不明确或 route 不可达，必须在创建 durable child row / 调用 Provider 前结构化拒绝，不能用一次失败 child 顺带绑定父会话。

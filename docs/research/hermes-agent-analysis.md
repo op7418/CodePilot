@@ -3,7 +3,7 @@
 > **本文采用三段式结构**：外部事实（Hermes）/ 本仓库事实（CodePilot, file:line）/ 推断与建议。
 > 每条陈述必须可追溯到具体来源；推断层不得与事实层混写。
 >
-> **⚠️ 对比基线说明**：本文的 CodePilot 现状以 [`docs/handover/decouple-native-runtime.md`](../handover/decouple-native-runtime.md) 为权威来源。
+> **⚠️ 对比基线说明**：本文的 CodePilot 现状以 `docs/handover/decouple-native-runtime.md` 为权威来源。
 > `ARCHITECTURE.md:3` 的总览描述仍把主链路写成 Claude Agent SDK，尚未同步到 native runtime 切换——
 > 读者遇到两者冲突时请以交接文档为准。
 
@@ -189,7 +189,7 @@ docstring 原文定位：`agent/auxiliary_client.py:1-43`。
 
 ## 二、CodePilot 事实层（本仓库当前实现）
 
-权威基线：[`docs/handover/decouple-native-runtime.md`](../handover/decouple-native-runtime.md)。
+权威基线：`docs/handover/decouple-native-runtime.md`。
 所有引用形式为 `file:line`。
 
 ### 2.1 Agent Loop 主循环（`src/lib/agent-loop.ts:225`）

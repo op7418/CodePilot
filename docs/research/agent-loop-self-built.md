@@ -1,7 +1,7 @@
 # 自建 Agent Loop 替代 claude-agent-sdk — 深度调研
 
 > 创建时间：2026-04-06
-> 关联执行计划：[decouple-claude-code](../exec-plans/completed/decouple-claude-code.md)
+> 关联执行计划：decouple-claude-code
 
 ## 1. CodePilot 当前 Agent Loop 完整事件流
 

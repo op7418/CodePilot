@@ -995,12 +995,7 @@ describe('U5 — product fonts are bundled and keep their semantic roles', () =>
       path.join(SRC, 'components/ai-elements/code-block.tsx'),
       'utf8',
     );
-    const terminalSource = fs.readFileSync(
-      path.join(SRC, 'components/ai-elements/terminal.tsx'),
-      'utf8',
-    );
 
     assert.match(codeBlockSource, /font-mono text-sm/);
-    assert.match(terminalSource, /font-mono text-sm/);
   });
 });

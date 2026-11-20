@@ -5,7 +5,7 @@
 **日期**：2026-05-18 · **作者**：Claude Code（产品重构 Worktree）
 **触发问题**：Phase 5e Round 8 收尾 — 用户提出 P4 要求 "形成明确结论：哪些 Codex 原生能力可以通过 app-server 当前路径拿到；哪些必须改用 / 补充 `@openai/codex-sdk` 才能稳定拿到；plugins / skills / namespace tools 的事件形态是否能完整映射到 CodePilot UI；如果不能，Settings 里必须诚实标注。"
 
-> **2026-05-21 补充**：本文原结论主要讨论 Codex 原生 plugins / skills 与 CodePilot provider proxy bridge，不等同于“Codex Account 无法注入 CodePilot MCP”。后续调研确认 Codex app-server `thread/start` / `thread/resume` 支持 per-thread `config.mcp_servers` override；因此 CodePilot Memory MCP 在 Codex Runtime 下的正确下一步不是迁移到 `@openai/codex-sdk`，而是新开 [Phase 8 Codex MCP / Memory 注入](../exec-plans/completed/phase-8-codex-mcp-context-injection.md)（已归档 2026-05-29）：先 POC `config.mcp_servers`，再补 Memory MCP wrapper、start/resume 注入、status / elicitation bridge 与 Settings capability 翻转。
+> **2026-05-21 补充**：本文原结论主要讨论 Codex 原生 plugins / skills 与 CodePilot provider proxy bridge，不等同于“Codex Account 无法注入 CodePilot MCP”。后续调研确认 Codex app-server `thread/start` / `thread/resume` 支持 per-thread `config.mcp_servers` override；因此 CodePilot Memory MCP 在 Codex Runtime 下的正确下一步不是迁移到 `@openai/codex-sdk`，而是新开 Phase 8 Codex MCP / Memory 注入（已归档 2026-05-29）：先 POC `config.mcp_servers`，再补 Memory MCP wrapper、start/resume 注入、status / elicitation bridge 与 Settings capability 翻转。
 
 ---
 

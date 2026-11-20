@@ -102,7 +102,7 @@ T3 Code 在聊天开始后会锁定 Provider Driver。模型选择器只展示�
 - 完全不同的 `CODEX_HOME` 被视为另一个工作环境，不出现在已有聊天里；
 - Claude 账号若使用不同配置目录，通常也不能在已有聊天里互换。
 
-这些规则可在 [Codex 多账号文档](../../资料/t3code/docs/user/providers-codex.md) 和 [Claude 多账号文档](../../资料/t3code/docs/user/providers-claude.md) 中核对。
+这些规则可在 Codex 多账号文档 和 Claude 多账号文档 中核对。
 
 换句话说，T3 Code 的产品规则不是“切换很自由”，而是：
 

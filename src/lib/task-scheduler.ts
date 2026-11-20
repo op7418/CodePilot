@@ -14,6 +14,7 @@ import crypto from 'crypto';
 
 const POLL_INTERVAL = 10_000; // 10s
 const GLOBAL_KEY = '__codepilot_scheduler__';
+const TIMERS_KEY = '__codepilot_scheduler_timers__';
 const BACKOFF_DELAYS = [30000, 60000, 300000, 900000]; // 30s, 1m, 5m, 15m
 const MAX_CONSECUTIVE_ERRORS = 10;
 const RECURRING_MAX_AGE_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
@@ -142,6 +143,8 @@ export function ensureSchedulerRunning(): void {
     (intervalId as NodeJS.Timeout).unref();
   }
 
+  (globalThis as Record<string, unknown>)[TIMERS_KEY] = [expiryIntervalId, intervalId];
+
   console.log('[scheduler] Started with 10s poll interval');
 }
 
@@ -149,7 +152,10 @@ export function ensureSchedulerRunning(): void {
  * Stop the scheduler polling loop.
  */
 export function stopScheduler(): void {
-  (globalThis as Record<string, unknown>)[GLOBAL_KEY] = false;
+  const g = globalThis as Record<string, unknown>;
+  for (const timer of (g[TIMERS_KEY] as NodeJS.Timeout[] | undefined) ?? []) clearInterval(timer);
+  g[TIMERS_KEY] = undefined;
+  g[GLOBAL_KEY] = false;
   console.log('[scheduler] Stopped');
 }
 
@@ -626,7 +632,7 @@ export async function runScheduledTaskNow(taskId: string): Promise<
  * almost certainly a crash.
  */
 async function recoverStaleRunningTasks(): Promise<void> {
-  const { getDb, listScheduledTasks, updateScheduledTask, listTaskRunLogs, updateTaskRunLog } =
+  const { listScheduledTasks, updateScheduledTask, listTaskRunLogs, updateTaskRunLog } =
     await import('@/lib/db');
   const STALE_MS = 30 * 60 * 1000;
   const now = Date.now();
@@ -661,7 +667,6 @@ async function recoverStaleRunningTasks(): Promise<void> {
     } catch { /* best effort */ }
 
     console.warn(`[scheduler] Recovered stale running task ${task.id} (${task.name}) — backoff ${backoffMs}ms`);
-    void getDb; // keep the import live in case we add a transaction later
   }
 }
 

@@ -116,11 +116,10 @@ CodePilot 的 CSS token 分两层。本节是项目级原则，虽然 design.md 
 - macOS 覆盖只在 `html[data-platform="darwin"][data-platform-style="auto"]` 生效。其它平台或 `data-platform-style="neutral"` 时，平台 token 仍 fall back 到默认（= 产品 token 等价值）。
 - **平台 token 不允许出现在内容层**（Apple HIG: Liquid Glass 用于 controls / navigation，不用于 content）。如果在 PR 里看到 `--platform-surface-*` 被绑定到内容卡片，直接 reject。
 
-参考：[`docs/exec-plans/completed/phase-7b-macos-native-visual-profile.md`](exec-plans/completed/phase-7b-macos-native-visual-profile.md) / [`docs/handover/macos-visual-profile.md`](handover/macos-visual-profile.md)。
 
 ## 图标语义（CodePilot Icon Layer）
 
-> 完整 semantic alias 字典 + HugeIcons 候选 + 冲突裁决决策日志见 [`docs/handover/icon-system.md`](handover/icon-system.md)；产品理由见 [`docs/insights/icon-system.md`](insights/icon-system.md)。本节只给 design 层的使用规则。
+> 产品理由见 [`docs/insights/icon-system.md`](insights/icon-system.md)。本节只给 design 层的使用规则。
 
 业务代码用 `<CodePilotIcon name="..." />` 表达**产品概念**，不直接 import vendor icon 名。一个概念对应一个 glyph，由 `src/components/ui/semantic-icon.tsx` 的 `SEMANTIC_MAP` 单点裁决。
 
@@ -146,7 +145,7 @@ CodePilot 的 CSS token 分两层。本节是项目级原则，虽然 design.md 
 
 ## macOS 壳层 profile（platform shell）
 
-> 完整 surface matrix + Electron vibrancy 选型 + 分层依据见 [`docs/handover/macos-visual-profile.md`](handover/macos-visual-profile.md)；产品理由见 [`docs/insights/macos-visual-profile.md`](insights/macos-visual-profile.md)。本节只给 design 层的边界规则。
+> 产品理由见 [`docs/insights/macos-visual-profile.md`](insights/macos-visual-profile.md)。本节只给 design 层的边界规则。
 
 **一句话边界**：macOS profile 只动**外壳和控件层**，不动内容层。同一套产品结构（聊天 / Settings / 卡片 / 消息 / Widget / 按钮顺序）在 mac / win / linux / web 上完全一致，不开平台分支。
 
@@ -174,7 +173,6 @@ CodePilot 的 CSS token 分两层。本节是项目级原则，虽然 design.md 
 
 ## 浮动卡片布局（floating card shell）
 
-> 抽象边界 + 四卡接入点 + gutter 几何验收见 [`docs/handover/macos-visual-profile.md`](handover/macos-visual-profile.md) 的 Phase 7c 节。
 
 macOS profile 下，外壳是**几张悬浮卡片**并排：左侧栏 / 主聊天 / 右工作区 / 文件树（assistant rail 复用同一套 primitive）。每张卡圆角 14px、独立投影、卡间留窄缝（缝里一条可拖拽细线调宽）。off-mac 圆角归 0、退回普通分栏块——同一份 DOM。
 
@@ -202,7 +200,7 @@ macOS profile 下，外壳是**几张悬浮卡片**并排：左侧栏 / 主聊�
 
 ## Composer（聊天输入外壳）
 
-> composer 属 chrome 层，macOS profile 下透出 vibrancy；surface matrix 见 [`docs/handover/macos-visual-profile.md`](handover/macos-visual-profile.md)。
+> composer 属 chrome 层，macOS profile 下透出 vibrancy。
 
 聊天输入框是一个**悬浮 hood**：顶部一排已选上下文胶囊（文件 / CLI / 目录引用），中间多行文本框，底部一排操作（左侧加料 + 模型 / effort 选择，右侧发送）。
 

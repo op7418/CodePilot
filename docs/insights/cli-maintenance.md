@@ -1,7 +1,5 @@
 # 为什么 CLI 更新必须“宁可少支持，也不能更新错目标”
 
-> 技术实现：[handover/cli-maintenance.md](../handover/cli-maintenance.md)；不变量：[guardrails/CliMaintenance.md](../guardrails/CliMaintenance.md)
-
 T3 Code 证明了一个很好的产品方向：桌面客户端知道自己的 Agent CLI 版本是否过旧，并能把“去终端找命令”缩短为一次明确操作。对 CodePilot 来说，它不只是便利功能，也能减少 CLI 版本过低造成的模型、权限和协议兼容问题。
 
 难点不在按钮，而在“这个按钮到底更新哪一份 CLI”。同一台机器可能同时存在 native、npm、Homebrew、bun、pnpm、WinGet 和自建 wrapper。PATH 看到的 `claude`/`codex` 不一定归用户以为的 package manager；Windows `.cmd` 也不是 realpath 能穿透的 symlink。只按目录名猜渠道，最坏结果不是更新失败，而是更新了另一份安装，界面显示成功，Runtime 仍继续执行旧版本。

@@ -1,7 +1,5 @@
 # 生成式 UI 持久化与项目看板
 
-> 技术实现见 [docs/handover/dashboard.md](../handover/dashboard.md)（看板系统）和 [docs/handover/generative-ui.md](../handover/generative-ui.md)（widget 渲染基础设施）
-
 ## 灵感来源
 
 受 [Moxt](https://mp.weixin.qq.com/s/PVA2DSGyCw4uxXx0CUWs1Q) 启发。Moxt 定位为 AI-native workspace，核心洞察：

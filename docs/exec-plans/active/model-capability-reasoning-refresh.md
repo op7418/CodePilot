@@ -25,7 +25,7 @@
 
 - **Signal**：用户明确已升级 `0.67.1`；GLM (CN) 的 Add Model 仍把 GLM-5.3 标成“已添加”，但 Models/模型选择里仍找不到，旧 GLM-5-Turbo 继续存在。
 - **Triage**：旧 isolated smoke 覆盖的是 pristine catalog/hidden/direct-wire 等构造行，没有覆盖这名升级用户的真实 ownership/identity 组合。当前 `getPresence()` 仍可能因 stable `sonnet` 命中旧 wire 而误报 current-added；read merge 又会保护 manual/user-edited/manual-* 行。该解释目前是高可信假设，不在拿到脱敏行形和四个消费面对账前写成根因。
-- **Decision**：B-031 重开，历史 Shipped/Tests/Build/CI 证据不删除，但不再具有关闭权。后续以 [新生产反馈计划](v0.67.1-production-feedback-signing-auto-update-2026-08-23.md) Phase 0/1 为唯一执行入口；必须先复现受影响 row shape，再建立 SKU-aware presence 与保守 legacy upgrade/conflict 合同。
+- **Decision**：B-031 重开，历史 Shipped/Tests/Build/CI 证据不删除，但不再具有关闭权。后续以 新生产反馈计划 Phase 0/1 为唯一执行入口；必须先复现受影响 row shape，再建立 SKU-aware presence 与保守 legacy upgrade/conflict 合同。
 - **重新关闭门禁**：failing-then-passing legacy fixture；Models/Search/Runtime/Composer 四面一致；至少一名受影响 0.67.1 用户完成候选版升级 smoke。仅再跑当前 210 条或 pristine isolated UI 不足以关闭。
 - **2026-08-24 Fix/Verify**：catalog 按已发布 git 历史明示 sonnet→`sonnet` 的 gen-0 `GLM-4.7`、后续 `GLM-5-Turbo`/`GLM-5.2`，以及 haiku→`haiku` 的 `GLM-4.5-Air` 完整 upstream/display/capabilities 指纹，删除未发布过的 sonnet→`glm-5-turbo` 猜测。修复轮 review 先证明首版遗漏 gen-0，因此计划状态曾回退为“部分”；补齐后用 gen-0/后续两组完整三行 fixture 验证 sonnet/haiku 原位迁移、各世代 opus 保留，并对真正 `identity_conflict` 的 fail-closed 与精确 model ids 作行为断言。migration compare-and-swap 且 ownership/upstream occupancy fail-closed；current canonical 不因额外旧行降级，真正 conflict 返回 model ids 与 UI 恢复动作。收口定向 49/49；最后一条真实用户 smoke 未跑，所以状态保持 🟡。
 

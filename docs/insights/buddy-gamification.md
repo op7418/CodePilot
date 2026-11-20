@@ -1,4 +1,3 @@
-> 技术实现见 [docs/handover/buddy-gamification.md](../handover/buddy-gamification.md)
 
 # Buddy 游戏化 — 从工具到伙伴的产品思考
 

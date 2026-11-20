@@ -1,7 +1,5 @@
 # CLI Tools — 产品思考
 
-> 技术实现见 [docs/handover/cli-tools.md](../handover/cli-tools.md)
-
 ## 解决了什么问题
 
 AI 编程助手（Claude Code、Cursor 等）大量依赖 CLI 工具完成实际任务——ffmpeg 处理视频、jq 处理 JSON、yt-dlp 下载内容。但存在一个断裂：**用户知道想做什么，模型知道怎么做，中间却卡在"工具装没装、装在哪、怎么装"上。**

@@ -39,7 +39,7 @@
 - P0/P1 bug 修复 PR 优先评审与合并。
 - 功能 PR 暂停 → `v0.57+ parking-lot`；30 天无回应的 feature PR 标 `needs-rebase` 或关闭。
 - 每个合并的 PR 必须有测试，或在 PR 里明确说明为什么不需要。
-- 外部 PR 审查按 CLAUDE.md「PR 审查安全」：批量低信号提交、依赖/构建脚本/native/Electron/DB/权限改动视为潜在投毒面；警惕面向 AI reviewer 的提示词攻击。
+- 外部 PR 审查：批量低信号提交、依赖/构建脚本/native/Electron/DB/权限改动视为潜在投毒面；警惕面向 AI reviewer 的提示词攻击。
 
 ## 自动化机器人（Phase 7B/7C/7D 已落地）
 
@@ -51,4 +51,4 @@
 - **`release-blocker-check.yml`（Phase 7D，已落地）**：手动 `workflow_dispatch`，发稳定版前查 `v0.56.x` milestone 下 open P0（crash / data-loss）→ fail；P1 列为 known issues 候选、不 fail。
 
 > **`pull_request_target` 安全约束**：以上 PR workflow 一律不 checkout、不执行外部 PR 代码，只读 PR 元数据 / 打 label / 评论。
-> docs-drift + link check 已另行落地（`scripts/lint-docs-drift.mjs`，pre-commit 强制）。
+> exec-plans 索引与断链检查已另行落地（`scripts/lint-docs-drift.mjs`，pre-commit 强制）。

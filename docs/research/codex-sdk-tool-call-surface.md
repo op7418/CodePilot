@@ -1,7 +1,7 @@
 # Codex SDK tool-call surface — Phase 7.3 调研
 
 > 创建：2026-05-20（Phase 7.3）
-> 父计划：[`docs/exec-plans/completed/context-accounting-runtime-contract.md`](../exec-plans/completed/context-accounting-runtime-contract.md) Phase 7（已归档）
+> 父计划：`docs/exec-plans/completed/context-accounting-runtime-contract.md` Phase 7（已归档）
 > 目的：确认 Codex Runtime 能否给 Phase 7 `ToolInvocationAccumulator` 提供 (toolUseId, toolName, input, resultContent) 这四元组，决定 Codex 走 native API 还是 SSE 兜底。
 
 ## 调研结果（一句话）

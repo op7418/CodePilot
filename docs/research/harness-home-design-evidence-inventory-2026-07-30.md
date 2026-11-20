@@ -2,7 +2,7 @@
 
 > 日期：2026-07-30
 > 状态：已有 4 组真实产品 brief / accepted / rejected 证据；**能证明既有产品取舍，尚不能自动等同于用户的通用个人审美**
-> 历史执行计划：[harness-home-design-method.md](../exec-plans/superseded/harness-home-design-method.md)（2026-08-04 已被 Capability Package/Broker / `creative` reference package 方向接管，本清单仅作研究证据）
+> 历史执行计划：harness-home-design-method.md（2026-08-04 已被 Capability Package/Broker / `creative` reference package 方向接管，本清单仅作研究证据）
 
 ## 用途与纪律
 

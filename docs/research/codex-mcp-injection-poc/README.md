@@ -1,6 +1,6 @@
 # Codex MCP 注入 — Phase 0 POC 记录
 
-> 执行计划见 [docs/exec-plans/completed/phase-8-codex-mcp-context-injection.md](../../exec-plans/completed/phase-8-codex-mcp-context-injection.md)（已归档 2026-05-29）
+> 执行计划见 docs/exec-plans/completed/phase-8-codex-mcp-context-injection.md（已归档 2026-05-29）
 > 状态：**Phase 0 核心问题已 live 验证通过**（真实 Codex `0.133.0-alpha.1` app-server，隔离 `CODEX_HOME`）。唯一未验证项 = 模型**自主**调用（auth-gated，需 OpenAI 登录）。
 
 本目录是 Phase 8 Phase 0 的 POC 产物，刻意放在 `docs/research/`（不进 `src/`），以免触及 `codex-user-mcp-wiring.test.ts` 的文件清单与产品路径。

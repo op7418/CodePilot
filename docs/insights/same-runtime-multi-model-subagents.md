@@ -1,6 +1,6 @@
 # 为什么先做同 Runtime 多模型 Sub-agent
 
-> 技术实现见 [handover](../handover/same-runtime-multi-model-subagents.md)，研究基线见 [初始调研](../research/cross-runtime-multi-agent-orchestration-2026-07-22.md) 与 [编排对标补充](../research/subagent-orchestration-competitor-followup-2026-07-24.md)。
+> 技术实现见 handover，研究基线见 [初始调研](../research/cross-runtime-multi-agent-orchestration-2026-07-22.md) 与 [编排对标补充](../research/subagent-orchestration-competitor-followup-2026-07-24.md)。
 
 ## 用户真正要的不是固定 Profile
 

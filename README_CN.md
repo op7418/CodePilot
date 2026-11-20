@@ -92,8 +92,8 @@ CodePilot 从编程工具起步，已成长为**通用 AI Agent 桌面客户端*
 
 | 前置条件 | 最低版本 |
 |---|---|
-| Node.js | 18+ |
-| npm | 9+（Node 18 自带） |
+| Node.js | 20.11+ |
+| npm | 9+（Node 20 自带） |
 
 ```bash
 git clone https://github.com/op7418/CodePilot.git
@@ -203,8 +203,6 @@ xattr -cr /Applications/CodePilot.app
 - [常见问题](https://www.codepilot.sh/zh/docs/faq) -- 常见问题和解决方案
 
 **开发文档：**
-- [ARCHITECTURE.md](./ARCHITECTURE.md) -- 架构、技术栈、目录结构、数据流
-- [docs/handover/](./docs/handover/) -- 设计决策、交接文档
 - [docs/exec-plans/](./docs/exec-plans/) -- 执行计划、技术债务
 
 ---

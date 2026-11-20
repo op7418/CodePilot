@@ -5,7 +5,7 @@
 > 状态：🚧 单一 shell / identity / pin / Primary+Inspector / v13 清理已落；hydration、Tab/Pin、Inspector 三条真实点击路径及全量回归通过，待复审
 > 风险等级：Tier 1；workspace identity / Git 子进程边界按 Tier 2 审查
 > 事实基线：[T3 Code 模型输入区、统一侧边栏与内置浏览器专项调研](../../research/t3code-composer-sidebar-browser-ux-2026-08-25.md)
-> 下游依赖：[Browser WebContentsView 技术 POC](browser-webcontentsview-poc.md)、[Browser Surface MVP](browser-surface-mvp.md)
+> 下游依赖：Browser WebContentsView 技术 POC、[Browser Surface MVP](browser-surface-mvp.md)
 
 ## 用户问题与争议
 
