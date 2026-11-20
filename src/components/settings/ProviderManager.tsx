@@ -97,18 +97,21 @@ const ACCESS_TYPE_I18N: Record<AccessType, TranslationKey> = {
  * SQLite stores `last_refreshed_at` as `'YYYY-MM-DD HH:MM:SS'` (no timezone)
  * — that's UTC by convention here, so append `Z` before parsing.
  */
-function formatRelativeTime(value: string, isZh: boolean): string {
+function formatRelativeTime(
+  value: string,
+  t: (key: TranslationKey, params?: Record<string, string | number>) => string,
+): string {
   const iso = value.includes('T') ? value : value.replace(' ', 'T') + 'Z';
-  const t = Date.parse(iso);
-  if (Number.isNaN(t)) return value;
-  const diffSec = Math.max(0, Math.floor((Date.now() - t) / 1000));
-  if (diffSec < 60) return isZh ? '刚刚' : 'just now';
+  const ts = Date.parse(iso);
+  if (Number.isNaN(ts)) return value;
+  const diffSec = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (diffSec < 60) return t('provider.mgr.timeJustNow');
   const diffMin = Math.floor(diffSec / 60);
-  if (diffMin < 60) return isZh ? `${diffMin} 分钟前` : `${diffMin} min ago`;
+  if (diffMin < 60) return t('provider.mgr.timeMinAgo', { n: diffMin });
   const diffHr = Math.floor(diffMin / 60);
-  if (diffHr < 24) return isZh ? `${diffHr} 小时前` : `${diffHr}h ago`;
+  if (diffHr < 24) return t('provider.mgr.timeHourAgo', { n: diffHr });
   const diffDay = Math.floor(diffHr / 24);
-  if (diffDay < 30) return isZh ? `${diffDay} 天前` : `${diffDay}d ago`;
+  if (diffDay < 30) return t('provider.mgr.timeDayAgo', { n: diffDay });
   // Older than ~a month — show the date in YYYY-MM-DD; relative numbers
   // start to mislead at this scale ("3 months ago" is unhelpful precision).
   return iso.slice(0, 10);
@@ -123,8 +126,8 @@ export function ProviderManager() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [envDetected, setEnvDetected] = useState<Record<string, string>>({});
-  const { t } = useTranslation();
-  const isZh = t('nav.chats') === '对话';
+  const { t, locale } = useTranslation();
+  const isZh = locale === 'zh';
 
   // Edit dialog state — fallback ProviderForm for providers that don't match any preset
   const [formOpen, setFormOpen] = useState(false);
@@ -613,7 +616,7 @@ export function ProviderManager() {
         if (pollCount >= maxPolls) {
           clearInterval(poll);
           setOpenaiLoggingIn(false);
-          setOpenaiError(isZh ? '登录超时，请重试' : 'Login timed out, please try again');
+          setOpenaiError(t('provider.mgr.openaiLoginTimeout'));
           return;
         }
         try {
@@ -669,7 +672,7 @@ export function ProviderManager() {
     const timer = window.setInterval(async () => {
       if (Date.now() >= deadline) {
         cancelXaiOAuthAttempt();
-        setXaiError(isZh ? 'xAI 登录超时，请重试' : 'xAI login timed out. Please try again.');
+        setXaiError(t('provider.mgr.xaiLoginTimeout'));
         return;
       }
       try {
@@ -698,7 +701,7 @@ export function ProviderManager() {
       } catch { /* keep polling */ }
     }, 2000);
     xaiPollTimerRef.current = timer;
-  }, [cancelXaiOAuthAttempt, fetchModels, isZh]);
+  }, [cancelXaiOAuthAttempt, fetchModels, t]);
 
   useEffect(() => () => {
     if (xaiPollTimerRef.current !== null) window.clearInterval(xaiPollTimerRef.current);
@@ -775,9 +778,7 @@ export function ProviderManager() {
         return false;
       }
       if (!json?.login) {
-        setCodexError(isZh
-          ? 'Codex 登录未返回有效会话，请重试。'
-          : 'Codex login did not return a login session. Please retry.');
+        setCodexError(t('provider.mgr.codexNoSession'));
         return false;
       }
       setCodexLoginStart(json.login);
@@ -793,7 +794,7 @@ export function ProviderManager() {
     } finally {
       setCodexLoggingIn(false);
     }
-  }, [isZh]);
+  }, [t]);
 
   const handleCodexLoginCancel = useCallback(async () => {
     if (codexLoginStart && codexLoginStart.type !== 'apiKey') {
@@ -927,7 +928,7 @@ export function ProviderManager() {
           // / 中转网关 / 云账号凭证），见 `getProviderAccessType` 注释。
           const accessType = getProviderAccessType(provider);
           const authMethod = needsPresetChoice
-            ? (isZh ? '套餐类型待确认' : 'Plan type needs confirmation')
+            ? t('provider.mgr.planTypeNeedsConfirm')
             : t(ACCESS_TYPE_I18N[accessType]);
           const totalCount = getTotalModelCount(provider.id);
           const enabledCount = getEnabledModelCount(provider.id);
@@ -937,22 +938,20 @@ export function ProviderManager() {
             // Show "已启用 / 总数" so the card carries both the runtime
             // exposure and the synced inventory at a glance.
             info.push({
-              label: isZh ? '可用模型' : 'Models',
-              value: isZh
-                ? `${enabledCount ?? 0} / ${totalCount} 启用`
-                : `${enabledCount ?? 0} / ${totalCount} enabled`,
+              label: t('provider.mgr.modelsLabel'),
+              value: t('provider.mgr.modelsCount', { enabled: enabledCount ?? 0, total: totalCount }),
             });
           }
           if (lastRefreshedAt) {
             // Relative time so the card stays a glance — exact timestamp goes
             // in the title attr for users who need precision.
             info.push({
-              label: isZh ? '上次刷新' : 'Last refresh',
-              value: formatRelativeTime(lastRefreshedAt, isZh),
+              label: t('provider.mgr.lastRefresh'),
+              value: formatRelativeTime(lastRefreshedAt, t),
               title: lastRefreshedAt + ' UTC',
             });
           }
-          info.push({ label: isZh ? '接入方式' : 'Auth', value: authMethod });
+          info.push({ label: t('provider.mgr.authLabel'), value: authMethod });
           // Surface base_url only when it's not the default vendor URL — it's
           // signal for users routing through a third-party gateway. Render
           // through `sanitizeEndpointForDisplay` so accidental key paste into
@@ -961,7 +960,7 @@ export function ProviderManager() {
             const sanitizeT: SanitizeTranslator = (key, vars) => t(key as TranslationKey, vars);
             const endpoint = sanitizeEndpointForDisplay(provider.base_url, sanitizeT);
             info.push({
-              label: isZh ? '接入地址' : 'Endpoint',
+              label: t('provider.mgr.endpointLabel'),
               value: endpoint.display,
               // When suspicious: tooltip explains the masking; do NOT echo the
               // raw value (would defeat the masking on hover). Otherwise no
@@ -982,7 +981,7 @@ export function ProviderManager() {
                   name: provider.name,
                   status,
                   statusLabel: needsPresetChoice
-                    ? (isZh ? '请选择套餐类型' : 'Choose plan type')
+                    ? t('provider.mgr.choosePlanType')
                     : undefined,
                   compat: getProviderCompat(provider),
                   provider: {base_url: provider.base_url, protocol: provider.protocol},
@@ -1021,7 +1020,7 @@ export function ProviderManager() {
           const showStale = isActive && activeImageProviderStale;
           const status: ProviderCardStatus = provider.api_key ? 'available' : 'needs-config';
           const statusLabel = showStale
-            ? (isZh ? '已失效' : 'Stale')
+            ? t('provider.mgr.stale')
             : isActive
               ? t('provider.activeForImage')
               : undefined;
@@ -1037,7 +1036,7 @@ export function ProviderManager() {
                 statusLabel,
                 compat: 'media_only',
                 info: currentLabel
-                  ? [{ label: isZh ? '当前模型' : 'Active model', value: currentLabel }]
+                  ? [{ label: t('provider.mgr.activeModel'), value: currentLabel }]
                   : undefined,
               }}
               primaryAction={
@@ -1048,7 +1047,7 @@ export function ProviderManager() {
                     className="h-8 px-3 text-xs text-muted-foreground"
                     onClick={() => setActiveImageProvider('')}
                   >
-                    {isZh ? '清除' : 'Clear'}
+                    {t('provider.mgr.clear')}
                   </Button>
                 ) : !isActive && provider.api_key ? (
                   <Button
@@ -1069,7 +1068,7 @@ export function ProviderManager() {
                  selector below uses the curated image-only list directly. */
             >
               <div className="flex items-center gap-1.5 flex-wrap">
-                <span className="text-[11px] text-muted-foreground mr-1">{isZh ? '模型' : 'Model'}:</span>
+                <span className="text-[11px] text-muted-foreground mr-1">{t('provider.mgr.modelColon')}:</span>
                 {models.map((m) => {
                   const active = current === m.value;
                   return (
@@ -1105,7 +1104,7 @@ export function ProviderManager() {
           const usable = xaiAuth?.usable ?? !!xaiAuth?.authenticated;
           const status: ProviderCardStatus = usable ? 'available' : 'needs-config';
           const statusLabel = showStale
-            ? (isZh ? '授权已失效' : 'Authorization stale')
+            ? t('provider.mgr.authStale')
             : isActive
               ? t('provider.activeForImage')
               : undefined;
@@ -1121,9 +1120,9 @@ export function ProviderManager() {
                 statusLabel,
                 compat: 'media_only',
                 info: [
-                  { label: isZh ? '图片模型' : 'Image model', value: 'Grok Imagine Image 2.0' },
-                  { label: isZh ? '视频模型' : 'Video model', value: 'Grok Imagine Video 1.5' },
-                  { label: isZh ? '接入方式' : 'Auth', value: isZh ? 'Grok Build 授权登录' : 'Grok Build OAuth' },
+                  { label: t('provider.mgr.imageModel'), value: 'Grok Imagine Image 2.0' },
+                  { label: t('provider.mgr.videoModel'), value: 'Grok Imagine Video 1.5' },
+                  { label: t('provider.mgr.authLabel'), value: t('provider.mgr.grokBuildOAuth') },
                 ],
               }}
               primaryAction={
@@ -1134,7 +1133,7 @@ export function ProviderManager() {
                     className="h-8 px-3 text-xs text-muted-foreground"
                     onClick={() => setActiveImageProvider('')}
                   >
-                    {isZh ? '清除' : 'Clear'}
+                    {t('provider.mgr.clear')}
                   </Button>
                 ) : !isActive && usable ? (
                   <Button
@@ -1180,9 +1179,7 @@ export function ProviderManager() {
               <div className="rounded-md bg-amber-500/10 border border-amber-500/30 px-3 py-2 flex items-start gap-2">
                 <div className="flex-1 min-w-0">
                   <p className="text-xs text-amber-700 dark:text-amber-400">
-                    {isZh
-                      ? '当前“图片生成默认”指向的服务商已不可用（被删除或类型已变更），图片生成会回退到其他服务商'
-                      : 'The provider currently marked as the image-generation default is unavailable (deleted or type changed). Image generation will fall back to another provider.'}
+                    {t('provider.mgr.staleImageBanner')}
                   </p>
                 </div>
                 <Button
@@ -1191,7 +1188,7 @@ export function ProviderManager() {
                   className="h-6 text-[11px] text-amber-700 dark:text-amber-400 shrink-0"
                   onClick={() => setActiveImageProvider('')}
                 >
-                  {isZh ? '清除' : 'Clear'}
+                  {t('provider.mgr.clear')}
                 </Button>
               </div>
             )}
@@ -1232,11 +1229,11 @@ export function ProviderManager() {
                             icon: getProviderIcon('OpenAI', ''),
                             name: 'OpenAI',
                             status: 'available',
-                            statusLabel: openaiAuth.plan || (isZh ? '已登录' : 'Signed in'),
+                            statusLabel: openaiAuth.plan || t('provider.mgr.signedIn'),
                             compat: 'codepilot_only',
                             info: [
-                              ...(openaiAuth.plan ? [{ label: isZh ? '订阅' : 'Plan', value: openaiAuth.plan }] : []),
-                              ...(openaiAuth.email ? [{ label: isZh ? '账号' : 'Account', value: openaiAuth.email }] : []),
+                              ...(openaiAuth.plan ? [{ label: t('provider.mgr.subscription'), value: openaiAuth.plan }] : []),
+                              ...(openaiAuth.email ? [{ label: t('provider.mgr.account'), value: openaiAuth.email }] : []),
                             ],
                           }}
                           onDelete={handleOpenAILogout}
@@ -1249,17 +1246,17 @@ export function ProviderManager() {
                             icon: getProviderIcon('xAI Grok', 'https://api.x.ai/v1'),
                             name: 'Grok Build OAuth',
                             status: 'available',
-                            statusLabel: isZh ? '已登录' : 'Signed in',
+                            statusLabel: t('provider.mgr.signedIn'),
                             compat: 'codepilot_only',
                             info: [
-                              { label: isZh ? '额度渠道' : 'Billing source', value: 'Grok Build subscription' },
-                              ...(xaiAuth.email ? [{ label: isZh ? '账号' : 'Account', value: xaiAuth.email }] : []),
+                              { label: t('provider.mgr.billingSource'), value: 'Grok Build subscription' },
+                              ...(xaiAuth.email ? [{ label: t('provider.mgr.account'), value: xaiAuth.email }] : []),
                             ],
                           }}
                           primaryAction={
                             <Button asChild variant="ghost" size="sm" className="h-8 px-3 text-xs">
                               <a href={xaiAuth.accountUrl} target="_blank" rel="noreferrer">
-                                {isZh ? '管理账号' : 'Manage account'}
+                                {t('provider.mgr.manageAccount')}
                               </a>
                             </Button>
                           }
@@ -1271,7 +1268,7 @@ export function ProviderManager() {
                           isZh={isZh}
                           data={{
                             icon: getProviderIcon('OpenAI', ''),
-                            name: isZh ? 'Codex 账户' : 'Codex Account',
+                            name: t('provider.mgr.codexAccountName'),
                             status: 'available',
                             // Phase 6 IA correction (2026-05-14): show
                             // planType-only as the headline. Earlier
@@ -1280,20 +1277,20 @@ export function ProviderManager() {
                             // because type is the *login method*, not
                             // the subscription tier.
                             statusLabel: codexAccount.account.planType
-                              || (isZh ? '已登录' : 'Signed in'),
+                              || t('provider.mgr.signedIn'),
                             compat: 'codex_account',
                             info: [
                               ...(codexAccount.account.email
-                                ? [{ label: isZh ? '账号' : 'Account', value: codexAccount.account.email }]
+                                ? [{ label: t('provider.mgr.account'), value: codexAccount.account.email }]
                                 : []),
                               ...(codexAccount.account.planType
-                                ? [{ label: isZh ? '套餐' : 'Plan', value: codexAccount.account.planType }]
+                                ? [{ label: t('provider.mgr.codexPlan'), value: codexAccount.account.planType }]
                                 : []),
                               {
                                 // Renamed from "类型" / "Type" — the
                                 // chatgpt/apiKey/amazonBedrock value is
                                 // how you *signed in*, not your plan.
-                                label: isZh ? '登录方式' : 'Login method',
+                                label: t('provider.mgr.loginMethod'),
                                 value: codexAccount.account.type,
                               },
                             ],
@@ -1322,7 +1319,7 @@ export function ProviderManager() {
                 {hasOfficial && (
                   <section className="space-y-3">
                     <h4 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                      {isZh ? '官方 API（直连）' : 'Official API (direct)'}
+                      {t('provider.mgr.officialApiDirect')}
                     </h4>
                     <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
                       {hasEnvClaude && (
@@ -1332,10 +1329,10 @@ export function ProviderManager() {
                             icon: getProviderIcon('Claude', 'https://api.anthropic.com'),
                             name: 'Claude Code',
                             status: 'available',
-                            statusLabel: isZh ? '已就绪' : 'Ready',
+                            statusLabel: t('provider.mgr.ready'),
                             compat: 'claude_code_ready',
                             info: [
-                              { label: isZh ? '来源' : 'Source', value: isZh ? '环境变量' : 'Environment' },
+                              { label: t('provider.mgr.source'), value: t('provider.mgr.environment') },
                             ],
                           }}
                           primaryAction={
@@ -1356,7 +1353,7 @@ export function ProviderManager() {
                 {hasCodePlan && (
                   <section className="space-y-3">
                     <h4 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                      {isZh ? 'Claude Code 兼容套餐' : 'Claude Code-compatible plans'}
+                      {t('provider.mgr.codePlans')}
                     </h4>
                     <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
                       {codePlanDbProviders.map(renderLlmDbProviderCard)}
@@ -1370,7 +1367,7 @@ export function ProviderManager() {
                 {hasThirdparty && (
                   <section className="space-y-3">
                     <h4 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider">
-                      {isZh ? '第三方 / 中转兼容' : 'Third-party / relay'}
+                      {t('provider.mgr.thirdPartyRelay')}
                     </h4>
                     <div className="grid gap-4 grid-cols-1 md:grid-cols-2">
                       {thirdpartyDbProviders.map(renderLlmDbProviderCard)}
@@ -1433,13 +1430,12 @@ export function ProviderManager() {
               // OAuth entries — synthetic (not preset-based). Always shown so the
               // category stays visible; already-connected entries are rendered
               // disabled with a "已登录" tag instead of being hidden.
-              type OAuthEntry = { key: string; name: string; description: string; descriptionZh: string; icon: ReactNode; onClick: () => void; connected?: boolean; loading?: boolean; disabled?: boolean };
+              type OAuthEntry = { key: string; name: string; description: string; icon: ReactNode; onClick: () => void; connected?: boolean; loading?: boolean; disabled?: boolean };
               const oauthEntries: OAuthEntry[] = [
                 {
                   key: 'openai-oauth',
                   name: 'OpenAI',
-                  description: 'Sign in with ChatGPT Plus/Pro — no API key required',
-                  descriptionZh: '使用 ChatGPT Plus/Pro 订阅登录，无需 API Key',
+                  description: t('provider.mgr.openaiOAuthDesc'),
                   icon: getProviderIcon('OpenAI', ''),
                   onClick: () => { setAddServiceOpen(false); handleOpenAILogin(); },
                   connected: !!openaiAuth?.authenticated,
@@ -1447,10 +1443,7 @@ export function ProviderManager() {
                 {
                   key: 'xai-oauth',
                   name: 'Grok Build OAuth',
-                  description: xaiAuth?.disabledReason
-                    || 'Grok Build browser or device login; depends on xAI upstream policy. API Key remains available.',
-                  descriptionZh: xaiAuth?.disabledReason
-                    || 'Grok Build 浏览器/设备码登录，依赖 xAI 上游策略；可改用 API Key。',
+                  description: xaiAuth?.disabledReason || t('provider.mgr.xaiOAuthDesc'),
                   icon: getProviderIcon('xAI Grok', 'https://api.x.ai/v1'),
                   onClick: () => {
                     setAddServiceOpen(false);
@@ -1472,8 +1465,7 @@ export function ProviderManager() {
                   // dialog. No silent browser navigation.
                   key: 'codex-account',
                   name: 'Codex Account',
-                  description: 'Sign in to Codex with ChatGPT Plus/Pro — gpt-5.5 etc.',
-                  descriptionZh: '登录 Codex（ChatGPT Plus/Pro 账户）— 可使用 gpt-5.5 等',
+                  description: t('provider.mgr.codexAccountDesc'),
                   icon: getProviderIcon('OpenAI', ''),
                   // Keep the picker open until the app-server accepts the
                   // login request. On failure, the error below remains in the
@@ -1520,22 +1512,22 @@ export function ProviderManager() {
                       {entry.name}
                       {entry.connected && (
                         <span className="inline-flex items-center rounded-full bg-status-success-muted px-1.5 py-0.5 text-[10px] font-medium text-status-success-foreground">
-                          {isZh ? '已登录' : 'Signed in'}
+                          {t('provider.mgr.signedIn')}
                         </span>
                       )}
                       {entry.loading && (
                         <span className="text-[10px] font-normal text-muted-foreground">
-                          {isZh ? '连接中…' : 'Connecting…'}
+                          {t('provider.mgr.connecting')}
                         </span>
                       )}
                       {entry.disabled && (
                         <span className="text-[10px] font-normal text-muted-foreground">
-                          {isZh ? '已关闭' : 'Disabled'}
+                          {t('provider.mgr.disabled')}
                         </span>
                       )}
                     </div>
                     <div className="text-[11px] text-muted-foreground truncate">
-                      {isZh ? entry.descriptionZh : entry.description}
+                      {entry.description}
                     </div>
                   </div>
                 </button>
@@ -1567,7 +1559,7 @@ export function ProviderManager() {
                   {officialPresets.length > 0 && (
                     <div>
                       <h4 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                        {isZh ? '官方 API（直连）' : 'Official API (direct)'}
+                        {t('provider.mgr.officialApiDirect')}
                       </h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {officialPresets.map(renderPresetButton)}
@@ -1578,7 +1570,7 @@ export function ProviderManager() {
                   {codePlanPresets.length > 0 && (
                     <div>
                       <h4 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                        {isZh ? 'Claude Code 兼容套餐' : 'Claude Code-compatible plans'}
+                        {t('provider.mgr.codePlans')}
                       </h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {codePlanPresets.map(renderPresetButton)}
@@ -1589,7 +1581,7 @@ export function ProviderManager() {
                   {thirdpartyPresets.length > 0 && (
                     <div>
                       <h4 className="text-[11px] font-medium text-muted-foreground uppercase tracking-wider mb-3">
-                        {isZh ? '第三方 / 中转兼容' : 'Third-party / relay'}
+                        {t('provider.mgr.thirdPartyRelay')}
                       </h4>
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         {thirdpartyPresets.map(renderPresetButton)}
@@ -1621,11 +1613,9 @@ export function ProviderManager() {
       <Dialog open={!!codexLoginStart} onOpenChange={(open) => { if (!open) void handleCodexLoginCancel(); }}>
         <DialogContent className="max-w-md">
           <DialogHeader>
-            <DialogTitle>{isZh ? '登录 Codex' : 'Login to Codex'}</DialogTitle>
+            <DialogTitle>{t('provider.mgr.codexLoginTitle')}</DialogTitle>
             <DialogDescription>
-              {isZh
-                ? '在浏览器中完成登录后，回到这里点击「我已完成登录」。'
-                : 'Complete login in your browser, then click "I’ve completed login" below.'}
+              {t('provider.mgr.codexLoginDesc')}
             </DialogDescription>
           </DialogHeader>
           {codexLoginStart?.type === 'chatgpt' && (
@@ -1641,10 +1631,10 @@ export function ProviderManager() {
               </a>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => void handleCodexLoginCancel()}>
-                  {isZh ? '取消' : 'Cancel'}
+                  {t('provider.mgr.cancel')}
                 </Button>
                 <Button size="sm" onClick={handleCodexLoginComplete}>
-                  {isZh ? '我已完成登录' : 'I’ve completed login'}
+                  {t('provider.mgr.codexLoginComplete')}
                 </Button>
               </div>
             </div>
@@ -1661,23 +1651,23 @@ export function ProviderManager() {
                 <span>{codexLoginStart.verificationUrl}</span>
               </a>
               <div className="rounded bg-card border border-border/60 px-3 py-2 flex items-center justify-between gap-2">
-                <span className="text-xs text-muted-foreground">{isZh ? '设备码' : 'Device code'}</span>
+                <span className="text-xs text-muted-foreground">{t('provider.mgr.deviceCode')}</span>
                 <span className="font-mono text-sm font-semibold tracking-wider">{codexLoginStart.userCode}</span>
                 <Button
                   variant="ghost"
                   size="sm"
                   onClick={() => { void navigator.clipboard.writeText(codexLoginStart.userCode); }}
-                  aria-label={isZh ? '复制' : 'Copy'}
+                  aria-label={t('provider.mgr.copy')}
                 >
                   <CodePilotIcon name="copy" size={12} aria-hidden />
                 </Button>
               </div>
               <div className="flex justify-end gap-2">
                 <Button variant="ghost" size="sm" onClick={() => void handleCodexLoginCancel()}>
-                  {isZh ? '取消' : 'Cancel'}
+                  {t('provider.mgr.cancel')}
                 </Button>
                 <Button size="sm" onClick={handleCodexLoginComplete}>
-                  {isZh ? '我已完成登录' : 'I’ve completed login'}
+                  {t('provider.mgr.codexLoginComplete')}
                 </Button>
               </div>
             </div>
@@ -1686,10 +1676,10 @@ export function ProviderManager() {
             <div className="flex flex-col gap-3">
               <p className="text-xs text-foreground/85">
                 <CheckCircle size={12} weight="fill" className="inline-block mr-1 text-status-success-foreground" />
-                {isZh ? 'API key 已保存，可以关闭此对话框。' : 'API key saved. You can close this dialog.'}
+                {t('provider.mgr.codexApiKeySaved')}
               </p>
               <div className="flex justify-end">
-                <Button size="sm" onClick={handleCodexLoginComplete}>{isZh ? '完成' : 'Done'}</Button>
+                <Button size="sm" onClick={handleCodexLoginComplete}>{t('provider.mgr.done')}</Button>
               </div>
             </div>
           )}
@@ -1703,11 +1693,9 @@ export function ProviderManager() {
       >
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
-            <DialogTitle>{isZh ? '请选择套餐类型' : 'Choose the plan type'}</DialogTitle>
+            <DialogTitle>{t('provider.mgr.choosePlanTypeTitle')}</DialogTitle>
             <DialogDescription>
-              {isZh
-                ? '这个旧配置使用个人版与团队版共用的地址，CodePilot 无法从地址或 Key 判断套餐。选择实际购买的类型后，目录管理的模型会更新为该套餐白名单；手动添加或手动编辑的模型会保留。'
-                : 'This legacy configuration uses an endpoint shared by Personal and Team plans. CodePilot cannot infer the product from the endpoint or key. Choosing your plan updates catalog-managed models to its allowlist; manually added or edited models are preserved.'}
+              {t('provider.mgr.choosePlanTypeDesc')}
             </DialogDescription>
           </DialogHeader>
           <div className="grid gap-3 mt-2">
@@ -1776,19 +1764,17 @@ export function ProviderManager() {
         <DialogContent className="sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>
-              {isZh ? '模型同步结果' : 'Model discovery result'} · {discoverState?.providerName}
+              {t('provider.mgr.discoveryTitle')} · {discoverState?.providerName}
             </DialogTitle>
             <DialogDescription>
-              {isZh
-                ? '只读探测，不会自动写入你的配置。失败时可以回退到内置目录。'
-                : 'Read-only probe — your configuration is not changed. Falls back to the built-in catalog when the upstream call fails.'}
+              {t('provider.mgr.discoveryDesc')}
             </DialogDescription>
           </DialogHeader>
           <div className="space-y-3 mt-2">
             {discoverState?.loading && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-4">
                 <SpinnerGap size={14} className="animate-spin" />
-                {isZh ? '正在探测…' : 'Probing…'}
+                {t('provider.mgr.probing')}
               </div>
             )}
             {discoverState?.result && (() => {
@@ -1798,38 +1784,38 @@ export function ProviderManager() {
                 : r.ok ? 'bg-status-success-muted text-status-success-foreground'
                 : 'bg-status-warning-muted text-status-warning-foreground';
               const classLabel =
-                r.classification === 'api' ? (isZh ? '可同步' : 'Discoverable')
-                : r.classification === 'experimental' ? (isZh ? '实验性同步' : 'Experimental')
-                : (isZh ? '使用内置目录' : 'Catalog only');
+                r.classification === 'api' ? t('provider.mgr.classApi')
+                : r.classification === 'experimental' ? t('provider.mgr.classExperimental')
+                : t('provider.mgr.classCatalogOnly');
               return (
                 <>
                   <div className="rounded-md bg-card border border-border/50">
                     <div className="px-4 divide-y divide-border/50">
                       <div className="py-2.5 flex items-center justify-between gap-3">
-                        <span className="text-[11px] text-muted-foreground">{isZh ? '分类' : 'Category'}</span>
+                        <span className="text-[11px] text-muted-foreground">{t('provider.mgr.categoryLabel')}</span>
                         <span className={cn('inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium', tone)}>
                           {classLabel}
                         </span>
                       </div>
                       <div className="py-2.5 flex items-center justify-between gap-3">
-                        <span className="text-[11px] text-muted-foreground">{isZh ? '协议' : 'Protocol'}</span>
+                        <span className="text-[11px] text-muted-foreground">{t('provider.mgr.protocolLabel')}</span>
                         <span className="text-xs font-mono text-foreground/85">{r.protocol}</span>
                       </div>
                       {r.endpoint && (
                         <div className="py-2.5 flex items-center justify-between gap-3 min-w-0">
-                          <span className="text-[11px] text-muted-foreground shrink-0">{isZh ? '端点' : 'Endpoint'}</span>
+                          <span className="text-[11px] text-muted-foreground shrink-0">{t('provider.mgr.discoveryEndpoint')}</span>
                           <span className="text-xs font-mono text-foreground/85 truncate text-right">{r.endpoint}</span>
                         </div>
                       )}
                       {typeof r.modelCount === 'number' && (
                         <div className="py-2.5 flex items-center justify-between gap-3">
-                          <span className="text-[11px] text-muted-foreground">{isZh ? '模型数' : 'Model count'}</span>
+                          <span className="text-[11px] text-muted-foreground">{t('provider.mgr.modelCount')}</span>
                           <span className="text-xs font-medium text-foreground/85">{r.modelCount}</span>
                         </div>
                       )}
                       {typeof r.durationMs === 'number' && (
                         <div className="py-2.5 flex items-center justify-between gap-3">
-                          <span className="text-[11px] text-muted-foreground">{isZh ? '耗时' : 'Duration'}</span>
+                          <span className="text-[11px] text-muted-foreground">{t('provider.mgr.duration')}</span>
                           <span className="text-xs font-mono text-foreground/85">{r.durationMs} ms</span>
                         </div>
                       )}
@@ -1854,7 +1840,7 @@ export function ProviderManager() {
                   {r.sampleModels && r.sampleModels.length > 0 && (
                     <div>
                       <p className="text-[11px] text-muted-foreground mb-2">
-                        {isZh ? `模型列表（${r.sampleModels.length} 条）` : `Models (${r.sampleModels.length})`}
+                        {t('provider.mgr.modelsListCount', { count: r.sampleModels.length })}
                       </p>
                       <div className="rounded-md bg-muted/40 px-3 py-2 max-h-48 overflow-y-auto">
                         <ul className="text-xs font-mono text-foreground/85 space-y-1">
@@ -1870,21 +1856,13 @@ export function ProviderManager() {
                       acc[e.status] = (acc[e.status] || 0) + 1;
                       return acc;
                     }, { 'new': 0, 'will-update': 0, 'preserve-edited': 0, 'hidden-but-upstream': 0, 'unchanged': 0, 'orphan': 0 });
-                    const labelZh: Record<DiffStatus, string> = {
-                      'new': '新增',
-                      'will-update': '将更新',
-                      'preserve-edited': '保留编辑',
-                      'hidden-but-upstream': '保持隐藏',
-                      'unchanged': '无变化',
-                      'orphan': '上游已下线',
-                    };
-                    const labelEn: Record<DiffStatus, string> = {
-                      'new': 'New',
-                      'will-update': 'Will update',
-                      'preserve-edited': 'Preserve edits',
-                      'hidden-but-upstream': 'Keep hidden',
-                      'unchanged': 'Unchanged',
-                      'orphan': 'No longer upstream',
+                    const labelKeys: Record<DiffStatus, TranslationKey> = {
+                      'new': 'provider.mgr.diffNew',
+                      'will-update': 'provider.mgr.diffWillUpdate',
+                      'preserve-edited': 'provider.mgr.diffPreserveEdited',
+                      'hidden-but-upstream': 'provider.mgr.diffHiddenButUpstream',
+                      'unchanged': 'provider.mgr.diffUnchanged',
+                      'orphan': 'provider.mgr.diffOrphan',
                     };
                     const order: DiffStatus[] = ['new', 'will-update', 'preserve-edited', 'hidden-but-upstream', 'unchanged', 'orphan'];
                     return (
@@ -1892,7 +1870,7 @@ export function ProviderManager() {
                         <div className="px-4 divide-y divide-border/50">
                           {order.filter(k => counts[k] > 0).map(k => (
                             <div key={k} className="py-2.5 flex items-center justify-between gap-3">
-                              <span className="text-[11px] text-muted-foreground">{isZh ? labelZh[k] : labelEn[k]}</span>
+                              <span className="text-[11px] text-muted-foreground">{t(labelKeys[k])}</span>
                               <span className="text-xs font-medium text-foreground/85">{counts[k]}</span>
                             </div>
                           ))}
@@ -1905,16 +1883,18 @@ export function ProviderManager() {
                   {discoverState?.applied && (
                     <div className="rounded-md bg-status-success-muted/40 border border-status-success-border/40 px-3 py-2">
                       <p className="text-xs text-status-success-foreground">
-                        {isZh
-                          ? `应用完成：新增 ${discoverState.applied.inserted}、刷新 ${discoverState.applied.refreshedPristine}、保留用户编辑 ${discoverState.applied.refreshedPreserved}。`
-                          : `Applied: ${discoverState.applied.inserted} new, ${discoverState.applied.refreshedPristine} refreshed, ${discoverState.applied.refreshedPreserved} edits preserved.`}
+                        {t('provider.mgr.appliedSummary', {
+                          inserted: discoverState.applied.inserted,
+                          refreshedPristine: discoverState.applied.refreshedPristine,
+                          refreshedPreserved: discoverState.applied.refreshedPreserved,
+                        })}
                       </p>
                     </div>
                   )}
 
                   {r.ok && r.modelCount === 0 && (
                     <p className="text-[11px] text-muted-foreground">
-                      {isZh ? '上游返回空模型列表，没有可应用的变化。' : 'Upstream returned an empty list — nothing to apply.'}
+                      {t('provider.mgr.upstreamEmpty')}
                     </p>
                   )}
 
@@ -1931,7 +1911,7 @@ export function ProviderManager() {
                         onClick={handleApplyDiff}
                       >
                         {discoverState?.applying && <SpinnerGap size={12} className="animate-spin" />}
-                        {isZh ? '应用更改' : 'Apply changes'}
+                        {t('provider.mgr.applyChanges')}
                       </Button>
                     </div>
                   )}
@@ -1953,11 +1933,9 @@ export function ProviderManager() {
       >
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>{isZh ? '登录 Grok Build OAuth' : 'Sign in to Grok Build OAuth'}</DialogTitle>
+            <DialogTitle>{t('provider.mgr.xaiLoginTitle')}</DialogTitle>
             <DialogDescription>
-              {isZh
-                ? '这是兼容接入，复用 Grok Build 公开 OAuth client，可能受 xAI 上游策略调整影响。xAI API Key 是独立且更稳定的备用渠道。'
-                : 'This compatibility login reuses the public Grok Build OAuth client and may be affected by xAI policy changes. xAI API Key remains a separate, more stable fallback.'}
+              {t('provider.mgr.xaiLoginDesc')}
             </DialogDescription>
           </DialogHeader>
 
@@ -1968,26 +1946,24 @@ export function ProviderManager() {
                 disabled={xaiLoggingIn}
                 onClick={() => void handleXaiLogin('browser')}
               >
-                {isZh ? '浏览器登录' : 'Browser login'}
+                {t('provider.mgr.xaiBrowserLogin')}
               </Button>
               <Button
                 variant="outline"
                 disabled={xaiLoggingIn}
                 onClick={() => void handleXaiLogin('device')}
               >
-                {isZh ? '设备码登录' : 'Device-code login'}
+                {t('provider.mgr.xaiDeviceLogin')}
               </Button>
             </div>
           ) : xaiLoginMethod === 'browser' ? (
             <div className="rounded-md border border-border/60 bg-muted/30 px-4 py-3 text-sm text-muted-foreground">
-              {isZh
-                ? '浏览器授权页面已打开。请在浏览器中完成登录；此流程不需要设备码，完成后窗口会自动收起。'
-                : 'The browser authorization page is open. Complete sign-in there; no device code is required, and this dialog will close automatically.'}
+              {t('provider.mgr.xaiBrowserHint')}
             </div>
           ) : xaiDevice ? (
             <div className="space-y-3 py-3">
               <p className="text-sm text-muted-foreground">
-                {isZh ? '打开验证页面并输入设备码：' : 'Open the verification page and enter this device code:'}
+                {t('provider.mgr.xaiDeviceHint')}
               </p>
               <div className="rounded-md bg-muted px-4 py-3 text-center font-mono text-xl tracking-widest">
                 {xaiDevice.userCode}
@@ -2002,19 +1978,19 @@ export function ProviderManager() {
                 <ArrowSquareOut size={14} />
               </a>
               <p className="text-xs text-muted-foreground">
-                {isZh ? `设备码约 ${Math.ceil(xaiDevice.expiresIn / 60)} 分钟后过期。` : `The code expires in about ${Math.ceil(xaiDevice.expiresIn / 60)} minutes.`}
+                {t('provider.mgr.xaiDeviceExpires', { minutes: Math.ceil(xaiDevice.expiresIn / 60) })}
               </p>
             </div>
           ) : (
             <p className="py-3 text-sm text-muted-foreground">
-              {isZh ? '正在获取设备码…' : 'Requesting a device code…'}
+              {t('provider.mgr.xaiRequestingCode')}
             </p>
           )}
 
           {xaiLoggingIn && (
             <p className="flex items-center gap-2 text-xs text-muted-foreground">
               <SpinnerGap size={13} className="animate-spin" />
-              {isZh ? '等待 xAI 授权完成…' : 'Waiting for xAI authorization…'}
+              {t('provider.mgr.xaiWaitingAuth')}
             </p>
           )}
           {xaiError && <p className="text-xs text-destructive" role="alert">{xaiError}</p>}

@@ -287,8 +287,11 @@ describe('ProviderManager — Codex Account virtual card (IA correction)', () =>
     // Phase 6 IA correction copy fix: type=chatgpt/apiKey/amazonBedrock
     // is the LOGIN METHOD, not the plan. "类型" reads as plan to users.
     // Pin the rename so a future build can't silently revert it.
-    assert.match(mgrSrc, /label:\s*isZh\s*\?\s*['"]登录方式['"]/);
-    assert.match(mgrSrc, /['"]Login method['"]/);
+    const enSrc = fs.readFileSync(path.join(repoRoot, 'i18n/en.ts'), 'utf8');
+    const zhSrc = fs.readFileSync(path.join(repoRoot, 'i18n/zh.ts'), 'utf8');
+    assert.match(mgrSrc, /label:\s*t\(['"]provider\.mgr\.loginMethod['"]\)/);
+    assert.match(zhSrc, /'provider\.mgr\.loginMethod':\s*'登录方式'/);
+    assert.match(enSrc, /'provider\.mgr\.loginMethod':\s*'Login method'/);
     // The Codex card MUST NOT render `account.type` under a "类型" /
     // "Type" label — that was the confusing original.
     const codexCardBlock = mgrSrc.match(/codexAccount\?\.kind\s*===\s*['"]logged_in['"][\s\S]+?<\/ProviderCard>/);

@@ -7,14 +7,24 @@ const source = readFileSync(
   path.resolve(__dirname, '../../components/settings/ProviderManager.tsx'),
   'utf8',
 );
+const enSrc = readFileSync(
+  path.resolve(__dirname, '../../i18n/en.ts'),
+  'utf8',
+);
+const zhSrc = readFileSync(
+  path.resolve(__dirname, '../../i18n/zh.ts'),
+  'utf8',
+);
 
 describe('xAI dual-channel Settings contract', () => {
   it('keeps API Key and OAuth as distinct user-visible entries', () => {
     assert.match(source, /OFFICIAL_DIRECT_API_KEYS[\s\S]*'xai'/);
     assert.match(source, /key:\s*'xai-oauth'/);
     assert.match(source, /name:\s*'Grok Build OAuth'/);
-    assert.match(source, /API Key remains available/);
-    assert.match(source, /public Grok Build OAuth client/);
+    assert.match(source, /provider\.mgr\.xaiOAuthDesc/);
+    assert.match(source, /provider\.mgr\.xaiLoginDesc/);
+    assert.match(enSrc, /'provider\.mgr\.xaiOAuthDesc':[\s\S]{0,160}API Key remains available/);
+    assert.match(enSrc, /'provider\.mgr\.xaiLoginDesc':[\s\S]{0,160}public Grok Build OAuth client/);
   });
 
   it('offers browser and device-code as methods of one OAuth identity', () => {
@@ -26,8 +36,9 @@ describe('xAI dual-channel Settings contract', () => {
 
   it('locks the dialog to the chosen method so browser login never asks for a device code', () => {
     assert.match(source, /xaiLoginMethod === 'browser'/);
-    assert.match(source, /此流程不需要设备码/);
-    assert.match(source, /no device code is required/);
+    assert.match(source, /provider\.mgr\.xaiBrowserHint/);
+    assert.match(zhSrc, /'provider\.mgr\.xaiBrowserHint':[\s\S]{0,160}此流程不需要设备码/);
+    assert.match(enSrc, /'provider\.mgr\.xaiBrowserHint':[\s\S]{0,200}no device code is required/);
     assert.match(source, /xaiLoginMethod === 'browser'[\s\S]*xaiDevice \?/);
   });
 
@@ -35,7 +46,9 @@ describe('xAI dual-channel Settings contract', () => {
     assert.match(source, /disabledReason/);
     assert.match(source, /disabled:\s*xaiAuth\?\.enabled === false/);
     assert.match(source, /entry\.disabled/);
-    assert.match(source, /已关闭|Disabled/);
+    assert.match(source, /provider\.mgr\.disabled/);
+    assert.match(zhSrc, /'provider\.mgr\.disabled':\s*'已关闭'/);
+    assert.match(enSrc, /'provider\.mgr\.disabled':\s*'Disabled'/);
   });
 
   it('connected card exposes local logout and the manual account-management link', () => {
@@ -50,7 +63,8 @@ describe('xAI dual-channel Settings contract', () => {
       source.indexOf("{codexAccount?.kind === 'logged_in'", source.indexOf("{xaiAuth?.authenticated && (")),
     );
     assert.doesNotMatch(xaiCard, /quota|remaining|percentage|\bPro\b|\bPremium\b/i);
-    assert.match(xaiCard, /Billing source/);
+    assert.match(xaiCard, /provider\.mgr\.billingSource/);
+    assert.match(enSrc, /'provider\.mgr\.billingSource':\s*'Billing source'/);
   });
 
   it('surfaces the OAuth entitlement in Image & video providers and wires it to the image default', () => {
