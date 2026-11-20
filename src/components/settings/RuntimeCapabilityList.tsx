@@ -55,6 +55,8 @@ import {
   DialogTrigger,
 } from '@/components/ui/dialog';
 import { cn } from '@/lib/utils';
+import { useTranslation } from '@/hooks/useTranslation';
+import type { TranslationKey } from '@/i18n';
 import type { RuntimeId } from '@/lib/runtime/runtime-id';
 import { getRuntimeDisplayName } from '@/lib/runtime/runtime-catalog';
 import type { CapabilityMatrixCell } from '@/lib/harness/capability-matrix';
@@ -109,77 +111,45 @@ function userExtensionsStatusIcon(status: UserExtensionsStatus) {
   }
 }
 
-function userExtensionsBadge(status: UserExtensionsStatus, isZh: boolean): { label: string; cls: string } {
-  if (isZh) {
-    switch (status) {
-      case 'executable':
-        return { label: '全部可用', cls: 'bg-status-success-muted text-status-success-foreground' };
-      case 'partial':
-        return { label: '部分可用', cls: 'bg-status-warning-muted text-status-warning-foreground' };
-      case 'perception_only':
-        return { label: '不可调用', cls: 'bg-status-warning-muted text-status-warning-foreground' };
-    }
-  }
+type TranslateFn = (key: TranslationKey, params?: Record<string, string | number>) => string;
+
+function userExtensionsBadge(status: UserExtensionsStatus, t: TranslateFn): { label: string; cls: string } {
   switch (status) {
     case 'executable':
-      return { label: 'All wired', cls: 'bg-status-success-muted text-status-success-foreground' };
+      return { label: t('runtime.capabilities.extExecutable'), cls: 'bg-status-success-muted text-status-success-foreground' };
     case 'partial':
-      return { label: 'Partial', cls: 'bg-status-warning-muted text-status-warning-foreground' };
+      return { label: t('runtime.capabilities.extPartial'), cls: 'bg-status-warning-muted text-status-warning-foreground' };
     case 'perception_only':
-      return { label: 'Not callable', cls: 'bg-status-warning-muted text-status-warning-foreground' };
+      return { label: t('runtime.capabilities.extPerceptionOnly'), cls: 'bg-status-warning-muted text-status-warning-foreground' };
   }
 }
 
-function statusLabel(status: CapabilityMatrixCell['status'], isZh: boolean): string {
-  if (isZh) {
-    switch (status) {
-      case 'executable':
-        return '可调用';
-      case 'perception_only':
-        return '不可调用';
-      case 'unavailable':
-        return '不支持';
-      case 'undetermined':
-        return '未确定';
-    }
-  }
+function statusLabel(status: CapabilityMatrixCell['status'], t: TranslateFn): string {
   switch (status) {
     case 'executable':
-      return 'Callable';
+      return t('runtime.capabilities.statusExecutable');
     case 'perception_only':
-      return 'Not callable here';
+      return t('runtime.capabilities.statusPerceptionOnly');
     case 'unavailable':
-      return 'Unsupported';
+      return t('runtime.capabilities.statusUnavailable');
     case 'undetermined':
-      return 'Undetermined';
+      return t('runtime.capabilities.statusUndetermined');
   }
 }
 
 function trustBoundaryLabel(
   boundary: NonNullable<CapabilityMatrixCell['trustBoundary']>,
-  isZh: boolean,
+  t: TranslateFn,
 ): string {
-  if (isZh) {
-    switch (boundary) {
-      case 'auto_safe':
-        return '自动执行';
-      case 'requires_approval':
-        return '需批准';
-      case 'side_effect':
-        return '会触发通知';
-      case 'mixed':
-        return '部分需批准';
-    }
-  }
   switch (boundary) {
     case 'auto_safe':
-      return 'Auto';
+      return t('runtime.capabilities.trustAutoSafe');
     case 'requires_approval':
-      return 'Approval';
+      return t('runtime.capabilities.trustRequiresApproval');
     case 'side_effect':
-      return 'Side effect';
+      return t('runtime.capabilities.trustSideEffect');
     case 'mixed':
-      return 'Mixed';
+      return t('runtime.capabilities.trustMixed');
   }
 }
 
@@ -209,6 +179,7 @@ export function RuntimeCapabilityList({
   providerNote,
   stopPropagationOnTrigger,
 }: Props) {
+  const { t } = useTranslation();
   const [open, setOpen] = useState(false);
   const executableCount = cells.filter((c) => c.status === 'executable').length;
   const totalCount = cells.length;
@@ -236,9 +207,10 @@ export function RuntimeCapabilityList({
             'transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring',
           )}
         >
-          {isZh
-            ? `查看能力清单（${executableCount} / ${totalCount}）`
-            : `View capabilities (${executableCount} / ${totalCount})`}
+          {t('runtime.capabilities.viewTrigger', {
+            executable: executableCount,
+            total: totalCount,
+          })}
         </button>
       </DialogTrigger>
       <DialogContent
@@ -247,12 +219,10 @@ export function RuntimeCapabilityList({
       >
         <DialogHeader className="shrink-0">
           <DialogTitle>
-            {isZh ? '能力支持清单' : 'Capability support'} — {runtimeLabel(runtimeId, isZh)}
+            {t('runtime.capabilities.dialogTitle')} — {runtimeLabel(runtimeId, isZh)}
           </DialogTitle>
           <DialogDescription>
-            {isZh
-              ? `这里只展示 CodePilot 提供的内置 Harness 能力。引擎自身的原生工具（例如 Codex 的 plugins / shell、ClaudeCode 的 hooks）由对应引擎管理，不在此列。`
-              : `This list only covers CodePilot’s built-in Harness capabilities. Each engine’s own native tools (Codex plugins / shell, ClaudeCode hooks, etc.) are managed by that engine and not shown here.`}
+            {t('runtime.capabilities.dialogDesc')}
           </DialogDescription>
         </DialogHeader>
 
@@ -267,7 +237,7 @@ export function RuntimeCapabilityList({
           )}
 
           <h4 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground mt-1">
-            {isZh ? 'CodePilot 内置能力' : 'Built-in capabilities'}
+            {t('runtime.capabilities.builtInHeading')}
           </h4>
           <ul className="flex flex-col gap-2">
             {cells.map((cell) => {
@@ -311,7 +281,7 @@ export function RuntimeCapabilityList({
                           cell.status === 'undetermined' && 'bg-muted text-muted-foreground',
                         )}
                       >
-                        {statusLabel(cell.status, isZh)}
+                        {statusLabel(cell.status, t)}
                       </span>
                       {cell.status === 'executable' && cell.trustBoundary && (
                         <span
@@ -321,7 +291,7 @@ export function RuntimeCapabilityList({
                             trustBoundaryClass(cell.trustBoundary),
                           )}
                         >
-                          {trustBoundaryLabel(cell.trustBoundary, isZh)}
+                          {trustBoundaryLabel(cell.trustBoundary, t)}
                         </span>
                       )}
                     </div>
@@ -359,11 +329,11 @@ export function RuntimeCapabilityList({
               HARNESS_CAPABILITIES catalog. */}
           {(() => {
             const summary = getUserExtensionsSummary(runtimeId);
-            const badge = userExtensionsBadge(summary.status, isZh);
+            const badge = userExtensionsBadge(summary.status, t);
             return (
               <div className="mt-4 pt-3 border-t border-border/40">
                 <h4 className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-                  {isZh ? '用户自定义' : 'User extensions'}
+                  {t('runtime.capabilities.userExtensionsHeading')}
                 </h4>
                 <div
                   data-testid={`user-extensions-row-${runtimeId}`}

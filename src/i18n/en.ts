@@ -2557,6 +2557,24 @@ const en = {
   'provider.card.moreActions': 'More actions',
   'provider.card.diagnose': 'Diagnose',
   'provider.card.syncToClaudeCode': 'Sync to Claude Code',
+
+  // Settings — Runtime Capability List
+  'runtime.capabilities.extExecutable': 'All wired',
+  'runtime.capabilities.extPartial': 'Partial',
+  'runtime.capabilities.extPerceptionOnly': 'Not callable',
+  'runtime.capabilities.statusExecutable': 'Callable',
+  'runtime.capabilities.statusPerceptionOnly': 'Not callable here',
+  'runtime.capabilities.statusUnavailable': 'Unsupported',
+  'runtime.capabilities.statusUndetermined': 'Undetermined',
+  'runtime.capabilities.trustAutoSafe': 'Auto',
+  'runtime.capabilities.trustRequiresApproval': 'Approval',
+  'runtime.capabilities.trustSideEffect': 'Side effect',
+  'runtime.capabilities.trustMixed': 'Mixed',
+  'runtime.capabilities.viewTrigger': 'View capabilities ({executable} / {total})',
+  'runtime.capabilities.dialogTitle': 'Capability support',
+  'runtime.capabilities.dialogDesc': 'This list only covers CodePilot’s built-in Harness capabilities. Each engine’s own native tools (Codex plugins / shell, ClaudeCode hooks, etc.) are managed by that engine and not shown here.',
+  'runtime.capabilities.builtInHeading': 'Built-in capabilities',
+  'runtime.capabilities.userExtensionsHeading': 'User extensions',
 } as const;
 
 export type TranslationKey = keyof typeof en;

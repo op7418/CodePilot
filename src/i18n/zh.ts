@@ -2528,6 +2528,24 @@ const zh: Record<TranslationKey, string> = {
   'provider.card.moreActions': '更多操作',
   'provider.card.diagnose': '诊断',
   'provider.card.syncToClaudeCode': '同步到 Claude Code',
+
+  // Settings — Runtime Capability List
+  'runtime.capabilities.extExecutable': '全部可用',
+  'runtime.capabilities.extPartial': '部分可用',
+  'runtime.capabilities.extPerceptionOnly': '不可调用',
+  'runtime.capabilities.statusExecutable': '可调用',
+  'runtime.capabilities.statusPerceptionOnly': '不可调用',
+  'runtime.capabilities.statusUnavailable': '不支持',
+  'runtime.capabilities.statusUndetermined': '未确定',
+  'runtime.capabilities.trustAutoSafe': '自动执行',
+  'runtime.capabilities.trustRequiresApproval': '需批准',
+  'runtime.capabilities.trustSideEffect': '会触发通知',
+  'runtime.capabilities.trustMixed': '部分需批准',
+  'runtime.capabilities.viewTrigger': '查看能力清单（{executable} / {total}）',
+  'runtime.capabilities.dialogTitle': '能力支持清单',
+  'runtime.capabilities.dialogDesc': '这里只展示 CodePilot 提供的内置 Harness 能力。引擎自身的原生工具（例如 Codex 的 plugins / shell、ClaudeCode 的 hooks）由对应引擎管理，不在此列。',
+  'runtime.capabilities.builtInHeading': 'CodePilot 内置能力',
+  'runtime.capabilities.userExtensionsHeading': '用户自定义',
 };
 
 export default zh;
