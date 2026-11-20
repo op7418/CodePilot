@@ -222,9 +222,7 @@ export function CliToolDetailDialog({
               size="sm"
               className="gap-1.5"
               onClick={() => {
-                const prefill = isZh
-                  ? `我想用 ${tool.name} 工具完成：`
-                  : `I want to use ${tool.name} to: `;
+                const prefill = t('cliTools.tryToolPrefill', { name: tool.name });
                 window.location.href = `/chat?prefill=${encodeURIComponent(prefill)}`;
               }}
             >
