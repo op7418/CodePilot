@@ -88,19 +88,12 @@ interface ProviderModelsBundle {
   models: ProviderModel[];
 }
 
-const SOURCE_LABEL_ZH: Record<ProviderModelSource, string> = {
-  api: 'API 同步',
-  catalog: '内置目录',
-  manual: '手动添加',
-  role_mapping: '角色映射',
-  sdk_default: 'SDK 默认',
-};
-const SOURCE_LABEL_EN: Record<ProviderModelSource, string> = {
-  api: 'From API',
-  catalog: 'Catalog',
-  manual: 'Manual',
-  role_mapping: 'Role mapping',
-  sdk_default: 'SDK default',
+const SOURCE_LABEL_KEYS: Record<ProviderModelSource, TranslationKey> = {
+  api: 'models.source.api',
+  catalog: 'models.source.catalog',
+  manual: 'models.source.manual',
+  role_mapping: 'models.source.role_mapping',
+  sdk_default: 'models.source.sdk_default',
 };
 const SOURCE_TONE: Record<ProviderModelSource, string> = {
   api: 'bg-status-success-muted text-status-success-foreground',
@@ -120,19 +113,12 @@ const SOURCE_TONE: Record<ProviderModelSource, string> = {
  * and would just add noise to the list. The user-touched and discovered-
  * but-hidden states are the ones worth surfacing.
  */
-const ENABLE_SOURCE_LABEL_ZH: Record<ModelEnableSource, string | undefined> = {
+const ENABLE_SOURCE_LABEL_KEYS: Record<ModelEnableSource, TranslationKey | undefined> = {
   recommended: undefined,
   catalog: undefined,
-  manual_enabled: '手动启用',
-  manual_hidden: '手动隐藏',
-  discovered: '未推荐',
-};
-const ENABLE_SOURCE_LABEL_EN: Record<ModelEnableSource, string | undefined> = {
-  recommended: undefined,
-  catalog: undefined,
-  manual_enabled: 'Manually enabled',
-  manual_hidden: 'Manually hidden',
-  discovered: 'Off-catalog',
+  manual_enabled: 'models.enableSource.manual_enabled',
+  manual_hidden: 'models.enableSource.manual_hidden',
+  discovered: 'models.enableSource.discovered',
 };
 const ENABLE_SOURCE_TONE: Record<ModelEnableSource, string> = {
   recommended: '',
@@ -143,19 +129,12 @@ const ENABLE_SOURCE_TONE: Record<ModelEnableSource, string> = {
   // dialog's "will-be-hidden" preview so the two surfaces feel coherent.
   discovered: 'bg-status-warning-muted text-status-warning-foreground',
 };
-const ENABLE_SOURCE_TOOLTIP_ZH: Record<ModelEnableSource, string> = {
-  recommended: '系统按推荐目录自动启用',
-  catalog: '内置目录默认',
-  manual_enabled: '你在 Models 页主动启用，刷新不会覆盖',
-  manual_hidden: '你在 Models 页主动隐藏，刷新不会覆盖',
-  discovered: '上游有这个模型，但不在推荐目录里 — 默认不在 Picker 中显示',
-};
-const ENABLE_SOURCE_TOOLTIP_EN: Record<ModelEnableSource, string> = {
-  recommended: 'System auto-enabled per the recommended catalog',
-  catalog: 'Built-in catalog default',
-  manual_enabled: 'You enabled this in Models — refresh will not override',
-  manual_hidden: 'You hid this in Models — refresh will not override',
-  discovered: 'Upstream offers this but it is not on the recommended list — hidden from the picker by default',
+const ENABLE_SOURCE_TOOLTIP_KEYS: Record<ModelEnableSource, TranslationKey> = {
+  recommended: 'models.enableSourceTooltip.recommended',
+  catalog: 'models.enableSourceTooltip.catalog',
+  manual_enabled: 'models.enableSourceTooltip.manual_enabled',
+  manual_hidden: 'models.enableSourceTooltip.manual_hidden',
+  discovered: 'models.enableSourceTooltip.discovered',
 };
 
 /**
@@ -207,8 +186,8 @@ type RoleKey = 'default' | 'reasoning' | 'small' | 'sonnet' | 'opus' | 'haiku';
 const ROLE_KEYS: RoleKey[] = ['default', 'sonnet', 'opus', 'haiku', 'reasoning', 'small'];
 
 export function ModelsSection() {
-  const { t } = useTranslation();
-  const isZh = t('nav.chats') === '对话';
+  const { t, locale } = useTranslation();
+  const isZh = locale === 'zh';
 
   const [providers, setProviders] = useState<ApiProvider[]>([]);
   const [bundles, setBundles] = useState<Record<string, ProviderModel[]>>({});
@@ -280,37 +259,21 @@ export function ModelsSection() {
   // provider; persistance goes through PUT /api/providers/[id].
   // RoleKey / ROLE_KEYS hoisted to module scope (stable identity for the
   // role-models useCallback dep — was recreated every render).
-  const ROLE_LABEL_ZH: Record<RoleKey, string> = {
-    default: '默认（兜底）',
-    sonnet: 'Sonnet 角色',
-    opus: 'Opus 角色',
-    haiku: 'Haiku 角色',
-    reasoning: '推理（reasoning）',
-    small: '小模型（small）',
+  const ROLE_LABEL_KEYS: Record<RoleKey, TranslationKey> = {
+    default: 'models.role.label.default',
+    sonnet: 'models.role.label.sonnet',
+    opus: 'models.role.label.opus',
+    haiku: 'models.role.label.haiku',
+    reasoning: 'models.role.label.reasoning',
+    small: 'models.role.label.small',
   };
-  const ROLE_LABEL_EN: Record<RoleKey, string> = {
-    default: 'Default (fallback)',
-    sonnet: 'Sonnet role',
-    opus: 'Opus role',
-    haiku: 'Haiku role',
-    reasoning: 'Reasoning',
-    small: 'Small',
-  };
-  const ROLE_HINT_ZH: Record<RoleKey, string> = {
-    default: '没有指定模型时用这个；也是 ANTHROPIC_MODEL 的来源',
-    sonnet: 'Claude Code 选 Sonnet 时实际跑的模型',
-    opus: 'Claude Code 选 Opus 时实际跑的模型',
-    haiku: 'Claude Code 选 Haiku 时实际跑的模型',
-    reasoning: '复杂推理任务（聊天里专门挑 reasoning 时使用）',
-    small: '子代理 / 便宜操作（子任务 / 简单总结时使用）',
-  };
-  const ROLE_HINT_EN: Record<RoleKey, string> = {
-    default: 'Used when no specific model is requested; also feeds ANTHROPIC_MODEL',
-    sonnet: 'What Claude Code actually runs when you pick Sonnet',
-    opus: 'What Claude Code actually runs when you pick Opus',
-    haiku: 'What Claude Code actually runs when you pick Haiku',
-    reasoning: 'Complex reasoning tasks (when chat asks for reasoning role)',
-    small: 'Sub-agents / cheap ops (sub-tasks / simple summaries)',
+  const ROLE_HINT_KEYS: Record<RoleKey, TranslationKey> = {
+    default: 'models.role.hint.default',
+    sonnet: 'models.role.hint.sonnet',
+    opus: 'models.role.hint.opus',
+    haiku: 'models.role.hint.haiku',
+    reasoning: 'models.role.hint.reasoning',
+    small: 'models.role.hint.small',
   };
 
   const [roleDialog, setRoleDialog] = useState<{ providerId: string; providerName: string } | null>(null);
@@ -467,7 +430,7 @@ export function ModelsSection() {
     if (targets.length === 0) {
       showToast({
         type: 'info',
-        message: isZh ? '没有可同步的服务商' : 'No syncable providers to refresh',
+        message: t('models.refreshAll.noSyncable'),
         duration: 4000,
       });
       return;
@@ -590,7 +553,7 @@ export function ModelsSection() {
             failCount++;
             failures.push({
               name: p.name,
-              reason: isZh ? '不支持自动同步' : 'Discovery not supported',
+              reason: t('models.refreshAll.unsupportedReason'),
             });
             break;
           case 'probe-failed':
@@ -618,7 +581,7 @@ export function ModelsSection() {
       // without expanding anything. Truncate to 3 names; "+N more"
       // suffix for the rest.
       const failNames = failures.slice(0, 3).map(f => f.name).join(', ');
-      const failMore = failures.length > 3 ? (isZh ? `等 ${failures.length} 个` : `+${failures.length - 3} more`) : '';
+      const failMore = failures.length > 3 ? t('models.refreshAll.failMore', { n: isZh ? failures.length : failures.length - 3 }) : '';
       const summaryParts: string[] = [];
       // Probe-and-apply successes (catalog refreshes that genuinely
       // touched enable/hide state). Skip this line when the only
@@ -679,9 +642,9 @@ export function ModelsSection() {
       // permanent "loading" spinner.
       updateToast(toastId, {
         type: 'warning',
-        message: isZh
-          ? `刷新过程异常: ${err instanceof Error ? err.message : String(err)}`
-          : `Batch refresh threw: ${err instanceof Error ? err.message : String(err)}`,
+        message: t('models.refreshAll.threw', {
+          message: err instanceof Error ? err.message : String(err),
+        }),
         duration: 6000,
       });
     } finally {
@@ -725,7 +688,10 @@ export function ModelsSection() {
     }
   }, [roleDialog, providers, roleDraft, fetchAll]);
 
-  useEffect(() => { fetchAll(); }, [fetchAll]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    fetchAll();
+  }, [fetchAll]);
 
   // Phase 2C: read default mode + runtime-compatible groups so the page
   // can render the "new chat default" status row + cross-runtime badges.
@@ -757,6 +723,7 @@ export function ModelsSection() {
   }, []);
 
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchDefaultMeta();
     const handler = () => { fetchDefaultMeta(); };
     window.addEventListener('provider-changed', handler);
@@ -853,22 +820,11 @@ export function ModelsSection() {
           setRuntimeCompatModels(compatMap);
         }
       } catch { /* fall back to stale isRuntimeCompat result */ }
-      const messageZh = wasHidden
-        ? (compat
-            ? '已启用并设为默认模型'
-            : '已启用并固定，但当前执行引擎 不可执行')
-        : (compat
-            ? '已设为默认模型'
-            : '已固定，但当前执行引擎 不可执行');
-      const messageEn = wasHidden
-        ? (compat
-            ? 'Enabled and set as default'
-            : 'Enabled and pinned, but not executable under current Runtime')
-        : (compat
-            ? 'Set as default model'
-            : 'Pinned, but not executable under current Runtime');
+      const messageKey: TranslationKey = wasHidden
+        ? (compat ? 'models.default.enabledAndSet' : 'models.default.enabledAndPinnedIncompat')
+        : (compat ? 'models.default.set' : 'models.default.pinnedIncompat');
       showToast({
-        message: isZh ? messageZh : messageEn,
+        message: t(messageKey),
         type: compat ? 'success' : 'warning',
       });
     } catch (err) {
@@ -877,13 +833,13 @@ export function ModelsSection() {
       // implying the pin was actually written.
       const isEnableFailure = err instanceof Error && err.message === 'enable-failed';
       const message = isEnableFailure
-        ? (isZh ? '启用模型失败，未修改默认模型' : 'Failed to enable model — default unchanged')
-        : (isZh ? '保存默认模型失败' : 'Failed to save default');
+        ? t('models.default.enableFailed')
+        : t('models.default.saveFailed');
       showToast({ message, type: 'error' });
     } finally {
       setSavingDefault(false);
     }
-  }, [savingDefault, isZh, isRuntimeCompat, bundles]);
+  }, [savingDefault, t, isRuntimeCompat, bundles]);
 
   const handleRevertToAuto = useCallback(async () => {
     if (savingDefault) return;
@@ -902,13 +858,13 @@ export function ModelsSection() {
       setPinnedProviderId('');
       setPinnedModel('');
       window.dispatchEvent(new Event('provider-changed'));
-      showToast({ message: isZh ? '已切回自动' : 'Reverted to Auto', type: 'success' });
+      showToast({ message: t('models.default.revertedToAuto'), type: 'success' });
     } catch {
-      showToast({ message: isZh ? '切换失败' : 'Failed to switch', type: 'error' });
+      showToast({ message: t('models.default.switchFailed'), type: 'error' });
     } finally {
       setSavingDefault(false);
     }
-  }, [savingDefault, isZh]);
+  }, [savingDefault, t]);
 
   // Resolved display name + label for the current pin. Falls back to the
   // raw ids when the pinned target isn't reachable under the current
@@ -948,6 +904,7 @@ export function ModelsSection() {
   // those concerns belong to chat-init; on Models we just need to
   // explain "what would Auto pick right now under the current engine".
   // The chat-side resolver remains the source of truth at send time.
+  // eslint-disable-next-line react-hooks/preserve-manual-memoization
   const autoResolved = useMemo(() => {
     if (defaultMode !== 'auto') return null;
     for (const p of providers) {
@@ -1029,6 +986,7 @@ export function ModelsSection() {
     // fail on a hidden-filtered model since the row wouldn't be in the
     // DOM yet.
     if (focusFilter === 'all' || focusFilter === 'hidden') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setViewFilter(focusFilter);
     }
 
@@ -1262,11 +1220,9 @@ export function ModelsSection() {
     <div className="max-w-4xl mx-auto space-y-8">
       <div className="flex flex-col sm:flex-row items-start sm:justify-between gap-3">
         <div className="min-w-0">
-          <h2 className="text-xl font-semibold tracking-tight">{isZh ? '模型管理' : 'Model management'}</h2>
+          <h2 className="text-xl font-semibold tracking-tight">{t('models.title')}</h2>
           <p className="text-sm text-muted-foreground mt-1.5">
-            {isZh
-              ? '选择每个服务商要在聊天里出现的模型，并补充自定义显示名。'
-              : 'Choose which models each provider exposes in chat, with optional display-name overrides.'}
+            {t('models.description')}
           </p>
         </div>
       </div>
@@ -1299,7 +1255,7 @@ export function ModelsSection() {
       >
         <div className="min-w-0 flex-1">
           <h3 className="text-sm font-medium flex items-center gap-2">
-            {isZh ? '新会话默认' : 'New chat default'}
+            {t('models.default.heading')}
             <span
               className={cn(
                 'inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium',
@@ -1308,41 +1264,40 @@ export function ModelsSection() {
                   : 'bg-muted text-muted-foreground',
               )}
               title={defaultMode === 'pinned'
-                ? (isZh ? '已固定到具体的 provider + model；不会被自动 fallback。' : 'Pinned to a specific provider + model; never silently fallback.')
-                : (isZh ? '系统按当前执行引擎自动选择第一个合适模型。' : 'System auto-picks the first suitable model under the current Runtime.')}
+                ? t('models.default.pinnedTooltip')
+                : t('models.default.autoTooltip')}
             >
-              {defaultMode === 'pinned' ? (isZh ? '已固定' : 'Pinned') : (isZh ? '自动' : 'Auto')}
+              {defaultMode === 'pinned' ? t('models.default.pinnedBadge') : t('models.default.autoBadge')}
             </span>
           </h3>
           <p className="text-xs text-muted-foreground mt-1.5 leading-relaxed">
             {defaultMode === 'auto' ? (
               autoResolved ? (
-                isZh
-                  ? `当前会用：${autoResolved.providerName} · ${autoResolved.modelLabel}。点击下方任何模型行右侧的图钉可固定为默认。`
-                  : `Currently resolves to: ${autoResolved.providerName} · ${autoResolved.modelLabel}. Pin any model row below to commit.`
+                t('models.default.autoResolvesTo', {
+                  provider: autoResolved.providerName,
+                  model: autoResolved.modelLabel,
+                })
               ) : (
                 <>
                   <Warning size={12} weight="fill" className="inline-block text-status-warning-foreground mr-1 -mt-0.5" />
-                  {isZh
-                    ? '当前执行引擎下没有可用模型 — 请到「服务商」连接一个，或在下方添加 / 启用模型。'
-                    : 'No usable model under the current execution engine — connect one in Providers, or enable / add a model below.'}
+                  {t('models.default.noUsableModel')}
                 </>
               )
             ) : pinnedIsValid === true ? (
-              isZh
-                ? `已固定：${pinnedDisplay?.providerName} / ${pinnedDisplay?.modelLabel}`
-                : `Pinned: ${pinnedDisplay?.providerName} / ${pinnedDisplay?.modelLabel}`
+              t('models.default.pinnedSummary', {
+                provider: pinnedDisplay?.providerName ?? '',
+                model: pinnedDisplay?.modelLabel ?? '',
+              })
             ) : pinnedIsValid === false ? (
               <>
                 <Warning size={12} weight="fill" className="inline-block text-status-warning-foreground mr-1 -mt-0.5" />
-                {isZh
-                  ? `已固定：${pinnedDisplay?.providerName ?? pinnedProviderId} / ${pinnedDisplay?.modelLabel ?? pinnedModel} — 当前执行引擎 下无法执行。`
-                  : `Pinned: ${pinnedDisplay?.providerName ?? pinnedProviderId} / ${pinnedDisplay?.modelLabel ?? pinnedModel} — not executable under current Runtime.`}
+                {t('models.default.pinnedIncompatSummary', {
+                  provider: pinnedDisplay?.providerName ?? pinnedProviderId,
+                  model: pinnedDisplay?.modelLabel ?? pinnedModel,
+                })}
               </>
             ) : (
-              isZh
-                ? '尚未选择默认模型 — 点击下方任意模型行的图钉。'
-                : 'No default selected — pin any model row below.'
+              t('models.default.noneSelected')
             )}
           </p>
         </div>
@@ -1357,7 +1312,7 @@ export function ModelsSection() {
             {savingDefault ? (
               <SpinnerGap size={12} className="animate-spin" />
             ) : null}
-            {isZh ? '改回自动' : 'Revert to Auto'}
+            {t('models.default.revertToAuto')}
           </Button>
         )}
       </div>
@@ -1375,12 +1330,12 @@ export function ModelsSection() {
         >
           <TabsList>
             {([
-              { key: 'enabled' as const, labelZh: '已启用', labelEn: 'Enabled', count: filterCounts.enabled },
-              { key: 'hidden' as const, labelZh: '已隐藏', labelEn: 'Hidden', count: filterCounts.hidden },
-              { key: 'all' as const, labelZh: '全部', labelEn: 'All', count: filterCounts.all },
+              { key: 'enabled' as const, labelKey: 'models.filter.enabled' as TranslationKey, count: filterCounts.enabled },
+              { key: 'hidden' as const, labelKey: 'models.filter.hidden' as TranslationKey, count: filterCounts.hidden },
+              { key: 'all' as const, labelKey: 'models.filter.all' as TranslationKey, count: filterCounts.all },
             ]).map((opt) => (
               <TabsTrigger key={opt.key} value={opt.key} className="gap-1.5 text-xs">
-                {isZh ? opt.labelZh : opt.labelEn}
+                {t(opt.labelKey)}
                 <span className="text-[10px] tabular-nums text-muted-foreground">
                   {opt.count}
                 </span>
@@ -1394,12 +1349,12 @@ export function ModelsSection() {
         <Select value={runtimeFilter} onValueChange={(v) => setRuntimeFilter(v as RuntimeFilter)}>
           <SelectTrigger
             className="w-[180px] shrink-0"
-            title={isZh ? '按模型接入能力筛选' : 'Filter models by access capability'}
+            title={t('models.filter.channelTitle')}
           >
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">{isZh ? '全部渠道' : 'All channels'}</SelectItem>
+            <SelectItem value="all">{t('models.filter.allChannels')}</SelectItem>
             <SelectItem value="claude_code_ready">{compatLabel('claude_code_ready', isZh)}</SelectItem>
             <SelectItem value="claude_code_verified">{compatLabel('claude_code_verified', isZh)}</SelectItem>
             <SelectItem value="claude_code_experimental">{compatLabel('claude_code_experimental', isZh)}</SelectItem>
@@ -1416,7 +1371,7 @@ export function ModelsSection() {
             name="models-search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder={isZh ? '搜索模型 id 或显示名…' : 'Search model id or display name…'}
+            placeholder={t('models.searchPlaceholder')}
             className="pl-9"
           />
         </div>
@@ -1432,7 +1387,7 @@ export function ModelsSection() {
       {!loading && visibleBundles.length === 0 && (
         <div className="rounded-lg border border-border/50 bg-card p-8 text-center">
           <p className="text-sm text-muted-foreground">
-            {isZh ? '尚未配置任何服务商。先到「服务商」页连接服务。' : 'No providers configured yet — connect one from the Providers page first.'}
+            {t('models.noProviders')}
           </p>
         </div>
       )}
@@ -1491,12 +1446,8 @@ export function ModelsSection() {
                 <h3 className="text-sm font-medium truncate">{provider.name}</h3>
                 <span className="text-[11px] text-muted-foreground shrink-0">
                   {isSearching
-                    ? (isZh
-                        ? `${models.length} / ${fullModels.length} 匹配`
-                        : `${models.length} / ${fullModels.length} match`)
-                    : (isZh
-                        ? `${enabledCount} / ${fullModels.length} 启用`
-                        : `${enabledCount} / ${fullModels.length} enabled`)}
+                    ? t('models.countMatch', { shown: models.length, total: fullModels.length })
+                    : t('models.countEnabled', { enabled: enabledCount, total: fullModels.length })}
                 </span>
                 {/* Phase 1 Step 2 收敛 round 4 + 5 (2026-05-06): compat
                     tag moved onto the same line as the count, kept as
@@ -1531,18 +1482,14 @@ export function ModelsSection() {
                           defaultRoleHidden ? "bg-status-warning-muted text-status-warning-foreground" : "bg-muted text-muted-foreground",
                         )}
                       >
-                        {isZh ? '默认' : 'Default'}: {defaultRoleModel?.display_name || defaultRoleId}
+                        {t('models.defaultChip')}: {defaultRoleModel?.display_name || defaultRoleId}
                         {defaultRoleHidden && ' ⚠'}
                       </span>
                     </TooltipTrigger>
                     <TooltipContent>
                       {defaultRoleHidden
-                        ? (isZh
-                            ? `默认模型「${defaultRoleId}」已隐藏，运行时会回退到第一个启用的模型`
-                            : `Default "${defaultRoleId}" is hidden — runtime falls back to the first enabled model`)
-                        : (isZh
-                            ? `没有指定模型时使用：${defaultRoleModel?.display_name || defaultRoleId}`
-                            : `Used when no model is specified: ${defaultRoleModel?.display_name || defaultRoleId}`)}
+                        ? t('models.defaultRoleHiddenTooltip', { id: defaultRoleId })
+                        : t('models.defaultRoleTooltip', { name: defaultRoleModel?.display_name || defaultRoleId })}
                     </TooltipContent>
                   </Tooltip>
                 )}
@@ -1602,11 +1549,9 @@ export function ModelsSection() {
                 size="sm"
                 className="text-muted-foreground hover:text-foreground"
                 onClick={() => openRoleDialog(provider)}
-                title={isZh
-                  ? '设置 Claude Code 引擎的别名映射（Sonnet / Opus / Haiku 等）实际跑哪个模型；只对 Claude Code 引擎生效，其它执行引擎按你直接选择的模型运行'
-                  : "Set the Claude Code engine alias mapping (Sonnet / Opus / Haiku) — only Claude Code uses these aliases, other engines run whichever model you pick directly"}
+                title={t('models.rolesButtonTitle')}
               >
-                {isZh ? '角色映射' : 'Roles'}
+                {t('models.rolesButton')}
               </Button>
               <Button
                 variant="outline"
@@ -1634,7 +1579,7 @@ export function ModelsSection() {
                 }}
               >
                 <CodePilotIcon name="plus" size={12} strokeWidth={2} aria-hidden />
-                {isZh ? '添加模型' : 'Add model'}
+                {t('models.addModel')}
               </Button>
               </div>
             </div>
@@ -1646,8 +1591,8 @@ export function ModelsSection() {
             <div className="rounded-lg border border-border/50 bg-card px-4 py-6 text-center">
               <p className="text-xs text-muted-foreground">
                 {search.trim()
-                  ? (isZh ? '无匹配结果' : 'No matches')
-                  : (isZh ? '该服务商暂无模型 — 点右上方「添加模型」补充' : 'No models yet — use "Add model" above to add one')}
+                  ? t('models.noMatches')
+                  : t('models.noModelsYet')}
               </p>
             </div>
           ) : (
@@ -1655,10 +1600,12 @@ export function ModelsSection() {
               {models.map((model, idx) => {
                 const editing = editingDisplay === `${provider.id}::${model.model_id}`;
                 const sourceTone = SOURCE_TONE[model.source as ProviderModelSource] || SOURCE_TONE.manual;
-                const sourceLabel = (isZh ? SOURCE_LABEL_ZH : SOURCE_LABEL_EN)[model.source as ProviderModelSource] || model.source;
-                const enableSourceLabel = (isZh ? ENABLE_SOURCE_LABEL_ZH : ENABLE_SOURCE_LABEL_EN)[model.enable_source];
+                const sourceLabelKey = SOURCE_LABEL_KEYS[model.source as ProviderModelSource];
+                const sourceLabel = sourceLabelKey ? t(sourceLabelKey) : model.source;
+                const enableSourceLabelKey = ENABLE_SOURCE_LABEL_KEYS[model.enable_source];
+                const enableSourceLabel = enableSourceLabelKey ? t(enableSourceLabelKey) : undefined;
                 const enableSourceTone = ENABLE_SOURCE_TONE[model.enable_source];
-                const enableSourceTooltip = (isZh ? ENABLE_SOURCE_TOOLTIP_ZH : ENABLE_SOURCE_TOOLTIP_EN)[model.enable_source];
+                const enableSourceTooltip = t(ENABLE_SOURCE_TOOLTIP_KEYS[model.enable_source]);
                 return (
                   <div
                     key={model.id}
@@ -1702,7 +1649,7 @@ export function ModelsSection() {
                               size="icon-xs"
                               className="h-5 w-5 shrink-0 text-muted-foreground hover:text-foreground"
                               onClick={() => beginRename(provider.id, model)}
-                              title={isZh ? '编辑显示名' : 'Rename'}
+                              title={t('models.renameTitle')}
                             >
                               <PencilSimple size={11} />
                             </Button>
@@ -1738,12 +1685,10 @@ export function ModelsSection() {
                         {isCurrentDefault(provider.id, model.model_id) && (
                           <span
                             className="inline-flex items-center gap-1 rounded-full bg-foreground text-background px-2 py-0.5 text-[10px] font-medium"
-                            title={isZh
-                              ? '当前固定的默认模型 — 新会话将使用这个'
-                              : 'Currently pinned default — used by new chats'}
+                            title={t('models.pinnedRowTooltip')}
                           >
                             <CodePilotIcon name="pin" size={9} strokeWidth={2} aria-hidden />
-                            {isZh ? '默认' : 'Default'}
+                            {t('models.defaultChip')}
                           </span>
                         )}
                         {/* Phase 2C: cross-Runtime tag — this model isn't
@@ -1756,11 +1701,11 @@ export function ModelsSection() {
                         {model.enabled === 1 && !isRuntimeCompat(provider.id, model.model_id) && (
                           <span
                             className="inline-flex items-center rounded-full px-2 py-0.5 text-[10px] font-medium bg-status-warning-muted text-status-warning-foreground cursor-help"
-                            title={isZh
-                              ? `当前执行引擎（${runtimeApplied || '未知'}）不支持这个模型。聊天发送时会被跳过；切换到另一个执行引擎，或在下方选其他模型。这与「角色映射」无关 — 角色映射只对 Claude Code 引擎生效。`
-                              : `The current execution engine (${runtimeApplied || 'unknown'}) does not run this model. Chat will skip it; switch engine, or pick a different model below. This is unrelated to role mapping — those aliases only apply to the Claude Code engine.`}
+                            title={t('models.otherEngineOnlyTooltip', {
+                              runtime: runtimeApplied || t('models.unknownRuntime'),
+                            })}
                           >
-                            {isZh ? '当前执行引擎不可用' : 'Other engine only'}
+                            {t('models.otherEngineOnly')}
                           </span>
                         )}
                         {/* Phase 1 Step 2 收敛 round 2 (2026-05-06):
@@ -1806,29 +1751,30 @@ export function ModelsSection() {
                           <div className="mt-0.5 flex items-center gap-3 text-[11px] text-muted-foreground truncate">
                             {isAlias ? (
                               <span className="truncate">
-                                <span>{isZh ? 'Claude Code 别名: ' : 'Claude Code alias: '}</span>
+                                <span>{t('models.claudeCodeAliasPrefix')}</span>
                                 <span className="font-mono">{model.model_id}</span>
                               </span>
                             ) : (
                               <span className="truncate">
-                                <span>{isZh ? '上游模型 ID: ' : 'Upstream ID: '}</span>
+                                <span>{t('models.upstreamIdPrefix')}</span>
                                 <span className="font-mono">{model.model_id}</span>
                               </span>
                             )}
                             {showRoleMapping && (
                               <span
                                 className="truncate"
-                                title={isZh
-                                  ? `Claude Code 引擎下，「${model.model_id}」会调用 ${roleMappingTarget}（在「角色映射」里设置）`
-                                  : `Under the Claude Code engine, "${model.model_id}" routes to ${roleMappingTarget} (set in Role mapping)`}
+                                title={t('models.roleMappingTooltip', {
+                                  modelId: model.model_id,
+                                  target: roleMappingTarget,
+                                })}
                               >
-                                <span>{isZh ? '映射到: ' : 'Maps to: '}</span>
+                                <span>{t('models.mapsToPrefix')}</span>
                                 <span className="font-mono">{roleMappingTarget}</span>
                               </span>
                             )}
                             {upstreamDiffers && (
                               <span className="truncate">
-                                <span>{isZh ? '实际请求: ' : 'Actual: '}</span>
+                                <span>{t('models.actualPrefix')}</span>
                                 <span className="font-mono">{model.upstream_model_id}</span>
                               </span>
                             )}
@@ -1858,10 +1804,10 @@ export function ModelsSection() {
                           : 'text-muted-foreground hover:text-foreground',
                       )}
                       title={isCurrentDefault(provider.id, model.model_id)
-                        ? (isZh ? '当前默认模型' : 'Current default model')
+                        ? t('models.pinTitleCurrent')
                         : model.enabled === 0
-                          ? (isZh ? '启用并设为默认模型' : 'Enable and set as default')
-                          : (isZh ? '设为默认模型' : 'Set as default')}
+                          ? t('models.pinTitleEnableAndSet')
+                          : t('models.pinTitleSet')}
                     >
                       <CodePilotIcon
                         name="pin"
@@ -1882,7 +1828,7 @@ export function ModelsSection() {
                         size="icon-sm"
                         className="text-muted-foreground hover:text-destructive shrink-0"
                         onClick={() => setDeleteTarget({ providerId: provider.id, modelId: model.model_id, name: model.display_name || model.model_id })}
-                        title={isZh ? '删除此条' : 'Delete'}
+                        title={t('models.deleteRowTitle')}
                       >
                         <CodePilotIcon name="delete" size="sm" aria-hidden />
                       </Button>
@@ -1912,12 +1858,10 @@ export function ModelsSection() {
         <DialogContent className="sm:max-w-2xl max-h-[85vh] flex flex-col gap-0 overflow-hidden">
           <DialogHeader className="shrink-0">
             <DialogTitle>
-              {isZh ? `${roleDialog?.providerName} · 角色映射（Claude Code 引擎）` : `${roleDialog?.providerName} · Role mapping (Claude Code engine)`}
+              {t('models.roleDialog.title', { provider: roleDialog?.providerName ?? '' })}
             </DialogTitle>
             <DialogDescription>
-              {isZh
-                ? '这是 Claude Code 引擎使用的别名映射 —— 聊天里选「Sonnet / Opus / Haiku」时实际跑这里指定的模型。其它执行引擎不使用这套别名，按你直接选择的模型运行。留空表示这个角色没有专属映射。'
-                : 'This alias mapping is used by the Claude Code engine — when chat picks "Sonnet / Opus / Haiku", it runs whatever you map here. Other execution engines ignore these aliases and run whichever model you pick directly. Leave blank to skip a role.'}
+              {t('models.roleDialog.description')}
             </DialogDescription>
           </DialogHeader>
           {(() => {
@@ -1935,15 +1879,15 @@ export function ModelsSection() {
                       <div className="flex items-center justify-between gap-3">
                         <div className="min-w-0">
                           <div className="text-xs font-medium">
-                            {isZh ? ROLE_LABEL_ZH[role] : ROLE_LABEL_EN[role]}
+                            {t(ROLE_LABEL_KEYS[role])}
                             {valueIsHidden && (
                               <span className="ml-2 inline-flex items-center rounded-full bg-status-warning-muted px-2 py-0.5 text-[10px] font-medium text-status-warning-foreground">
-                                {isZh ? '已隐藏' : 'Hidden'}
+                                {t('models.roleDialog.hiddenBadge')}
                               </span>
                             )}
                           </div>
                           <div className="text-[11px] text-muted-foreground">
-                            {isZh ? ROLE_HINT_ZH[role] : ROLE_HINT_EN[role]}
+                            {t(ROLE_HINT_KEYS[role])}
                           </div>
                         </div>
                         <Select
@@ -1954,7 +1898,7 @@ export function ModelsSection() {
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
-                            <SelectItem value="__unset__">{isZh ? '未设置' : 'Not set'}</SelectItem>
+                            <SelectItem value="__unset__">{t('models.roleDialog.notSet')}</SelectItem>
                             {/* Enabled rows first, hidden rows after — order
                                 within each bucket follows the DB sort_order
                                 already returned by getAllModelsForProvider.
@@ -1967,7 +1911,7 @@ export function ModelsSection() {
                               .map(m => (
                                 <SelectItem key={m.id} value={m.model_id}>
                                   {m.display_name || m.model_id}
-                                  {m.enabled === 0 && (isZh ? ' (已隐藏)' : ' (hidden)')}
+                                  {m.enabled === 0 && t('models.roleDialog.hiddenSuffix')}
                                 </SelectItem>
                               ))}
                           </SelectContent>
@@ -1984,7 +1928,7 @@ export function ModelsSection() {
               {t('common.cancel')}
             </Button>
             <Button onClick={handleSaveRoles} disabled={roleSaving}>
-              {roleSaving ? (isZh ? '保存中…' : 'Saving…') : (isZh ? '保存' : 'Save')}
+              {roleSaving ? t('models.roleDialog.saving') : t('models.roleDialog.save')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2065,7 +2009,7 @@ export function ModelsSection() {
             if (!policy.reliable) return null;
             return (
               <div className="mt-2 -mb-1 text-[11px] text-muted-foreground">
-                {isZh ? '不知道要填什么 ID？' : 'Not sure what ID to type?'}
+                {t('models.addDialog.notSurePrompt')}
                 {' '}
                 <button
                   type="button"
@@ -2077,14 +2021,14 @@ export function ModelsSection() {
                     refetchProviderBundle(target.id);
                   }}
                 >
-                  {isZh ? '让 CodePilot 重新检测一次该服务商的模型列表' : 'Re-detect this provider\'s upstream models'}
+                  {t('models.addDialog.redetect')}
                 </button>
               </div>
             );
           })()}
           <div className="space-y-3 mt-2">
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">{isZh ? '模型 ID' : 'Model ID'}</label>
+              <label className="text-xs text-muted-foreground">{t('models.addDialog.modelIdLabel')}</label>
               <Input
                 value={newModelId}
                 onChange={(e) => setNewModelId(e.target.value)}
@@ -2093,11 +2037,11 @@ export function ModelsSection() {
               />
             </div>
             <div className="space-y-1.5">
-              <label className="text-xs text-muted-foreground">{isZh ? '显示名（可选）' : 'Display name (optional)'}</label>
+              <label className="text-xs text-muted-foreground">{t('models.addDialog.displayNameLabel')}</label>
               <Input
                 value={newDisplayName}
                 onChange={(e) => setNewDisplayName(e.target.value)}
-                placeholder={isZh ? '留空则与模型 ID 相同' : 'Defaults to model ID'}
+                placeholder={t('models.addDialog.displayNamePlaceholder')}
                 className="text-sm"
               />
             </div>
@@ -2106,7 +2050,7 @@ export function ModelsSection() {
             <Button variant="outline" onClick={() => setAddDialog(null)}>{t('common.cancel')}</Button>
             <Button onClick={handleAddModel} disabled={!newModelId.trim()}>
               <CodePilotIcon name="plus" size="sm" aria-hidden />
-              {isZh ? '添加' : 'Add'}
+              {t('models.addDialog.add')}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -2116,11 +2060,9 @@ export function ModelsSection() {
       <AlertDialog open={!!deleteTarget} onOpenChange={(open) => { if (!open) setDeleteTarget(null); }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{isZh ? '删除手动添加的模型' : 'Delete manual model'}</AlertDialogTitle>
+            <AlertDialogTitle>{t('models.deleteDialog.title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {isZh
-                ? `确定要删除「${deleteTarget?.name}」吗？此操作不可撤销。`
-                : `Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+              {t('models.deleteDialog.description', { name: deleteTarget?.name ?? '' })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2129,7 +2071,7 @@ export function ModelsSection() {
               onClick={handleDelete}
               className="bg-destructive text-white hover:bg-destructive/90"
             >
-              {isZh ? '删除' : 'Delete'}
+              {t('models.deleteDialog.confirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2143,13 +2085,19 @@ export function ModelsSection() {
           <AlertDialogHeader>
             <AlertDialogTitle>
               {bulkConfirm?.target === 1
-                ? (isZh ? '启用全部模型' : 'Enable all models')
-                : (isZh ? '关闭全部模型' : 'Disable all models')}
+                ? t('models.bulkDialog.enableTitle')
+                : t('models.bulkDialog.disableTitle')}
             </AlertDialogTitle>
             <AlertDialogDescription>
-              {isZh
-                ? `这会${bulkConfirm?.target === 1 ? '启用' : '关闭'}「${bulkConfirm?.providerName}」下的 ${bulkConfirm?.affected ?? 0} 个模型，操作可在每行单独还原。`
-                : `This will ${bulkConfirm?.target === 1 ? 'enable' : 'disable'} ${bulkConfirm?.affected ?? 0} models under "${bulkConfirm?.providerName}". You can revert per row afterwards.`}
+              {bulkConfirm?.target === 1
+                ? t('models.bulkDialog.enableDesc', {
+                    name: bulkConfirm?.providerName ?? '',
+                    count: bulkConfirm?.affected ?? 0,
+                  })
+                : t('models.bulkDialog.disableDesc', {
+                    name: bulkConfirm?.providerName ?? '',
+                    count: bulkConfirm?.affected ?? 0,
+                  })}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -2163,8 +2111,8 @@ export function ModelsSection() {
               }}
             >
               {bulkConfirm?.target === 1
-                ? (isZh ? '全部启用' : 'Enable all')
-                : (isZh ? '全部关闭' : 'Disable all')}
+                ? t('models.bulkDialog.enableConfirm')
+                : t('models.bulkDialog.disableConfirm')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
@@ -2180,11 +2128,9 @@ export function ModelsSection() {
       }}>
         <AlertDialogContent>
           <AlertDialogHeader>
-            <AlertDialogTitle>{isZh ? '整理模型列表' : 'Tidy model list'}</AlertDialogTitle>
+            <AlertDialogTitle>{t('models.alignDialog.title')}</AlertDialogTitle>
             <AlertDialogDescription>
-              {isZh
-                ? '只保留每个服务商的推荐模型为启用，其余隐藏。下面是即将发生的变化预览，确认后再写入。'
-                : 'Keep each provider\'s recommended models enabled and hide the rest. Preview below — nothing is written until you confirm.'}
+              {t('models.alignDialog.description')}
             </AlertDialogDescription>
           </AlertDialogHeader>
 
@@ -2192,12 +2138,12 @@ export function ModelsSection() {
             {alignAllPhase === 'previewing' && (
               <div className="flex items-center gap-2 text-sm text-muted-foreground py-4 justify-center">
                 <SpinnerGap size={14} className="animate-spin" />
-                {isZh ? '计算中…' : 'Computing…'}
+                {t('models.alignDialog.computing')}
               </div>
             )}
             {alignAllPhase !== 'previewing' && alignPreview.length === 0 && (
               <p className="text-xs text-muted-foreground py-2">
-                {isZh ? '没有可处理的服务商。' : 'No providers to align.'}
+                {t('models.alignDialog.empty')}
               </p>
             )}
             {alignAllPhase !== 'previewing' && alignPreview.length > 0 && (() => {
@@ -2215,10 +2161,10 @@ export function ModelsSection() {
                   <div className="rounded-md border border-border/50 bg-card">
                     <div className="px-4 divide-y divide-border/50">
                       {([
-                        { label: isZh ? '插入' : 'Insert', value: totals.inserted },
-                        { label: isZh ? '启用' : 'Enable', value: totals.enabled },
-                        { label: isZh ? '隐藏' : 'Hide', value: totals.disabled },
-                        { label: isZh ? '删除目录种子' : 'Prune catalog seeds', value: totals.pruned },
+                        { label: t('models.alignDialog.insert'), value: totals.inserted },
+                        { label: t('models.alignDialog.enable'), value: totals.enabled },
+                        { label: t('models.alignDialog.hide'), value: totals.disabled },
+                        { label: t('models.alignDialog.prune'), value: totals.pruned },
                       ]).map((item) => (
                         <div key={item.label} className="py-2.5 flex items-center justify-between gap-3">
                           <span className="text-[11px] text-muted-foreground">{item.label}</span>
@@ -2244,9 +2190,14 @@ export function ModelsSection() {
                   )}
                   {(unchanged.length > 0 || skipped.length > 0) && (
                     <p className="text-[11px] text-muted-foreground">
-                      {isZh
-                        ? `${unchanged.length} 个服务商无变化${skipped.length ? `，${skipped.length} 个无目录已跳过` : ''}`
-                        : `${unchanged.length} unchanged${skipped.length ? `, ${skipped.length} skipped (no catalog)` : ''}`}
+                      {skipped.length
+                        ? t('models.alignDialog.unchangedAndSkipped', {
+                            unchanged: unchanged.length,
+                            skipped: skipped.length,
+                          })
+                        : t('models.alignDialog.unchangedOnly', {
+                            unchanged: unchanged.length,
+                          })}
                     </p>
                   )}
                 </div>
@@ -2261,10 +2212,10 @@ export function ModelsSection() {
               disabled={alignAllPhase !== 'preview-ready'}
             >
               {alignAllPhase === 'applying'
-                ? (isZh ? '应用中…' : 'Applying…')
+                ? t('models.alignDialog.applying')
                 : alignAllPhase === 'previewing'
-                  ? (isZh ? '加载中…' : 'Loading…')
-                  : (isZh ? '应用' : 'Apply')}
+                  ? t('models.alignDialog.loading')
+                  : t('models.alignDialog.apply')}
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
