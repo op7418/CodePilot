@@ -2466,6 +2466,31 @@ const zh: Record<TranslationKey, string> = {
   'overview.health.ctaOpen': '去健康检查',
   'overview.health.claudeWarnings': '检测到 Claude Code 兼容性提示，建议在健康检查页查看',
   'overview.health.summary': '服务商连接、Runtime、默认模型、模型暴露、工作空间状态一站式总览',
+
+  // Settings — Preset Connect Dialog
+  'provider.preset.errBaseUrlAnthropic': '请填写 Base URL（官方 API 使用 https://api.anthropic.com）',
+  'provider.preset.errBaseUrlMedia': '请填写 Base URL（留空会回落到官方服务，无法作为第三方生效）',
+  'provider.preset.errReenterKey': '切换认证方式后需要重新输入密钥',
+  'provider.preset.errModelMappingAll3': '模型映射需要同时填写 Sonnet、Opus、Haiku 三个模型名称',
+  'provider.preset.billingPayAsYouGo': '按量付费',
+  'provider.preset.billingFree': '免费',
+  'provider.preset.billingSelfHosted': '自托管',
+  'provider.preset.getApiKey': '获取 API Key',
+  'provider.preset.officialDocs': '官方文档',
+  'provider.preset.purchasePlan': '购买或管理套餐',
+  'provider.preset.setupGuide': '配置指南',
+  'provider.preset.keepKeyPlaceholder': '已保存，留空则沿用原密钥',
+  'provider.preset.clearKeyPending': '保存后将清空已存密钥。',
+  'provider.preset.inferredAuthHint': '检测到此 URL 通常使用 {auth} 认证方式',
+  'provider.preset.switch': '切换',
+  'provider.preset.modelNameHint': '在服务商控制台配置的模型名称，可改为你账号实际可用的型号',
+  'provider.preset.modelMappingLabel': '模型名称映射（选填）',
+  'provider.preset.modelMappingDesc': '如果服务商使用不同的模型名称（如 claude-sonnet-4-6），在此映射。留空则使用默认名称（sonnet / opus / haiku）。',
+  'provider.preset.testSuccess': '连接成功',
+  'provider.preset.testSkipped': '此服务商类型无法进行连接测试，请保存配置后发送消息验证',
+  'provider.preset.testing': '测试中...',
+  'provider.preset.testAction': '测试连接',
+  'provider.preset.fillKeyBeforeConnect': '请先填写 API Key 再连接',
 };
 
 export default zh;

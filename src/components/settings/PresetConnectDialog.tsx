@@ -101,8 +101,8 @@ export function PresetConnectDialog({
   const [authorizing, setAuthorizing] = useState(false);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ success: boolean; error?: { code: string; message: string; suggestion: string; recoveryActions?: Array<{ label: string; url?: string; action?: string }> } } | null>(null);
-  const { t } = useTranslation();
-  const isZh = t('nav.chats') === '对话';
+  const { t, locale } = useTranslation();
+  const isZh = locale === 'zh';
 
   // Unified auth-style transition. Both the dropdown selector and the
   // "smart recommend" helper link MUST go through this helper so edit-mode
@@ -194,6 +194,7 @@ export function PresetConnectDialog({
   };
 
   // Reset form when dialog opens
+  /* eslint-disable react-hooks/set-state-in-effect -- intentional: re-seed form fields on dialog open */
   useEffect(() => {
     if (!open || !preset) return;
     setError(null);
@@ -308,6 +309,7 @@ export function PresetConnectDialog({
       setShowAdvanced(false);
     }
   }, [open, preset, isEdit, editProvider]);
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   if (!preset) return null;
 
@@ -324,9 +326,7 @@ export function PresetConnectDialog({
     // by server-side validation in /api/providers route; this pre-check is
     // just for a clearer UX.
     if (preset.protocol === 'anthropic' && !preset.base_url && !baseUrl.trim()) {
-      setError(isZh
-        ? '请填写 Base URL（官方 API 使用 https://api.anthropic.com）'
-        : 'Please specify a base URL (use https://api.anthropic.com for the official API)');
+      setError(t('provider.preset.errBaseUrlAnthropic'));
       return;
     }
     // Third-party media presets: empty baseUrl would silently resolve to the
@@ -337,9 +337,7 @@ export function PresetConnectDialog({
       && !preset.base_url
       && !baseUrl.trim()
     ) {
-      setError(isZh
-        ? '请填写 Base URL（留空会回落到官方服务，无法作为第三方生效）'
-        : 'Please specify a base URL (leaving this blank falls back to the official endpoint)');
+      setError(t('provider.preset.errBaseUrlMedia'));
       return;
     }
 
@@ -348,9 +346,7 @@ export function PresetConnectDialog({
     // style (see auth style onValueChange), so checking !apiKey alone is
     // sufficient — masked values no longer enter state.
     if (isEdit && authStyle !== initialAuthStyle && !apiKey) {
-      setError(isZh
-        ? '切换认证方式后需要重新输入密钥'
-        : 'Please re-enter the key after changing auth style');
+      setError(t('provider.preset.errReenterKey'));
       return;
     }
 
@@ -387,9 +383,7 @@ export function PresetConnectDialog({
       if (hasAny) {
         // If user fills any, all 3 are required
         if (!mapSonnet.trim() || !mapOpus.trim() || !mapHaiku.trim()) {
-          setError(isZh
-            ? '模型映射需要同时填写 Sonnet、Opus、Haiku 三个模型名称'
-            : 'Model mapping requires all 3 model names (Sonnet, Opus, Haiku)');
+          setError(t('provider.preset.errModelMappingAll3'));
           return;
         }
         const existing = (() => { try { return JSON.parse(roleModelsJson); } catch { return {}; } })();
@@ -508,11 +502,11 @@ export function PresetConnectDialog({
             <div className="flex items-center gap-2 flex-wrap">
               {preset.meta.billingModel && (
                 <span className="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-medium bg-muted text-muted-foreground">
-                  {preset.meta.billingModel === 'pay_as_you_go' ? (isZh ? '按量付费' : 'Pay-as-you-go')
+                  {preset.meta.billingModel === 'pay_as_you_go' ? t('provider.preset.billingPayAsYouGo')
                     : preset.meta.billingModel === 'coding_plan' ? 'Coding Plan'
                     : preset.meta.billingModel === 'token_plan' ? 'Token Plan'
-                    : preset.meta.billingModel === 'free' ? (isZh ? '免费' : 'Free')
-                    : preset.meta.billingModel === 'self_hosted' ? (isZh ? '自托管' : 'Self-hosted')
+                    : preset.meta.billingModel === 'free' ? t('provider.preset.billingFree')
+                    : preset.meta.billingModel === 'self_hosted' ? t('provider.preset.billingSelfHosted')
                     : preset.meta.billingModel}
                 </span>
               )}
@@ -520,27 +514,27 @@ export function PresetConnectDialog({
                 <a href={preset.meta.apiKeyUrl} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[11px] text-primary hover:underline">
                   <ArrowSquareOut size={12} />
-                  {isZh ? '获取 API Key' : 'Get API Key'}
+                  {t('provider.preset.getApiKey')}
                 </a>
               )}
               {preset.meta.docsUrl && (
                 <a href={preset.meta.docsUrl} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline">
                   <ArrowSquareOut size={12} />
-                  {isZh ? '官方文档' : 'Official docs'}
+                  {t('provider.preset.officialDocs')}
                 </a>
               )}
               {preset.meta.purchaseUrl && (
                 <a href={preset.meta.purchaseUrl} target="_blank" rel="noopener noreferrer"
                   className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline">
                   <ArrowSquareOut size={12} />
-                  {isZh ? '购买或管理套餐' : 'Purchase or manage plan'}
+                  {t('provider.preset.purchasePlan')}
                 </a>
               )}
               <a href={isZh ? 'https://www.codepilot.sh/zh/docs/providers' : 'https://www.codepilot.sh/docs/providers'} target="_blank" rel="noopener noreferrer"
                 className="inline-flex items-center gap-1 text-[11px] text-muted-foreground hover:text-foreground hover:underline">
                 <ArrowSquareOut size={12} />
-                {isZh ? '配置指南' : 'Setup Guide'}
+                {t('provider.preset.setupGuide')}
               </a>
             </div>
             {(isZh ? (preset.meta.notesZh ?? preset.meta.notes) : preset.meta.notes)?.length ? (
@@ -622,9 +616,9 @@ export function PresetConnectDialog({
                   }}
                   placeholder={
                     clearStoredKey
-                      ? (isZh ? "保存后将清空已存密钥" : "Stored key will be cleared on save")
+                      ? t('provider.form.clearKeyPlaceholder')
                       : hasStoredKey
-                      ? (isZh ? "已保存，留空则沿用原密钥" : "Saved — leave blank to keep existing")
+                      ? t('provider.preset.keepKeyPlaceholder')
                       : (authStyle === "auth_token" ? "token-..." : "sk-...")
                   }
                   className="text-sm font-mono flex-1"
@@ -641,7 +635,7 @@ export function PresetConnectDialog({
                   {clearStoredKey ? (
                     <>
                       <span className="text-amber-500">
-                        {isZh ? "保存后将清空已存密钥。" : "The stored key will be cleared on save. "}
+                        {t('provider.preset.clearKeyPending')}
                       </span>
                       <Button
                         type="button"
@@ -649,7 +643,7 @@ export function PresetConnectDialog({
                         className="h-auto p-0 text-[11px] text-amber-500 underline hover:no-underline"
                         onClick={() => setClearStoredKey(false)}
                       >
-                        {isZh ? "撤销" : "Undo"}
+                        {t('provider.form.undo')}
                       </Button>
                     </>
                   ) : (
@@ -659,7 +653,7 @@ export function PresetConnectDialog({
                       className="h-auto p-0 text-[11px] text-muted-foreground underline hover:no-underline"
                       onClick={() => setClearStoredKey(true)}
                     >
-                      {isZh ? "清除已存密钥" : "Clear stored key"}
+                      {t('provider.form.clearKeyAction')}
                     </Button>
                   )}
                 </p>
@@ -669,16 +663,16 @@ export function PresetConnectDialog({
                 const inferred = inferAuthStyleFromUrl(baseUrl);
                 return inferred && inferred !== authStyle ? (
                   <p className="text-[11px] text-amber-500">
-                    {isZh
-                      ? `检测到此 URL 通常使用 ${inferred === 'auth_token' ? 'Auth Token' : 'API Key'} 认证方式`
-                      : `This URL typically uses ${inferred === 'auth_token' ? 'Auth Token' : 'API Key'} authentication`}
+                    {t('provider.preset.inferredAuthHint', {
+                      auth: inferred === 'auth_token' ? 'Auth Token' : 'API Key',
+                    })}
                     {' '}
                     <Button
                       variant="link"
                       className="h-auto p-0 text-[11px] text-amber-500 underline hover:no-underline"
                       onClick={() => applyAuthStyleChange(inferred)}
                     >
-                      {isZh ? '切换' : 'Switch'}
+                      {t('provider.preset.switch')}
                     </Button>
                   </p>
                 ) : null;
@@ -697,9 +691,7 @@ export function PresetConnectDialog({
                 className="text-sm font-mono"
               />
               <p className="text-[11px] text-muted-foreground">
-                {isZh
-                  ? '在服务商控制台配置的模型名称，可改为你账号实际可用的型号'
-                  : 'Model name as configured in the provider console — change it to the model your account uses'}
+                {t('provider.preset.modelNameHint')}
               </p>
             </div>
           )}
@@ -710,12 +702,10 @@ export function PresetConnectDialog({
           {preset.fields.includes("model_mapping") && (
             <div className="space-y-2">
               <Label className="text-xs text-muted-foreground">
-                {isZh ? '模型名称映射（选填）' : 'Model name mapping (optional)'}
+                {t('provider.preset.modelMappingLabel')}
               </Label>
               <p className="text-[11px] text-muted-foreground leading-relaxed">
-                {isZh
-                  ? '如果服务商使用不同的模型名称（如 claude-sonnet-4-6），在此映射。留空则使用默认名称（sonnet / opus / haiku）。'
-                  : 'Map model names if the provider uses different IDs (e.g. claude-sonnet-4-6). Leave empty to use defaults (sonnet / opus / haiku).'}
+                {t('provider.preset.modelMappingDesc')}
               </p>
               <div className="grid grid-cols-[auto_1fr] gap-x-3 gap-y-2 items-center">
                 <span className="text-xs text-muted-foreground text-right">Sonnet</span>
@@ -814,9 +804,9 @@ export function PresetConnectDialog({
               <div className={`rounded-md px-3 py-2 text-sm ${bgClass}`}>
                 <div className="flex items-center gap-2">
                   {testResult.success
-                    ? <><CheckCircle size={16} className="text-emerald-500 shrink-0" />{/* lint-allow-raw-color */}<span className="text-emerald-600 dark:text-emerald-400">{/* lint-allow-raw-color */}{isZh ? '连接成功' : 'Connection successful'}</span></>
+                    ? <><CheckCircle size={16} className="text-emerald-500 shrink-0" />{/* lint-allow-raw-color */}<span className="text-emerald-600 dark:text-emerald-400">{/* lint-allow-raw-color */}{t('provider.preset.testSuccess')}</span></>
                     : isSkipped
-                      ? <><Warning size={16} className="text-muted-foreground shrink-0" /><span className="text-muted-foreground">{isZh ? '此服务商类型无法进行连接测试，请保存配置后发送消息验证' : 'Connection test not available for this provider type'}</span></>
+                      ? <><Warning size={16} className="text-muted-foreground shrink-0" /><span className="text-muted-foreground">{t('provider.preset.testSkipped')}</span></>
                       : <><XCircle size={16} className="text-destructive shrink-0" /><span className="text-destructive">{testResult.error?.message || 'Connection failed'}</span></>
                   }
                 </div>
@@ -856,13 +846,13 @@ export function PresetConnectDialog({
                 className="gap-1.5"
               >
                 {testing ? <SpinnerGap size={14} className="animate-spin" /> : <CodePilotIcon name="diagnose" size="sm" aria-hidden />}
-                {testing ? (isZh ? '测试中...' : 'Testing...') : (isZh ? '测试连接' : 'Test')}
+                {testing ? t('provider.preset.testing') : t('provider.preset.testAction')}
               </Button>
               <Button
                 type="submit"
                 disabled={saving || testing || authorizing || !canTest}
                 className="gap-2"
-                title={!canTest ? (isZh ? '请先填写 API Key 再连接' : 'Fill the API Key before connecting') : undefined}
+                title={!canTest ? t('provider.preset.fillKeyBeforeConnect') : undefined}
               >
                 {saving && <SpinnerGap size={16} className="animate-spin" />}
                 {saving ? t('provider.saving') : isEdit ? t('provider.update') : t('provider.connect')}

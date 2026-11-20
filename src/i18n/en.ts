@@ -2495,6 +2495,31 @@ const en = {
   'overview.health.ctaOpen': 'Open Health',
   'overview.health.claudeWarnings': 'Claude Code compatibility warnings detected — see Health',
   'overview.health.summary': 'One-page overview of provider connectivity, runtime, default model, exposure, and workspace',
+
+  // Settings — Preset Connect Dialog
+  'provider.preset.errBaseUrlAnthropic': 'Please specify a base URL (use https://api.anthropic.com for the official API)',
+  'provider.preset.errBaseUrlMedia': 'Please specify a base URL (leaving this blank falls back to the official endpoint)',
+  'provider.preset.errReenterKey': 'Please re-enter the key after changing auth style',
+  'provider.preset.errModelMappingAll3': 'Model mapping requires all 3 model names (Sonnet, Opus, Haiku)',
+  'provider.preset.billingPayAsYouGo': 'Pay-as-you-go',
+  'provider.preset.billingFree': 'Free',
+  'provider.preset.billingSelfHosted': 'Self-hosted',
+  'provider.preset.getApiKey': 'Get API Key',
+  'provider.preset.officialDocs': 'Official docs',
+  'provider.preset.purchasePlan': 'Purchase or manage plan',
+  'provider.preset.setupGuide': 'Setup Guide',
+  'provider.preset.keepKeyPlaceholder': 'Saved — leave blank to keep existing',
+  'provider.preset.clearKeyPending': 'The stored key will be cleared on save. ',
+  'provider.preset.inferredAuthHint': 'This URL typically uses {auth} authentication',
+  'provider.preset.switch': 'Switch',
+  'provider.preset.modelNameHint': 'Model name as configured in the provider console — change it to the model your account uses',
+  'provider.preset.modelMappingLabel': 'Model name mapping (optional)',
+  'provider.preset.modelMappingDesc': 'Map model names if the provider uses different IDs (e.g. claude-sonnet-4-6). Leave empty to use defaults (sonnet / opus / haiku).',
+  'provider.preset.testSuccess': 'Connection successful',
+  'provider.preset.testSkipped': 'Connection test not available for this provider type',
+  'provider.preset.testing': 'Testing...',
+  'provider.preset.testAction': 'Test',
+  'provider.preset.fillKeyBeforeConnect': 'Fill the API Key before connecting',
 } as const;
 
 export type TranslationKey = keyof typeof en;
