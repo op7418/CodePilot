@@ -14,7 +14,7 @@
  *
  * The naive fix (drop `'user'` from `settingSources`) also disables
  * user-level MCP servers, plugins, hooks, and CLAUDE.md, all of which
- * `claude-client.ts:652-654` and `plugin-discovery.ts` actively depend on.
+ * `claude-client.ts` actively depends on.
  *
  * ## What this module does
  *
