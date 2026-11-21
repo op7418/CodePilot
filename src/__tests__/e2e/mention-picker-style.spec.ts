@@ -31,9 +31,6 @@ test.describe('@ picker style smoke', () => {
     await goToChat(page);
 
     const input = page.locator('textarea[name="message"]').first();
-    if ((await input.count()) === 0) {
-      test.skip(true, 'Chat message input is unavailable in current test environment');
-    }
     await expect(input).toBeVisible();
 
     // Type a filter that the mock recognises — typing just `@` can leave the

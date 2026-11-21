@@ -54,7 +54,7 @@ test.describe('Model identity conflict recovery @smoke', () => {
         const section = page.locator(`[id="provider-section-${provider.id}"]`);
         const row = page.locator(`[data-model-row="${provider.id}::haiku"]`);
         await expect(section).toBeVisible();
-        const channelFilter = page.getByRole('combobox', { name: /按接入渠道筛选服务商|Filter providers by access channel/ });
+        const channelFilter = page.getByRole('combobox', { name: /按模型接入能力筛选|Filter models by access capability/ });
         await channelFilter.click();
         await page.getByRole('option', { name: /^Claude Code (compat|兼容)$/ }).click();
         const search = page.locator('#models-search');

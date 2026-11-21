@@ -21,75 +21,111 @@ import { goToChat } from '../helpers';
  * Pairs with unit/composer-first-message-clear.test.ts (source-pin).
  */
 test.describe('First-message composer clears optimistically @smoke', () => {
-  test('typed first message clears the composer at submit, before any redirect', async ({ page }) => {
-    // Session insert the first-message flow does before opening the stream.
-    await page.route('**/api/chat/sessions', async (route) => {
-      if (route.request().method() !== 'POST') {
-        await route.continue();
-        return;
-      }
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          session: {
-            id: 'mock-first-msg-session',
-            title: 'Mock',
-            model: 'sonnet',
-            mode: 'code',
-            provider_id: 'mock',
-            working_directory: '/tmp',
-          },
-        }),
-      });
+  test('typed first message clears the composer at submit, before any redirect', async ({ page, request }) => {
+    const dataDir = process.env.CODEPILOT_E2E_DATA_DIR;
+    if (!dataDir) throw new Error('Isolated E2E database required');
+    await page.addInitScript(
+      (dir) => localStorage.setItem('codepilot:last-working-directory', dir),
+      dataDir,
+    );
+
+    const created = await request.post('/api/providers', {
+      data: {
+        name: `First-message E2E fixture ${Date.now()}`,
+        provider_type: 'anthropic',
+        protocol: 'anthropic',
+        preset_key: 'anthropic-official',
+        base_url: 'https://api.anthropic.com',
+        api_key: 'fixture-no-network',
+      },
     });
+    expect(created.ok()).toBe(true);
+    const { provider } = await created.json();
 
-    // HOLD the /api/chat response so sendFirstMessage stays mid-"stream" (no
-    // router.push), keeping us on the SAME /chat composer to assert on.
-    let chatHit = false;
-    await page.route('**/api/chat', async (route) => {
-      if (route.request().method() !== 'POST') {
-        await route.continue();
-        return;
-      }
-      chatHit = true;
-      await new Promise((r) => setTimeout(r, 4000));
-      await route.fulfill({
-        status: 200,
-        contentType: 'text/event-stream',
-        body: `data: ${JSON.stringify({ type: 'done' })}\n\n`,
-      });
-    });
-
-    await goToChat(page);
-
-    const input = page.locator('textarea[name="message"]').first();
-    if ((await input.count()) === 0) {
-      test.skip(true, 'Chat message input is unavailable in current test environment');
-    }
-    await expect(input).toBeVisible();
-
-    await input.fill('hello first message');
-    await expect(input).toHaveValue('hello first message');
-    await input.press('Enter');
-
-    // Skip (don't false-fail) if the new-chat send can't fire in this env —
-    // e.g. no provider/model is sendable under the active runtime. The send
-    // reaching /api/chat is the precondition for a meaningful clear assertion.
-    let sent = false;
     try {
+      await page.route('**/api/settings/app', async (route) => {
+        if (route.request().method() !== 'GET') {
+          await route.continue();
+          return;
+        }
+        const response = await route.fetch();
+        const data = await response.json();
+        await route.fulfill({
+          response,
+          json: {
+            ...data,
+            settings: {
+              ...data.settings,
+              agent_runtime: 'codepilot_runtime',
+              default_provider_id: provider.id,
+              default_model: 'sonnet',
+            },
+          },
+        });
+      });
+
+      // Session insert the first-message flow does before opening the stream.
+      await page.route('**/api/chat/sessions', async (route) => {
+        if (route.request().method() !== 'POST') {
+          await route.continue();
+          return;
+        }
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            session: {
+              id: 'mock-first-msg-session',
+              title: 'Mock',
+              model: 'sonnet',
+              mode: 'code',
+              provider_id: provider.id,
+              runtime_pin: 'codepilot_runtime',
+              runtime_binding_state: 'bound',
+              route_revision: 1,
+              working_directory: dataDir,
+            },
+          }),
+        });
+      });
+
+      // HOLD the /api/chat response so sendFirstMessage stays mid-"stream" (no
+      // router.push), keeping us on the SAME /chat composer to assert on.
+      let chatHit = false;
+      await page.route('**/api/chat', async (route) => {
+        if (route.request().method() !== 'POST') {
+          await route.continue();
+          return;
+        }
+        chatHit = true;
+        await new Promise((r) => setTimeout(r, 4000));
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: `data: ${JSON.stringify({ type: 'done' })}\n\n`,
+        });
+      });
+
+      await goToChat(page);
+
+      const input = page.locator('textarea[name="message"]').first();
+      await expect(input).toBeVisible();
+
+      await input.fill('hello first message');
+      await expect(input).toHaveValue('hello first message');
+      await input.press('Enter');
+
       await expect.poll(() => chatHit, { timeout: 5_000 }).toBeTruthy();
-      sent = true;
-    } catch {
-      sent = false;
+
+      // Optimistic clear: the SAME composer empties immediately, while /api/chat
+      // is still "streaming" (held) and BEFORE any redirect to /chat/[id].
+      await expect(input).toHaveValue('', { timeout: 2_000 });
+
+      // Proves we asserted on the new-chat composer, not a post-redirect ChatView.
+      expect(page.url()).not.toMatch(/\/chat\/[^/?#]+/);
+    } finally {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      await request.delete(`/api/providers/${provider.id}`);
     }
-    test.skip(!sent, 'first-message send did not fire (no sendable provider in this env)');
-
-    // Optimistic clear: the SAME composer empties immediately, while /api/chat
-    // is still "streaming" (held) and BEFORE any redirect to /chat/[id].
-    await expect(input).toHaveValue('', { timeout: 2_000 });
-
-    // Proves we asserted on the new-chat composer, not a post-redirect ChatView.
-    expect(page.url()).not.toMatch(/\/chat\/[^/?#]+/);
   });
 });

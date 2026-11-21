@@ -68,11 +68,7 @@ test.describe('Run Checkpoint — confirm-and-send chain @smoke', () => {
     // composer textarea directly — that's the actual readiness signal.
     await page.goto(`/chat/${fixtureId}`, { waitUntil: 'commit' });
     const input = page.locator('textarea[name="message"]').first();
-    try {
-      await input.waitFor({ state: 'visible', timeout: 10_000 });
-    } catch {
-      test.skip(true, 'Chat composer unavailable in current test environment');
-    }
+    await expect(input).toBeVisible({ timeout: 10_000 });
 
     // The data-attribute MUST exist on a button — that's the hook
     // Round 2's confirm-and-send uses to find this composer's submit
@@ -111,11 +107,7 @@ test.describe('Run Checkpoint — confirm-and-send chain @smoke', () => {
 
     await page.goto(`/chat/${fixtureId}`, { waitUntil: 'commit' });
     const input = page.locator('textarea[name="message"]').first();
-    try {
-      await input.waitFor({ state: 'visible', timeout: 10_000 });
-    } catch {
-      test.skip(true, 'Chat composer unavailable in current test environment');
-    }
+    await expect(input).toBeVisible({ timeout: 10_000 });
     await expect(page.locator('button[data-message-input-submit]')).toHaveCount(1);
 
     // The mock env has no real provider, so the submit button stays

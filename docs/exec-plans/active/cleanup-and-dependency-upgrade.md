@@ -25,7 +25,7 @@
 | WP6 | 永久跳过的 E2E 用例 | Gemini | 完成（`visual-regression.spec.ts` 因基线截图未入库保持 skip） |
 | WP7 | 设置页内联中英文迁到 i18n 字典 | Gemini | 完成 |
 | WP8 | `docs/research/` 与 `docs/guardrails/` 按新标准分流 | Opus | 完成（`v0.56.x-stability-trust` 留待所有者决定） |
-| WP9 | 收尾小项：健康页标题、旧计划、既有失败的 E2E、plugin-discovery | Opus | 待开始 |
+| WP9 | 收尾小项：健康页标题、旧计划、既有失败的 E2E、plugin-discovery | Opus | 完成 |
 
 ## 本机环境注意
 
@@ -203,3 +203,15 @@
   - 发现但按“文案一字不改”原则未改动：`HealthSection.tsx` 原英文/中文均为 `"执行引擎 / CLI"`（已原样迁入 `health.runtime.title`）；`UsageStatsSection.tsx` 仍有一处未涉及内联文案的 `t('nav.chats') === '对话'`（仅传给 `<OverviewHeatmap isZh={isZh} />`）。
 - 2026-11-20：WP4–WP7 审查通过（全量单测 5686 通过；i18n 删除的 478 个键与新增的 499 个键经脚本核对无遗漏、文案未变）。随后按用户决定删除整个 `资料/` 目录并改为整体忽略；research 文档里指向本地参考项目源码的链接改为上游相对路径的纯文本；删掉 guardrails 文件头的“已知关键文件”引用块。源码注释里的 `资料/codex/...` 保留，表示上游 openai/codex 仓库内的路径。
 - 2026-11-20：本机打包验证。arm64 包构建、packaged server 与 Main→utilityProcess→SQLite 健康检查通过；universal 包合并通过（Next 自带的第二份 sharp 两个架构都在），但本机 ad-hoc 签名在 Electron Framework 的 `chrome_crashpad_handler` 处失败，universal 包未做启动验证。正式签名、公证、Windows、Linux 未验证，留给 CI。本机终端若带 `ELECTRON_RUN_AS_NODE=1`，启动检查会误报失败，需先 unset。
+- 2026-11-21：WP9 完成（拆分为 3 个 commit）：
+  - 文案与旧计划：`src/i18n/en.ts` 的 `health.runtime.title` 修正为 `'Runtime / CLI'`（`zh.ts` 不变）；删除 `docs/exec-plans/active/v0.56.x-stability-trust.md` 及 `docs/exec-plans/README.md` 索引行，更新 `issue-tracker.md` 与 `docs/research/issue-629-resume-error-shape-poc/README.md` 中指向该文件的死链（`.github/TRIAGE.md` 无此链接）。
+  - `src/lib/plugin-discovery.ts`：全仓核实零运行期/测试调用方，`src/lib/claude-home-shadow.ts` 仅第 17 行注释提及（与计划“引用”描述略有出入）；删除模块并清理注释。
+  - E2E 修复与去条件 skip：逐条排查全部 7 个既有失败，确认均为测试/夹具过时或并行共享库竞争（无产品缺陷），一并修复全量并行跑时暴露的 `fable51-review-followup.spec.ts` 跨 worker 共享库竞争：
+    - `chat-save-warning.spec.ts`：用 `page.route` 隔离 `GET /api/settings/app` 取代共享 DB `PUT` 避免并行 `zh`/`en` 竞争，并仅对 `POST /api/chat/sessions` 调用 `route.fetch()` + `finally` 中 `unrouteAll({ behavior: 'ignoreErrors' })`。
+    - `foundation-refresh-capability.spec.ts` U6：在 `CODEX_DISABLED=1` 下断言诚实的不可用契约（`supported: false`、`installedVersion: null`、`unavailableReason: 'codex_version'`、非 `'runtime'`、`source` 仍指向 Codex reviewer 轴）；非禁用环境保持原断言。
+    - `context-chips-send-clear.spec.ts`：`new-chat submit` 补齐 `localStorage['codepilot:last-working-directory']` 与隔离 fixture provider；`existing-session submit` 补齐 `runtime_binding_state: 'bound'` / `route_revision` 及 `PATCH /api/chat/sessions/[id]/route` mock；移除全部 5 处条件 `test.skip`。
+    - `global-search-modes.spec.ts`：搜索触发按钮限定在 `sidebar(page)` 下并去掉宽泛的 `|Search`（避免误点顶栏含 `search` 字样的临时目录按钮 `codepilot-search-modes-a-...`）。
+    - `model-identity-conflict.spec.ts`：渠道筛选 combobox 可访问名称更新为 `/按模型接入能力筛选|Filter models by access capability/`（对应 `models.filter.channelTitle`）。
+    - `first-message-send-clear.spec.ts`、`mention-picker-style.spec.ts`、`run-checkpoint-confirm.spec.ts`：补齐隔离 provider/工作目录夹具，移除剩余 5 处条件 skip（全仓实际共 10 处条件 skip，加上 `visual-regression.spec.ts` 的 `test.describe.skip` 共 11 处，与计划“11 处 `test.skip(true, …)`”计数略有出入）；`visual-regression.spec.ts` 保持 skip。
+    - `fable51-review-followup.spec.ts`：隔离 `GET /api/settings/app` locale 覆写，将全局 `SELECT COUNT(*) FROM chat_sessions` 改为按 `provider_id` 计数并断言 `POST /api/chat/sessions` 次数为 0。
+  - 验证：全量 `npm run test:e2e` 通过（100 passed, 6 skipped [仅 `visual-regression.spec.ts`], 0 failed）；还原 Next 自动改动的 `tsconfig.json`。

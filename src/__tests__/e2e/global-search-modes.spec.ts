@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import Database from 'better-sqlite3';
-import { deleteTestSession } from '../helpers';
+import { deleteTestSession, sidebar } from '../helpers';
 
 function getDbPath() {
   const dataDir = process.env.CLAUDE_GUI_DATA_DIR || path.join(os.homedir(), '.codepilot');
@@ -65,7 +65,7 @@ test.describe('Global Search modes UX', () => {
       await page.goto(`/chat/${sessionA}`);
 
       // Open global search from the sidebar trigger (language-agnostic fallback).
-      await page.getByRole('button', { name: /(搜索会话|Search sessions|Search)/i }).first().click();
+      await sidebar(page).getByRole('button', { name: /(搜索会话|Search sessions)/i }).first().click();
       await expect(searchInput).toBeVisible({ timeout: 10_000 });
 
       // Default all-mode caps its file-branch scan at the N most-recent
@@ -89,7 +89,7 @@ test.describe('Global Search modes UX', () => {
       await expect(page).toHaveURL(new RegExp(`/chat/${sessionB}\\?message=`), { timeout: 10_000 });
 
       // Re-open and verify file: prefix still works in the same UX flow.
-      await page.getByRole('button', { name: /(搜索会话|Search sessions|Search)/i }).first().click();
+      await sidebar(page).getByRole('button', { name: /(搜索会话|Search sessions)/i }).first().click();
       await expect(searchInput).toBeVisible({ timeout: 10_000 });
       await searchInput.fill(`file:${fileNameA}`);
       await expect(page.getByText(/(Searching in|当前搜索范围)/)).toBeVisible({ timeout: 10_000 });

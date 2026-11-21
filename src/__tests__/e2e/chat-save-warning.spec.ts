@@ -21,12 +21,37 @@ for (const entry of ['new', 'existing', 'trimmed-existing', 'detached-existing',
     let finishDetached!: () => void;
     const detachedGate = new Promise<void>(resolve => { finishDetached = resolve; });
     try {
-      expect((await request.put('/api/settings/app', { data: { settings: {
-        locale, agent_runtime: 'codepilot_runtime', default_provider_id: provider.id, default_model: 'sonnet',
-      } } })).ok()).toBe(true);
-      await page.route('**/api/chat/sessions', async (route) => {
+      // Scope locale & default provider to this browser page rather than mutating
+      // the shared E2E SQLite settings row, so parallel entries don't race over
+      // each other's locale (zh vs en).
+      await page.route('**/api/settings/app', async (route) => {
+        if (route.request().method() !== 'GET') {
+          await route.continue();
+          return;
+        }
         const response = await route.fetch();
-        if (route.request().method() === 'POST' && response.ok()) {
+        const data = await response.json();
+        await route.fulfill({
+          response,
+          json: {
+            ...data,
+            settings: {
+              ...data.settings,
+              locale,
+              agent_runtime: 'codepilot_runtime',
+              default_provider_id: provider.id,
+              default_model: 'sonnet',
+            },
+          },
+        });
+      });
+      await page.route('**/api/chat/sessions', async (route) => {
+        if (route.request().method() !== 'POST') {
+          await route.continue();
+          return;
+        }
+        const response = await route.fetch();
+        if (response.ok()) {
           const data = await response.json();
           sessions.push(data.session.id);
         }
@@ -131,6 +156,7 @@ for (const entry of ['new', 'existing', 'trimmed-existing', 'detached-existing',
       }
     } finally {
       finishDetached();
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
       for (const id of sessions) await request.delete(`/api/chat/sessions/${id}`);
       await request.delete(`/api/providers/${provider.id}`);
     }

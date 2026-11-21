@@ -21,9 +21,6 @@ test.describe('Context chips — directory chip lifecycle @smoke', () => {
     await goToChat(page);
 
     const input = page.locator('textarea[name="message"]').first();
-    if ((await input.count()) === 0) {
-      test.skip(true, 'Chat message input is unavailable in current test environment');
-    }
     await expect(input).toBeVisible();
 
     // No chip should be present at start.
@@ -65,9 +62,6 @@ test.describe('Context chips — directory chip lifecycle @smoke', () => {
     await goToChat(page);
 
     const input = page.locator('textarea[name="message"]').first();
-    if ((await input.count()) === 0) {
-      test.skip(true, 'Chat message input is unavailable in current test environment');
-    }
     await expect(input).toBeVisible();
 
     await page.evaluate(() => {
@@ -92,9 +86,6 @@ test.describe('Context chips — directory chip lifecycle @smoke', () => {
     await goToChat(page);
 
     const input = page.locator('textarea[name="message"]').first();
-    if ((await input.count()) === 0) {
-      test.skip(true, 'Chat message input is unavailable in current test environment');
-    }
     await expect(input).toBeVisible();
 
     // The handler in MessageInput strips trailing slashes — verify the chip
@@ -119,94 +110,140 @@ test.describe('Context chips — directory chip lifecycle @smoke', () => {
   // flagged by Codex as masking the regression risk; the
   // existing-session test below is where the same-composer state
   // clearance is locked down.
-  test('new-chat submit posts inode/directory + LLM-context in body @smoke', async ({ page }) => {
+  test('new-chat submit posts inode/directory + LLM-context in body @smoke', async ({ page, request }) => {
+    const dataDir = process.env.CODEPILOT_E2E_DATA_DIR;
+    if (!dataDir) throw new Error('Isolated E2E database required');
+    await page.addInitScript(
+      (dir) => localStorage.setItem('codepilot:last-working-directory', dir),
+      dataDir,
+    );
+
+    const created = await request.post('/api/providers', {
+      data: {
+        name: `Context chips E2E fixture ${Date.now()}`,
+        provider_type: 'anthropic',
+        protocol: 'anthropic',
+        preset_key: 'anthropic-official',
+        base_url: 'https://api.anthropic.com',
+        api_key: 'fixture-no-network',
+      },
+    });
+    expect(created.ok()).toBe(true);
+    const { provider } = await created.json();
+
     let chatRequestBody: Record<string, unknown> | null = null;
     let sessionCounter = 0;
 
-    // The /chat first-message flow always tries to create a session row
-    // before opening the SSE stream. Without this mock the page would
-    // either block or 500 on session insert.
-    await page.route('**/api/chat/sessions', async (route) => {
-      if (route.request().method() !== 'POST') {
-        await route.continue();
-        return;
-      }
-      sessionCounter += 1;
-      const id = `mock-chip-session-${sessionCounter}`;
-      await route.fulfill({
-        status: 200,
-        contentType: 'application/json',
-        body: JSON.stringify({
-          session: {
-            id,
-            title: 'Mock Session',
-            model: 'sonnet',
-            mode: 'code',
-            provider_id: 'mock',
-            working_directory: '/tmp',
+    try {
+      await page.route('**/api/settings/app', async (route) => {
+        if (route.request().method() !== 'GET') {
+          await route.continue();
+          return;
+        }
+        const response = await route.fetch();
+        const data = await response.json();
+        await route.fulfill({
+          response,
+          json: {
+            ...data,
+            settings: {
+              ...data.settings,
+              agent_runtime: 'codepilot_runtime',
+              default_provider_id: provider.id,
+              default_model: 'sonnet',
+            },
           },
-        }),
+        });
       });
-    });
 
-    // Capture the /api/chat POST body — this is where we prove the
-    // submit reached the network layer with the correct payload (chips
-    // serialised as `inode/directory` files, content carries
-    // `[Referenced Directories]`).
-    await page.route('**/api/chat', async (route) => {
-      const req = route.request();
-      if (req.method() !== 'POST') {
-        await route.continue();
-        return;
-      }
-      try {
-        chatRequestBody = req.postDataJSON() as Record<string, unknown>;
-      } catch {
-        chatRequestBody = null;
-      }
-      // Minimal SSE: an immediate `done` so the page doesn't sit in
-      // "streaming" forever and we can assert post-state quickly.
-      await route.fulfill({
-        status: 200,
-        contentType: 'text/event-stream',
-        body: `data: ${JSON.stringify({ type: 'done' })}\n\n`,
+      // The /chat first-message flow always tries to create a session row
+      // before opening the SSE stream. Without this mock the page would
+      // either block or 500 on session insert.
+      await page.route('**/api/chat/sessions', async (route) => {
+        if (route.request().method() !== 'POST') {
+          await route.continue();
+          return;
+        }
+        sessionCounter += 1;
+        const id = `mock-chip-session-${sessionCounter}`;
+        await route.fulfill({
+          status: 200,
+          contentType: 'application/json',
+          body: JSON.stringify({
+            session: {
+              id,
+              title: 'Mock Session',
+              model: 'sonnet',
+              mode: 'code',
+              provider_id: provider.id,
+              runtime_pin: 'codepilot_runtime',
+              runtime_binding_state: 'bound',
+              route_revision: 1,
+              working_directory: dataDir,
+            },
+          }),
+        });
       });
-    });
 
-    await goToChat(page);
+      // Capture the /api/chat POST body — this is where we prove the
+      // submit reached the network layer with the correct payload (chips
+      // serialised as `inode/directory` files, content carries
+      // `[Referenced Directories]`).
+      await page.route('**/api/chat', async (route) => {
+        const req = route.request();
+        if (req.method() !== 'POST') {
+          await route.continue();
+          return;
+        }
+        try {
+          chatRequestBody = req.postDataJSON() as Record<string, unknown>;
+        } catch {
+          chatRequestBody = null;
+        }
+        // Minimal SSE: an immediate `done` so the page doesn't sit in
+        // "streaming" forever and we can assert post-state quickly.
+        await route.fulfill({
+          status: 200,
+          contentType: 'text/event-stream',
+          body: `data: ${JSON.stringify({ type: 'done' })}\n\n`,
+        });
+      });
 
-    const input = page.locator('textarea[name="message"]').first();
-    if ((await input.count()) === 0) {
-      test.skip(true, 'Chat message input is unavailable in current test environment');
+      await goToChat(page);
+
+      const input = page.locator('textarea[name="message"]').first();
+      await expect(input).toBeVisible();
+
+      // Add a directory chip via the same event the file-tree "+" uses.
+      // Before submit we lock the chip is present + textarea is fillable.
+      await page.evaluate(() => {
+        window.dispatchEvent(
+          new CustomEvent('attach-directory-to-chat', { detail: { path: 'src/app' } }),
+        );
+      });
+      const folderChip = page.locator('span.font-mono', { hasText: 'src/app' });
+      await expect(folderChip).toBeVisible();
+
+      // User types and submits via Enter — same path as the real composer.
+      await input.fill('please review this folder');
+      await input.press('Enter');
+
+      // The POST body crossed the boundary with the expected serialisation:
+      // catches regressions in the payload composition half
+      // (composeSubmitPayload, mentionAppend, etc.) AND proves submit
+      // actually fired in the new-chat pipeline (proxy for "onSend was
+      // called"). State-clearance regressions on the SAME composer are
+      // tested by the existing-session test below — not here.
+      await expect.poll(() => chatRequestBody !== null, { timeout: 5_000 }).toBeTruthy();
+      const payload = (chatRequestBody ?? {}) as { content?: unknown; files?: unknown };
+      const content = typeof payload.content === 'string' ? payload.content : '';
+      const files = Array.isArray(payload.files) ? (payload.files as Array<{ type?: string; filePath?: string }>) : [];
+      expect(content).toContain('[Referenced Directories]');
+      expect(files.some((f) => f.type === 'inode/directory' && f.filePath === 'src/app')).toBe(true);
+    } finally {
+      await page.unrouteAll({ behavior: 'ignoreErrors' });
+      await request.delete(`/api/providers/${provider.id}`);
     }
-    await expect(input).toBeVisible();
-
-    // Add a directory chip via the same event the file-tree "+" uses.
-    // Before submit we lock the chip is present + textarea is fillable.
-    await page.evaluate(() => {
-      window.dispatchEvent(
-        new CustomEvent('attach-directory-to-chat', { detail: { path: 'src/app' } }),
-      );
-    });
-    const folderChip = page.locator('span.font-mono', { hasText: 'src/app' });
-    await expect(folderChip).toBeVisible();
-
-    // User types and submits via Enter — same path as the real composer.
-    await input.fill('please review this folder');
-    await input.press('Enter');
-
-    // The POST body crossed the boundary with the expected serialisation:
-    // catches regressions in the payload composition half
-    // (composeSubmitPayload, mentionAppend, etc.) AND proves submit
-    // actually fired in the new-chat pipeline (proxy for "onSend was
-    // called"). State-clearance regressions on the SAME composer are
-    // tested by the existing-session test below — not here.
-    await expect.poll(() => chatRequestBody !== null, { timeout: 5_000 }).toBeTruthy();
-    const payload = (chatRequestBody ?? {}) as { content?: unknown; files?: unknown };
-    const content = typeof payload.content === 'string' ? payload.content : '';
-    const files = Array.isArray(payload.files) ? (payload.files as Array<{ type?: string; filePath?: string }>) : [];
-    expect(content).toContain('[Referenced Directories]');
-    expect(files.some((f) => f.type === 'inode/directory' && f.filePath === 'src/app')).toBe(true);
   });
 
   // ── Existing-session submit (Codex P2 final closure) ───────────────
@@ -252,25 +289,27 @@ test.describe('Context chips — directory chip lifecycle @smoke', () => {
       });
     });
 
+    const mockSession = {
+      id: fixtureId,
+      title: 'Mock Existing Session',
+      model: 'sonnet',
+      mode: 'code',
+      provider_id: 'mock',
+      runtime_pin: 'codepilot_runtime',
+      runtime_binding_state: 'bound',
+      route_revision: 1,
+      working_directory: '/tmp',
+      permission_profile: 'default',
+      context_summary: null,
+    };
+
     // Mock the GET that ChatView's session loader hits.
     await page.route(`**/api/chat/sessions/${fixtureId}`, async (route) => {
       if (route.request().method() === 'GET') {
         await route.fulfill({
           status: 200,
           contentType: 'application/json',
-          body: JSON.stringify({
-            session: {
-              id: fixtureId,
-              title: 'Mock Existing Session',
-              model: 'sonnet',
-              mode: 'code',
-              provider_id: 'mock',
-              runtime_pin: 'codepilot_runtime',
-              working_directory: '/tmp',
-              permission_profile: 'default',
-              context_summary: null,
-            },
-          }),
+          body: JSON.stringify({ session: mockSession }),
         });
         return;
       }
@@ -280,6 +319,18 @@ test.describe('Context chips — directory chip lifecycle @smoke', () => {
         return;
       }
       await route.continue();
+    });
+
+    // Mock route binding commits (PATCH /api/chat/sessions/[id]/route).
+    await page.route(`**/api/chat/sessions/${fixtureId}/route`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          session: mockSession,
+          route_revision: mockSession.route_revision + 1,
+        }),
+      });
     });
 
     // Mock initial messages load — empty session.
@@ -313,9 +364,6 @@ test.describe('Context chips — directory chip lifecycle @smoke', () => {
     await goToConversation(page, fixtureId);
 
     const input = page.locator('textarea[name="message"]').first();
-    if ((await input.count()) === 0) {
-      test.skip(true, 'Chat message input is unavailable in current test environment');
-    }
     await expect(input).toBeVisible();
 
     // Snapshot the textarea handle BEFORE submit. Playwright `expect`
