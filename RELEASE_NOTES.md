@@ -73,7 +73,7 @@
 
 ## 系统要求
 
-- macOS 12.0+
+- macOS 13.0+（自下个版本起，因桌面运行时升级，最低支持系统提升为 macOS 13 Ventura，不再支持 macOS 12）
 - Windows 10/11 x64，或常见 x64/arm64 Linux 发行版
 - 需要配置 API 服务商或受支持的套餐凭据
 - 推荐安装 Claude Code CLI 或 Codex CLI 以获得完整功能

@@ -138,7 +138,7 @@
     "@types/react-syntax-highlighter": "^15.5.13",
     "@types/ws": "^8.18.1",
     "concurrently": "^9.2.1",
-    "electron": "^40.10.6",
+    "electron": "^45.3.2",
     "electron-builder": "26.18.0",
     "esbuild": "^0.27.3",
     "eslint": "^9",

@@ -32,7 +32,7 @@
 
 | 平台 | 下载 | 架构 |
 |---|---|---|
-| macOS | [Apple Silicon (.dmg)](https://github.com/op7418/CodePilot/releases/latest) · [Intel (.dmg)](https://github.com/op7418/CodePilot/releases/latest) | arm64 / x64 |
+| macOS (13+) | [Apple Silicon (.dmg)](https://github.com/op7418/CodePilot/releases/latest) · [Intel (.dmg)](https://github.com/op7418/CodePilot/releases/latest) | arm64 / x64 |
 | Windows | [安装包 (.exe)](https://github.com/op7418/CodePilot/releases/latest) | x64 + arm64 |
 | Linux | 从源码构建 | x64 + arm64 |
 

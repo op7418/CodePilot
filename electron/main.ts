@@ -2961,7 +2961,7 @@ app.whenReady().then(async () => {
     let copied = false;
     try {
       const install = selectCodexWindowsInstallCommand(findWindowsNpmCommand());
-      clipboard.writeText(install.command);
+      await clipboard.writeText(install.command);
       copied = true;
       const spec = buildCodexPowerShellLaunchSpec();
       const launcher = spawn(spec.command, spec.args, {
@@ -3037,14 +3037,21 @@ app.whenReady().then(async () => {
     return true;
   });
 
-  // Native folder picker dialog
+  // Native folder picker dialog (track last chosen directory so Electron 43+'s
+  // Downloads fallback doesn't lose the user's previous folder when defaultPath
+  // is omitted).
+  let lastOpenedFolderDialogPath: string | undefined;
   ipcMain.handle('dialog:open-folder', async (_event, options?: { defaultPath?: string; title?: string }) => {
     if (!mainWindow) return { canceled: true, filePaths: [] };
+    const defaultPath = options?.defaultPath || lastOpenedFolderDialogPath || undefined;
     const result = await dialog.showOpenDialog(mainWindow, {
       title: options?.title || 'Select a project folder',
-      defaultPath: options?.defaultPath || undefined,
+      defaultPath,
       properties: ['openDirectory', 'createDirectory'],
     });
+    if (!result.canceled && result.filePaths[0]) {
+      lastOpenedFolderDialogPath = result.filePaths[0];
+    }
     return { canceled: result.canceled, filePaths: result.filePaths };
   });
 
@@ -3458,10 +3465,14 @@ app.whenReady().then(async () => {
     && event.sender === mainWindow.webContents
     && event.sender.getURL() === activeServerRecoveryDataUrl
   );
-  ipcMain.handle('server-recovery:copy-diagnostics', (event) => {
+  ipcMain.handle('server-recovery:copy-diagnostics', async (event) => {
     if (!isTrustedServerRecoverySender(event)) return false;
-    clipboard.writeText(serverRecoveryDiagnostics());
-    return true;
+    try {
+      await clipboard.writeText(serverRecoveryDiagnostics());
+      return true;
+    } catch {
+      return false;
+    }
   });
   ipcMain.handle('server-recovery:retry', (event) => {
     if (

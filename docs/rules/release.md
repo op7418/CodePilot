@@ -105,7 +105,7 @@ Linux AppImage/deb/rpm 当前提供 checksum/attestation 与手工安装，不�
 
 ## 系统要求
 
-- macOS 12.0+
+- macOS 13.0+
 - Windows 10/11 x64，或常见 x64/arm64 Linux 发行版
 - 需要配置 API 服务商（Anthropic / OpenRouter 等）
 - 推荐安装 Claude Code CLI 以获得完整功能
