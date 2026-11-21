@@ -25,6 +25,7 @@
 | WP6 | 永久跳过的 E2E 用例 | Gemini | 完成（`visual-regression.spec.ts` 因基线截图未入库保持 skip） |
 | WP7 | 设置页内联中英文迁到 i18n 字典 | Gemini | 完成 |
 | WP8 | `docs/research/` 与 `docs/guardrails/` 按新标准分流 | Opus | 完成（`v0.56.x-stability-trust` 留待所有者决定） |
+| WP9 | 收尾小项：健康页标题、旧计划、既有失败的 E2E、plugin-discovery | Opus | 待开始 |
 
 ## 本机环境注意
 
@@ -146,6 +147,15 @@
 - `docs/guardrails/`：保留"不能破坏什么"和"为什么不那样做"。"关键文件 + 责任"表会随代码过期，删掉；先核对每份里引用的源文件是否还存在。
 - `docs/exec-plans/active/` 里 `v0.56.x-stability-trust`、`codex-stop-recovery`、`mimo-ultraspeed-openai-compatible-provider` 三份看着已过期，对照代码确认做完了就删。
 
+## WP9 收尾小项
+
+- **健康页标题**：`health.runtime.title` 的英文值现在是中文“执行引擎 / CLI”，改成 `Runtime / CLI`。中文值不动。
+- **旧计划**：删除 `active/v0.56.x-stability-trust.md` 并去掉 README 索引行。`.github/TRIAGE.md` 等处如果还有指向它的链接，一并去掉。
+- **既有失败的 E2E**（7 个，都在此前没人改过的文件里）：`foundation-refresh-capability.spec.ts` 的 U6、`context-chips-send-clear.spec.ts` 2 条、`chat-save-warning.spec.ts` 1 条、`global-search-modes.spec.ts` 1 条、`model-identity-conflict.spec.ts` 2 条。先逐个确认失败原因：是测试写法过时，还是产品真有问题。前者修测试；后者不要改测试去迁就，停下来报告。
+- **条件跳过**（11 处 `test.skip(true, …)`，分布在 `context-chips-send-clear`、`run-checkpoint-confirm`、`first-message-send-clear`、`mention-picker-style`）：它们在“环境里没有可用输入框或服务商”时跳过。WP6 已经给聊天类用例建了独立的 fixture provider 和请求拦截，照同样办法让这些用例真正跑起来，去掉跳过。
+- **`src/lib/plugin-discovery.ts`**：调用它的两个路由已删，现在只剩 `claude-home-shadow.ts` 引用。确认是否还有实际用途，没有就删。
+- `visual-regression.spec.ts` 的 skip 保留（快照基线不入库）。
+
 ## 决策日志
 
 - 2026-11-20：第一轮清理完成（未提交）。删除 handover 目录、`ARCHITECTURE.md`、45 个无引用源文件、6 个无调用路由；修复 `stopScheduler`。全量单测 5698 通过。
@@ -192,3 +202,4 @@
   - 同步更新了 5 个直接正则断言组件源码中英文字面量的源码钉单测（`codex-phase-6-wiring.test.ts`、`codex-binary-discovery.test.ts`、`codex-windows-recovery.test.ts`、`pin-incomplete-ui.test.ts`、`xai-oauth-ui.test.ts`），改为同时断言组件内的 i18n 键引用与 `src/i18n/{en,zh}.ts` 中的精确原文。
   - 发现但按“文案一字不改”原则未改动：`HealthSection.tsx` 原英文/中文均为 `"执行引擎 / CLI"`（已原样迁入 `health.runtime.title`）；`UsageStatsSection.tsx` 仍有一处未涉及内联文案的 `t('nav.chats') === '对话'`（仅传给 `<OverviewHeatmap isZh={isZh} />`）。
 - 2026-11-20：WP4–WP7 审查通过（全量单测 5686 通过；i18n 删除的 478 个键与新增的 499 个键经脚本核对无遗漏、文案未变）。随后按用户决定删除整个 `资料/` 目录并改为整体忽略；research 文档里指向本地参考项目源码的链接改为上游相对路径的纯文本；删掉 guardrails 文件头的“已知关键文件”引用块。源码注释里的 `资料/codex/...` 保留，表示上游 openai/codex 仓库内的路径。
+- 2026-11-20：本机打包验证。arm64 包构建、packaged server 与 Main→utilityProcess→SQLite 健康检查通过；universal 包合并通过（Next 自带的第二份 sharp 两个架构都在），但本机 ad-hoc 签名在 Electron Framework 的 `chrome_crashpad_handler` 处失败，universal 包未做启动验证。正式签名、公证、Windows、Linux 未验证，留给 CI。本机终端若带 `ELECTRON_RUN_AS_NODE=1`，启动检查会误报失败，需先 unset。
