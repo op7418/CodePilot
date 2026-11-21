@@ -2,7 +2,7 @@ name: Stale — needs-repro / needs-confirmation
 
 # 保守的 stale 流程：
 # 只处理"等用户补信息 / 等确认"的 issue；明确排除所有 P0/P1 高风险，
-# 也不碰 feature（v0.57+ parking-lot 不在 any-of-labels 里）。
+# 也不碰 feature（parking-lot 不在 any-of-labels 里）。
 # 节奏：14 天无更新 → 自动评论提醒；再 14 天无回应 → 自动关闭（带说明，可重开）。
 #
 # 首次上线可先用 workflow_dispatch 手动跑一次、把下方 debug-only 临时设为 true

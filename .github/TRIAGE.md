@@ -17,14 +17,14 @@
 | `needs-confirmation` | 等用户确认最新版是否仍复现（stale 流程对象） |
 | `old-version` | 旧版本反馈，需最新版复测 |
 | `stale` | 长期无回应、进入自动关闭流程（由 stale 机器人加 / 去） |
-| `v0.57+ parking-lot` | 待排期功能建议（历史标签名保留，不进 stale） |
+| `parking-lot` | 待排期功能建议（不进 stale） |
 
 ## Issue triage
 
 - 新 bug 进来先核验：是否有版本 / 平台 / runtime / 复现。缺则打 `needs-repro` 并请求补充，不立即排期。
 - **不直接采信 issue 自述的根因**——必须用当前源码或本地复现核验后再定性。
 - 确认属实的纳入当前发版 milestone，按上表打 P0/P1。
-- 功能请求默认带 `enhancement` 与 `v0.57+ parking-lot`，按优先级评估排期。
+- 功能请求默认带 `enhancement` 与 `parking-lot`，按优先级评估排期。
 - P0 未关闭不发 stable。
 
 ## PR triage（每周）
@@ -36,8 +36,8 @@
 
 ## 自动化机器人
 
-- **`stale-needs-repro.yml`（已激活）**：对带 `needs-repro` / `needs-confirmation` 的 issue，14 天无更新自动评论提醒、再 14 天无回应自动关闭（带可重开说明）。**豁免全部 P0/P1，不碰 feature（`v0.57+ parking-lot`）、不动 PR**，每次限 60 条。
-- **`issue-intake.yml`（已激活）**：新建或编辑 issue 时自动分流——影响面勾选→P0；功能模板→`v0.57+ parking-lot`；bug 缺 version/os/provider/复现→`needs-repro` + 一次性评论；**作者编辑正文或评论补充后自动摘 `needs-repro`**。不自动关闭任何 issue。
+- **`stale-needs-repro.yml`（已激活）**：对带 `needs-repro` / `needs-confirmation` 的 issue，14 天无更新自动评论提醒、再 14 天无回应自动关闭（带可重开说明）。**豁免全部 P0/P1，不碰 feature（`parking-lot`）、不动 PR**，每次限 60 条。
+- **`issue-intake.yml`（已激活）**：新建或编辑 issue 时自动分流——影响面勾选→P0；功能模板→`parking-lot`；bug 缺 version/os/provider/复现→`needs-repro` + 一次性评论；**作者编辑正文或评论补充后自动摘 `needs-repro`**。不自动关闭任何 issue。
 
 - **`pr-labeler.yml`（已落地）**：按 PR 改动路径打 `area:*`（用 actions/labeler，只读 changed-files、不 checkout / 不执行 PR 代码）。
 - **`pr-size-warning.yml`（已落地）**：PR >25 文件或 >800 行 → 打 `pr:large` + 评论提醒拆分（去重）；**只提醒，不 fail、不关闭**。

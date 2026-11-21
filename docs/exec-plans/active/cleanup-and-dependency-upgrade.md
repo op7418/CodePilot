@@ -215,3 +215,4 @@
     - `first-message-send-clear.spec.ts`、`mention-picker-style.spec.ts`、`run-checkpoint-confirm.spec.ts`：补齐隔离 provider/工作目录夹具，移除剩余 5 处条件 skip（全仓实际共 10 处条件 skip，加上 `visual-regression.spec.ts` 的 `test.describe.skip` 共 11 处，与计划“11 处 `test.skip(true, …)`”计数略有出入）；`visual-regression.spec.ts` 保持 skip。
     - `fable51-review-followup.spec.ts`：隔离 `GET /api/settings/app` locale 覆写，将全局 `SELECT COUNT(*) FROM chat_sessions` 改为按 `provider_id` 计数并断言 `POST /api/chat/sessions` 次数为 0。
   - 验证：全量 `npm run test:e2e` 通过（100 passed, 6 skipped [仅 `visual-regression.spec.ts`], 0 failed）；还原 Next 自动改动的 `tsconfig.json`。
+- 2026-11-21：标签改名完成。仓库内 `.github/ISSUE_TEMPLATE/feature_request.yml`、`.github/TRIAGE.md`、`.github/workflows/issue-intake.yml`、`.github/workflows/stale-needs-repro.yml` 中 `v0.57+ parking-lot` 引用已全部改为 `parking-lot`（未改 GitHub 远端标签本身；push 前或同时需由仓库所有者在 GitHub 网页将标签重命名为 `parking-lot`）。

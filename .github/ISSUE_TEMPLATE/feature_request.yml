@@ -1,6 +1,6 @@
 name: "Feature request / 功能建议"
 description: "建议一个新功能或改进 / Suggest a feature or improvement"
-labels: ["enhancement", "v0.57+ parking-lot"]
+labels: ["enhancement", "parking-lot"]
 body:
   - type: markdown
     attributes:

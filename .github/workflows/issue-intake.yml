@@ -1,7 +1,7 @@
 name: Issue intake — 新 issue 自动分流
 
 # 自动分流新建/编辑的 issue，并在作者补充后摘 needs-repro + stale。
-#   - 功能模板(enhancement) → v0.57+ parking-lot（feature_request.yml 已自带，此处冗余兜底）
+#   - 功能模板(enhancement) → parking-lot（feature_request.yml 已自带，此处冗余兜底）
 #   - 影响面勾选"数据丢失"/"崩溃中断" → 对应 P0 label
 #   - bug 缺复现(version/os/provider/steps 占位 或 无 form 结构) → needs-repro + 一次性评论
 #   - 作者**编辑正文**或**评论**补充后 → 摘 needs-repro **和 stale**（兑现"补全自动取消"承诺）
@@ -52,7 +52,7 @@ jobs:
             const body = issue.body || '';
             const isFeature = labels.includes('enhancement');
             const add = new Set();
-            if (isFeature) add.add('v0.57+ parking-lot');
+            if (isFeature) add.add('parking-lot');
             if (/- \[[xX]\][^\n]*(数据|data loss|文件写入|file write|丢失)/.test(body)) add.add('P0-data-loss-risk');
             if (/- \[[xX]\][^\n]*(崩溃|闪退|中断|crash|quit|interrupt)/.test(body)) add.add('P0-crash-or-interrupt');
 
