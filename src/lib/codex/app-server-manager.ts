@@ -367,8 +367,8 @@ export function selectBestCodexCandidate(candidates: readonly CodexBinaryCandida
  * containing spaces (`Program Files`, `AppData\Roaming`) survive.
  *
  * Real `.exe` binaries and ALL macOS / Linux paths are returned for a direct
- * spawn, unchanged — preserving the `app-server` stdio contract (never
- * `--listen`) that older Codex.app builds depend on.
+ * spawn, unchanged — preserving the `app-server` default stdio contract (no
+ * listen flag) that older Codex.app builds depend on.
  *
  * `platform` / `comspec` are injectable so both branches are unit-testable
  * without actually running on Windows.
