@@ -18,8 +18,8 @@
 | 工作包 | 内容 | 建议执行者 | 状态 |
 |---|---|---|---|
 | WP1 | 三处实际缺陷：上传路由路径检查、MCP 连接管理、定时任务并发 | Opus | 完成 |
-| WP2 | 依赖：lock 同步、漏洞修复、删无用依赖 | Opus | 完成（mac universal 包未在本机验证） |
-| WP3 | Node 与 Electron 大版本升级 | Opus | 完成（Windows、Linux、正式签名与公证待 CI 验证） |
+| WP2 | 依赖：lock 同步、漏洞修复、删无用依赖 | Opus | 完成 |
+| WP3 | Node 与 Electron 大版本升级 | Opus | 完成（三平台已在 `build.yml` 手动构建中通过，见决策日志） |
 | WP4 | 第二轮死代码：路由、IPC、模块、`资料/` | Gemini | 完成（`资料/` 后续已按用户决定整体删除） |
 | WP5 | GitHub 模板与工作流的过时口径 | Gemini | 完成 |
 | WP6 | 永久跳过的 E2E 用例 | Gemini | 完成（`visual-regression.spec.ts` 因基线截图未入库保持 skip） |
@@ -251,3 +251,22 @@
     - 两项启动检查在 universal 的 arm64 部分和 Rosetta 下的 x86_64 部分都通过（x86_64 只是 Rosetta 模拟，不是真实 Intel 机器）。
   - Sentry：preview 构建没有注入 `SENTRY_DSN`，包里的 DSN 为空，`Sentry.init` 不会执行；启动检查也显式清空了 DSN。CI 只证明 SDK 模块在 Electron 45 下加载不崩。另在本机用 Electron 45.3.2 跑了最小测试：7.16.0 用假 DSN 初始化无报错，事件能到 `beforeSend`。带 DSN 的打包 app 仍未验证。
   - 发现未处理：universal 包里有 Claude Agent SDK 自带的 4 个 linux/win32 `audio-capture.node`。打包配置从未排除它们，main 上已发布的版本里同样存在，与本次升级无关。
+- 2026-11-21：发版准备，用 `build.yml` 手动触发全平台构建（不会运行发布任务，发布任务只在推送 tag 时运行）。`telemetry_smoke=true` 会跳过 Intel 检查，也不上传 macOS 产物，所以拆成两次触发。这几次构建时 `package.json` 还是 0.67.17，source map 和遥测合成事件都记在线上 Sentry 的 `codepilot@0.67.17` 下。
+  - [run 44878584640](https://github.com/op7418/CodePilot/actions/runs/44878584640)（`a3ed77b8`，platform=all）：macOS 和 Intel 检查通过；Windows、Linux 失败。
+    - Windows：`npm ci` 通过，`next build` 失败。Next 16.4 的 Turbopack 把 `powershell-utils` 里 `fs.access(<SYSTEMROOT>\...\powershell.exe)` 当成文件引用，在 Windows 上解析成项目外的 `C:/` 绝对路径后直接报错。0.2.0 和 0.2.1 这行代码相同，Next 16.2 不报错；上游见 vercel/next.js discussion #100516，16.4.6 已是最新补丁。修复：只把 `powershell-utils` 设为 `serverExternalPackages`，`trash` 仍打进 bundle，macOS Trash 辅助程序的 `x64ArchFiles` 路径不变（`dc49cd05`）。它只在 `trash` 的 Linux/WSL 分支用到，standalone 里通过 Next 的哈希外部别名加载，本机确认两个别名都能 import。
+    - Linux x64/arm64：zlib-sync 针对 Electron 45 编译失败。node-gyp 总会定义 `V8_DEPRECATION_WARNINGS`，Electron 45 的 V8 头文件因此出现 `class [[deprecated]] __attribute__((visibility)) Value`，GCC 12 及以下不接受，ubuntu-22.04 最高只有 GCC 12。clang 14 也不行：头文件无条件使用 `std::source_location`，需要 clang 15。用 Compiler Explorer 实测：GCC 11.4/12.4 失败，GCC 13+ 通过；clang 14 + libstdc++ 11 失败，clang 15 + libstdc++ 11/12 通过。修复：Linux 打包步骤安装 jammy 的 `clang-15`，并设 `CC`/`CXX`，不换 runner，保持 glibc 2.35 基线（`6be3ee1c`）。
+  - [run 44878598450](https://github.com/op7418/CodePilot/actions/runs/44878598450)（`a3ed77b8`，platform=macos，telemetry_smoke=true）：通过。带真实 DSN 的 arm64 包里，Next 服务端和 Electron 主进程都发出合成事件；原生崩溃夹具按预期以 139 退出，重启后 Sentry 再次初始化。事件是否到达 Sentry 后台没有核对（本机无 Sentry 访问权限）。
+  - [run 44880192091](https://github.com/op7418/CodePilot/actions/runs/44880192091)（`dc49cd05`，platform=all）：全部通过。
+    - Windows：`npm ci` 时 zlib-sync 编译通过；better-sqlite3 两处 prebuilds 只保留 `win32-x64.node`，在 Electron 下加载 ABI 150；zlib-sync 按 Electron ABI 重编并替换；NSIS 与 blockmap 生成；安装包和 `CodePilot.exe` 均为 `NotSigned`，`app-update.yml` 没有 `publisherName`；两项启动检查通过（win32 x64）。
+    - Linux x64/arm64：zlib-sync 用 clang-15 编译通过并替换；better-sqlite3 只保留 `linux-*` 与 `linuxmusl-*`；AppImage/deb/rpm 的架构检查通过；两项启动检查通过；glibc 基线 2.35。下载 deb 对比 v0.67.17：新的 `zlib_sync.node` 最高 GLIBC 版本相同（x64 2.14、arm64 2.17），GLIBCXX 只需 3.4，不再需要 CXXABI_1.3.9。
+    - macOS：三个架构签名、公证、DMG staple 和 Gatekeeper 通过，`latest-mac.yml` 写入 `minimumSystemVersion 22.0.0`，arm64 启动检查通过。
+    - Intel（`macos-15-intel`，x64 Node）：universal ZIP 的 Main→utilityProcess→SQLite 检查通过，arch=x64。这一步不加载 zlib-sync；本机用 Rosetta 分别加载 universal 包里两半的 zlib-sync，解压往返都正确。
+    - 下载全部产物在本机按发布任务的方式合并 checksum，跑 `verify-update-assets.mjs ... stable distribution`：通过（2 份 metadata，含按真实文件重算 sha256）。
+- 2026-11-21：用真实数据副本验证升级。`~/.codepilot`（632M，最后由 v0.67.17 使用）整体复制到系统临时目录，副本 sha256 与原库一致。用 CI 的 preview.6 universal 包（与当时分支只差文档）指向副本启动，user-data 也在临时目录，带上隔离标志让 app 不碰系统钥匙串。
+  - 启动三次，日志无 SQLite 或迁移错误；`/api/health` 显示 database=healthy、ABI 150。这个版本没有改表结构，启动前后 schema 哈希相同，`integrity_check` 为 ok。
+  - API 读出 325 个会话、3935 条消息（不含心跳确认消息），与副本数据库一致，读取消息 0 失败。8 个服务商和 9 组模型都能读出，默认服务商正确；界面显示项目列表和默认模型。
+  - 钥匙串：日志确认 `safeStorage skipped`。服务商密钥在库里是明文旧格式（v0.67.17 起就是这样，相关代码这次没改），所以隔离模式下仍以掩码显示；正式环境下的密钥加密迁移路径没有被验证。
+  - 发现未处理（v0.67.17 已有，代码相同）：一条早于 `permanent` 字段的旧心跳任务（`permanent=0`），每次启动会被重新激活，随即因"超过 7 天"被停用，并发一条"⏰ Assistant heartbeat"通知。用户真实库里 10~11 月每次启动都有一条。
+  - 验证结束后删除副本；原库修改时间仍是 12:06，没有被打开。
+- 2026-11-21：版本号改为 0.68.0，`RELEASE_NOTES.md` 换成 0.68.0 正文（`3a727dd3`）。发布相关的 49 个单测与全量单测通过。`lint-docs-drift.mjs` 实际只检查计划索引，不检查 Release Notes 与版本号；版本号与 tag 的一致性由打 tag 时 CI 的源码门禁检查。
+- 发版前置条件（仓库设置，代码改不了）：仓库变量 `CODEPILOT_IMMUTABLE_RELEASES_CONFIRMED_AT` 当前是 `2026-09-22`，发布任务要求是当天或前一 UTC 日，否则 Release 任务失败。失败的 tag 不能复用，只能递增 patch，所以必须在推送 tag 前由管理员刷新；`CODEPILOT_RULESETS_CONFIRMED_STATE` 也要与 live ruleset 一致。
