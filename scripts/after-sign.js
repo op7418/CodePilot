@@ -12,9 +12,10 @@
  * on every rebuild and makes macOS prompt for the existing Safe Storage item.
  *
  * Ad-hoc signing order (inside-out):
- *   1. All native binaries (.node, .dylib, .so)
- *   2. Extensionless executable helpers inside Frameworks/
- *   3. All Frameworks (*.framework)
+ *   1. Native binaries (.node, .dylib, .so) outside framework bundles
+ *   2. Loose executable helpers directly under Frameworks/
+ *   3. Each framework: its nested helpers and libraries (deepest first), then
+ *      the framework bundle itself
  *   4. All Helper apps (*.app inside Frameworks/)
  *   5. The main .app bundle
  */
@@ -72,7 +73,7 @@ function collectFiles(dir, extensions) {
  * Collect executable helper binaries that do not have file extensions, such as
  * Electron Framework.framework/.../Helpers/chrome_crashpad_handler.
  */
-function collectExecutableHelpers(dir) {
+function collectExecutableHelpers(dir, { includeNativeExtensions = false, skipFrameworks = false } = {}) {
   const results = [];
   if (!fs.existsSync(dir)) return results;
 
@@ -84,8 +85,15 @@ function collectExecutableHelpers(dir) {
       if (entry.name.endsWith('.app')) {
         continue;
       }
-      results.push(...collectExecutableHelpers(fullPath));
+      if (skipFrameworks && entry.name.endsWith('.framework')) {
+        continue;
+      }
+      results.push(...collectExecutableHelpers(fullPath, { includeNativeExtensions, skipFrameworks }));
     } else if (entry.isFile()) {
+      if (includeNativeExtensions && ['.node', '.dylib', '.so'].includes(path.extname(entry.name))) {
+        results.push(fullPath);
+        continue;
+      }
       try {
         const mode = fs.statSync(fullPath).mode;
         if ((mode & 0o111) !== 0) {
@@ -98,6 +106,22 @@ function collectExecutableHelpers(dir) {
   }
 
   return results;
+}
+
+/**
+ * Code nested inside a framework that must be sealed before the framework
+ * itself, deepest paths first. The framework's own main binary
+ * (Versions/<v>/<Name>) is excluded: signing the bundle signs it.
+ */
+function collectFrameworkNestedCode(frameworkPath) {
+  const frameworkName = path.basename(frameworkPath, '.framework');
+  return collectExecutableHelpers(frameworkPath, { includeNativeExtensions: true })
+    .filter((file) => {
+      const relative = path.relative(frameworkPath, file).split(path.sep);
+      const isMainBinary = relative.length === 3 && relative[0] === 'Versions' && relative[2] === frameworkName;
+      return !isMainBinary;
+    })
+    .sort((a, b) => b.split(path.sep).length - a.split(path.sep).length || a.localeCompare(b));
 }
 
 /**
@@ -167,27 +191,33 @@ module.exports = async function afterSign(context) {
     console.log(`[afterSign]   Signed ${nativeBinaries.length} native binaries (.node/.dylib/.so)`);
   }
 
-  // Step 2: Sign executable helper binaries inside frameworks before signing
-  // framework bundles. Some Electron builds ship extensionless helper binaries
-  // (e.g. chrome_crashpad_handler), and codesign requires them to be sealed
-  // before the parent framework is signed.
-  const executableHelpers = collectExecutableHelpers(frameworksPath);
-  for (const helper of executableHelpers) {
+  // Step 2: Sign loose executable helpers directly under Frameworks/.
+  const looseHelpers = collectExecutableHelpers(frameworksPath, { skipFrameworks: true });
+  for (const helper of looseHelpers) {
     codesign(helper);
     signed++;
   }
-  if (executableHelpers.length > 0) {
-    console.log(`[afterSign]   Signed ${executableHelpers.length} executable helper binaries`);
+  if (looseHelpers.length > 0) {
+    console.log(`[afterSign]   Signed ${looseHelpers.length} loose executable helpers`);
   }
 
-  // Step 3: Sign all Frameworks
+  // Step 3: Sign each framework inside-out. codesign rejects a framework whose
+  // nested helpers (e.g. Helpers/chrome_crashpad_handler, app_shim_loader) or
+  // libraries are still unsigned, and a universal merge strips their original
+  // signatures, so they must be sealed before the enclosing bundle.
   const frameworks = collectBundles(frameworksPath, '.framework');
+  let nestedCount = 0;
   for (const fw of frameworks) {
+    for (const nested of collectFrameworkNestedCode(fw)) {
+      codesign(nested);
+      signed++;
+      nestedCount++;
+    }
     codesign(fw);
     signed++;
   }
   if (frameworks.length > 0) {
-    console.log(`[afterSign]   Signed ${frameworks.length} frameworks`);
+    console.log(`[afterSign]   Signed ${nestedCount} framework-nested binaries and ${frameworks.length} frameworks`);
   }
 
   // Step 4: Sign all Helper apps
@@ -209,3 +239,5 @@ module.exports = async function afterSign(context) {
   runCodesign(['--verify', '--deep', '--strict', appPath]);
   console.log('[afterSign] Signature verification passed (--deep --strict)');
 };
+
+module.exports.collectFrameworkNestedCode = collectFrameworkNestedCode;
