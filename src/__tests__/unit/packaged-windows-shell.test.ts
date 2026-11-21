@@ -107,6 +107,9 @@ describe('next.config.ts — cacheHandler wiring (3.3)', () => {
   it('disables Next’s default in-memory LRU so our handler owns memory', () => {
     assert.match(src, /cacheMaxMemorySize:\s*0/);
   });
+  it('keeps powershell-utils external so Turbopack can build on Windows hosts', () => {
+    assert.match(src, /serverExternalPackages:\s*\[[^\]]*'powershell-utils'[^\]]*\]/);
+  });
 });
 
 describe('electron-builder.yml — installer path choice (3.2)', () => {

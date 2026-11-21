@@ -63,7 +63,10 @@ const nextConfig: NextConfig = {
   //   omits cli.js, so the SDK fails with "Claude Code executable not found at
   //   .../node_modules/@anthropic-ai/claude-agent-sdk/cli.js" in production.
   //   Sentry recorded ~247 events in 14d before this was added.
-  serverExternalPackages: ['better-sqlite3', 'discord.js', '@discordjs/ws', 'zlib-sync', '@anthropic-ai/claude-agent-sdk'],
+  // - powershell-utils (via trash's Linux/WSL path): Turbopack 16.4 resolves its
+  //   `fs.access(<SYSTEMROOT>\...\powershell.exe)` as a file reference and fails
+  //   the build on Windows hosts (vercel/next.js discussion #100516).
+  serverExternalPackages: ['better-sqlite3', 'discord.js', '@discordjs/ws', 'zlib-sync', '@anthropic-ai/claude-agent-sdk', 'powershell-utils'],
   env: {
     NEXT_PUBLIC_APP_VERSION: pkg.version,
     NEXT_PUBLIC_SENTRY_DSN: process.env.SENTRY_DSN || '',
