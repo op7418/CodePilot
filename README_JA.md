@@ -92,8 +92,8 @@ CodePilot はコーディングツールとして始まりましたが、**汎�
 
 | 前提条件 | 最小バージョン |
 |---|---|
-| Node.js | 20.11+ |
-| npm | 9+（Node 20 に付属） |
+| Node.js | 24+ |
+| npm | 11+（Node 24 に付属） |
 
 ```bash
 git clone https://github.com/op7418/CodePilot.git

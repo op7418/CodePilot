@@ -33,7 +33,7 @@ const watch = process.argv.includes("--watch");
 const shared = {
   bundle: true,
   platform: "node",
-  target: "node20",
+  target: "node24",
   external: ["electron"],
   sourcemap: true,
   minify: false,

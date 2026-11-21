@@ -96,8 +96,8 @@ CodePilot started as a coding tool but has grown into a **general-purpose AI age
 
 | Prerequisite | Minimum version |
 |---|---|
-| Node.js | 20.11+ |
-| npm | 9+ (ships with Node 20) |
+| Node.js | 24+ |
+| npm | 11+ (ships with Node 24) |
 
 ```bash
 git clone https://github.com/op7418/CodePilot.git

@@ -82,7 +82,7 @@ async function buildElectron() {
   const shared = {
     bundle: true,
     platform: 'node',
-    target: 'node18',
+    target: 'node24',
     external: ['electron'],
     sourcemap: true,
     minify: false,

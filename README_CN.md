@@ -92,8 +92,8 @@ CodePilot 从编程工具起步，已成长为**通用 AI Agent 桌面客户端*
 
 | 前置条件 | 最低版本 |
 |---|---|
-| Node.js | 20.11+ |
-| npm | 9+（Node 20 自带） |
+| Node.js | 24+ |
+| npm | 11+（Node 24 自带） |
 
 ```bash
 git clone https://github.com/op7418/CodePilot.git
