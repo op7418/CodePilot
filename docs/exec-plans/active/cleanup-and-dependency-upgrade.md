@@ -238,3 +238,16 @@
   - [run 44868696344](https://github.com/op7418/CodePilot/actions/runs/44868696344)（preview.4）：时区用例通过；`memory-records-recovery` 的双写者用例超时 15 秒。根因是子进程先发 `staged` 再 `SIGSTOP` 自己，父进程的 `SIGCONT` 可能先到而丢失。本地注入 300ms 延迟复现，改为等子进程真正停住再继续（`be3be815`）。
   - [run 44869416141](https://github.com/op7418/CodePilot/actions/runs/44869416141)（preview.5）：全量单测在 CI 全绿；`electron:build` 通过；x64 包的 better-sqlite3 预编译同步、zlib-sync 针对 Electron 45 x64 重编通过，Developer ID 签名完成；提交公证时 Apple 返回 `HTTP 403 A required agreement is missing or has expired`。这是 Apple 开发者账号的协议未签或过期，不是代码问题，按约定停止。arm64、universal、minimumSystemVersion 写入、staple、Gatekeeper、启动检查都还没跑到。
   - 需要账号所有者在 Apple Developer 网站（Agreements, Tax, and Banking）接受最新协议后再触发 preview.6。远端分支保留。
+  - 用户接受 Apple 协议后，[run 44872673247](https://github.com/op7418/CodePilot/actions/runs/44872673247)（preview.6，`0c34a23e`）全部通过，macOS job 42 分钟。CI 日志确认：
+    - arm64、x64、universal 三个 app 都完成 Developer ID 签名和公证；三个 DMG 签名、公证、staple 并通过 Gatekeeper；
+    - 每个架构的 better-sqlite3 两处 prebuilds 都只保留 darwin 文件；
+    - zlib-sync 按 Electron 45 分别为 arm64 和 x64 重编；
+    - `preview-mac.yml` 写入 `minimumSystemVersion 22.0.0`（app 要求 13.0）；
+    - arm64 app 的 ABI、packaged server 和 Main→utility→SQLite 检查通过。
+  - 下载 artifact 在本机复核：
+    - 资产审计（`verify-update-assets.mjs ... preview macos`，含按真实文件重算 sha256）通过；
+    - universal 主程序、`zlib_sync.node`、`app_shim_loader` 都是 x86_64+arm64；
+    - `codesign --deep --strict`、`spctl`（Notarized Developer ID）、`stapler validate` 和三个 DMG 的 Gatekeeper 都通过；
+    - 两项启动检查在 universal 的 arm64 部分和 Rosetta 下的 x86_64 部分都通过（x86_64 只是 Rosetta 模拟，不是真实 Intel 机器）。
+  - Sentry：preview 构建没有注入 `SENTRY_DSN`，包里的 DSN 为空，`Sentry.init` 不会执行；启动检查也显式清空了 DSN。CI 只证明 SDK 模块在 Electron 45 下加载不崩。另在本机用 Electron 45.3.2 跑了最小测试：7.16.0 用假 DSN 初始化无报错，事件能到 `beforeSend`。带 DSN 的打包 app 仍未验证。
+  - 发现未处理：universal 包里有 Claude Agent SDK 自带的 4 个 linux/win32 `audio-capture.node`。打包配置从未排除它们，main 上已发布的版本里同样存在，与本次升级无关。
