@@ -308,7 +308,7 @@ describe('localDayStartAsUTC', () => {
   });
 
   it('UTC-5: local midnight is UTC 05:00 same day', () => {
-    setTZ('EST'); // fixed UTC-5, no DST
+    setTZ('America/Panama'); // fixed UTC-5, no DST; Node 24 on Linux falls back to UTC for legacy 'EST'
     const now = new Date('2026-01-10T12:00:00Z'); // local 07:00
     const result = localDayStartAsUTC(0, now);
     // Local midnight 2026-01-10 = UTC 2026-01-10 05:00:00
