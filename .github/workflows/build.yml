@@ -540,8 +540,8 @@ jobs:
           node-version: 24
           cache: npm
 
-      - name: Install RPM packaging support
-        run: sudo apt-get update && sudo apt-get install -y rpm
+      - name: Install RPM packaging support and clang 15
+        run: sudo apt-get update && sudo apt-get install -y rpm clang-15
 
       - run: npm ci
 
@@ -568,6 +568,12 @@ jobs:
 
       - name: Package Linux ${{ matrix.arch }}
         timeout-minutes: 35
+        # Electron 45's V8 headers need GCC 13+ or clang 15+ (GNU attribute after
+        # [[deprecated]], std::source_location). Jammy's GCC tops out at 12;
+        # clang 15 keeps the 22.04 glibc/libstdc++ baseline.
+        env:
+          CC: clang-15
+          CXX: clang++-15
         run: npx electron-builder --linux --${{ matrix.arch }} --config electron-builder.yml --publish never
 
       - name: Verify Linux package architecture, native ABI, and server startup

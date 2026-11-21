@@ -267,6 +267,12 @@ describe('Electron packaging hygiene', () => {
       linuxJob,
       /electron-builder --linux --\$\{\{ matrix\.arch \}\}/,
     );
+    assert.match(linuxJob, /apt-get install -y rpm clang-15/);
+    assert.match(
+      linuxJob,
+      /Package Linux[\s\S]*?CC:\s*clang-15\s*\n\s*CXX:\s*clang\+\+-15[\s\S]*?electron-builder --linux/,
+      'Jammy GCC cannot compile Electron 45 V8 headers; native rebuilds must use clang 15',
+    );
     assert.match(linuxJob, /Upload Linux source maps to Sentry/);
     assert.match(linuxJob, /github\.event_name == 'push'/);
     assert.match(linuxJob, /CODEPILOT_OFFICIAL_UPDATE_BUILD:\s*"0"/);
