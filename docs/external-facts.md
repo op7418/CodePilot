@@ -184,5 +184,13 @@
 - ruleset 的 `bypass_actors` 字段对没有写权限的调用者是隐藏的，字段缺失不能当成空数组。
 - electron-updater 的差分下载（6.8.3 时核实）任一环节失败会自动回退完整包。`blockMapSize` 只描述嵌入式 blockmap，不适用于外置的 sidecar 文件。
 - 没有内置 updater provenance 的旧安装包无法被远端开启自动更新，首个带 updater 的版本必须手动安装。
+- 按最低系统版本拦截 mac 更新（2026-11-21，读 electron-updater 6.8.11 与 6.8.3 源码，两版逻辑相同）：
+  - `checkIfUpdateSupported` 用 `semver.lt(os.release(), updateInfo.minimumSystemVersion)` 比较。macOS 上 `os.release()` 是 Darwin 内核版本，macOS 12 是 21.x，13 是 22.x，14 是 23.x，15 是 24.x，26 是 25.x。
+  - 比较时抛错会被 catch，只打 warning，然后照常允许更新。所以写成 `13.0` 这种 macOS 版本号或非三段式写法，等于不拦截。
+  - 判定不支持时发出 `update-not-available`，不下载、不安装。界面只会显示"已是最新"，拿不到"系统过低"这个状态。
+  - electron-builder 26.18.0 的 `mac.minimumSystemVersion` 只写进 `Info.plist` 的 `LSMinimumSystemVersion` 和 pkg 安装要求，不写进 `latest-mac.yml`；`releaseInfo` 的 schema 也不允许加这个字段。所以本项目在 CI 里打完包后追加这个字段。
+  - Electron 45 自带的 `Info.plist` 已经是 `LSMinimumSystemVersion` 13.0，不用另外配置。
+  - Squirrel.Mac 安装时没有找到按 `LSMinimumSystemVersion` 检查的逻辑。不加这个字段时，macOS 12 用户会下载并装上新版，然后新版因系统版本不够被拒绝启动，旧版已经被替换。
+  - 拦不住的情况：没有 electron-updater 的旧版本（macOS v0.67.5 以前）、非官方构建、走 GitHub 手动下载的路径。这些用户仍会看到新版本，下载的包却打不开。
 
 完整的发版门禁见 [rules/release.md](rules/release.md)。

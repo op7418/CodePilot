@@ -134,6 +134,10 @@ jobs:
           CODEPILOT_REQUIRE_DEVELOPER_ID: "1"
         run: npx electron-builder --mac --universal --config electron-builder.yml -c.publish.channel=preview --publish never
 
+      - name: Stamp macOS minimum system version into updater metadata
+        # Must run before Checksums so checksums-macos.sha256 covers the final YAML.
+        run: node scripts/stamp-macos-minimum-system-version.mjs release preview-mac.yml
+
       - name: Notarize and staple preview DMG
         timeout-minutes: 45
         env:

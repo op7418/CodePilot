@@ -236,8 +236,12 @@ jobs:
           # A separately generated universal ZIP becomes latest-mac.yml's
           # single feed target. The first command keeps native DMGs for manual
           # arm64/x64 bootstrap; the second overwrites metadata with builder-
-          # generated universal metadata without hand-editing YAML.
+          # generated universal metadata.
           npx electron-builder --mac --universal --config electron-builder.yml --publish never
+
+      - name: Stamp macOS minimum system version into updater metadata
+        # Must run before Checksums so checksums-macos.sha256 covers the final YAML.
+        run: node scripts/stamp-macos-minimum-system-version.mjs release latest-mac.yml
 
       - name: Notarize and staple final macOS DMGs
         timeout-minutes: 45

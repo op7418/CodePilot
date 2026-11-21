@@ -29,6 +29,7 @@
 | UP-12 | chat 活动事实必须同时存在 active `runtime_status`（`running` / `streaming` / `waiting_permission`）与未过期 session lock；尤其不能漏掉正在输出 token 的 `streaming`。崩溃留下的裸 status/过期 owner 不得永久卡安装。一次只读 activity snapshot 不是跨请求原子准入栅栏；在 chat/bridge/task 共用带租约 fence 前，不得宣称“检查后绝无新任务启动”，残余竞态由 tech-debt #88 跟踪。 |
 | UP-13 | stable GitHub Release 同时发布三平台安装包，发布 macOS signed/notarized ZIP updater graph 与 Windows unsigned NSIS updater graph；Linux 必须使用 `CODEPILOT_OFFICIAL_UPDATE_BUILD=0`，只允许手动安装包/checksum/attestation，不得出现 Linux updater metadata。Windows unsigned feed 只有在新鲜的 Immutable Releases 管理员确认、active 且无 bypass/exclude/重名的 default-branch no-delete/no-force 与 `v*` tag no-delete/no-update rulesets、管理员 no-bypass 状态与 live `id` / `updated_at` 无漂移、40-hex Action pins 与真实 RC-A→RC-B 门禁全部成立时才可公开；Actions token 隐藏 `bypass_actors` 时不得把缺失解释为空；preview Release 仍为 macOS-only。 |
 | UP-14 | Windows differential update 必须显式保持 `nsis.differentialPackage=true` 与 `disableDifferentialDownload=false`。差分只是优先路径：旧 installer、blockmap 或 Range 请求不可用时必须回退完整 NSIS 下载；不得把理论节省比例冒充每次实测。 |
+| UP-15 | mac feed（`latest-mac.yml` / `preview-mac.yml`）必须带 `minimumSystemVersion`。值是三段式 Darwin 版本，等于 universal ZIP 里 app 的 `LSMinimumSystemVersion` 按显式对照表换算的结果。写成 macOS 版本号（如 `13.0`）时 electron-updater 比较会抛错并放行更新，等于没有拦截。它由打包 job 在 Checksums 之前写入，central audit 核对值和 checksum。低于最低系统的客户端只会得到 `update-not-available`，UI 不提示"系统过低"，因为新 UI 不会在旧系统上运行，旧客户端也拿不到这个状态。 |
 
 ## 3. 改动检查表
 
@@ -68,6 +69,7 @@
 - `release-notes-rendering.test.ts`：GitHub Atom HTML 正常结构、Markdown 兼容及 script/style/event/SVG/form/img/危险 scheme 反例。
 - `updater-contract.test.ts`：以可控 Promise 行为测试 emitter-first / Promise-first 两种竞态都只记录一次失败且没有 `unhandledRejection`；同时钉住生产接线、downloading check 互斥、install handoff latch 回滚、无更新时清空旧 snapshot 字段，以及 `running` / `streaming` + live owner 会阻断安装、stale runtime_status 不冒充 live owner。
 - `electron-packaging-hygiene.test.ts`：真实 Main→utilityProcess→SQLite package gate。
+- `macos-minimum-system-version.test.ts`：对照表与未知值失败；用 electron-updater 自身的 `checkIfUpdateSupported` 断言 Darwin 21.6.0 不支持、22.0.0 与 25.0.0 支持，以及 `13.0` 会放行的反例；审计拒绝非三段式、低于或高于 app 要求的值；先算 checksum 再写入会失败；三个 workflow 的步骤顺序。
 - 发布资产合同测试：stable 要求 macOS metadata/blockmap、Windows metadata/blockmap 与三平台 installer/checksum 的 central audit；混入 Linux updater metadata 必须失败，preview 混入任一非 Mac 资产必须失败。
 - 真实 smoke：0.67.1→RC-A 手动 bootstrap；RC-A→RC-B native update，macOS arm64/x64 与 Windows x64。
 
@@ -86,4 +88,5 @@
 - 2026-08-24：用户澄清目标是“Mac 自动更新 + Windows/Linux 手动包”，不是 Mac-only 分发。stable 同一 Release 恢复三平台安装包，API 继续按真实 platform/arch 选直链；只有 Mac 包带 official provenance 并消费 `latest-mac.yml`，Windows/Linux 不发布 updater feed。
 - 2026-08-26：用户再次明确先交付 Windows 自动更新、Linux 延后，并接受不申请 Microsoft/Azure/PFX 签名。Windows stable 改为 GitHub single-trust-root unsigned NSIS updater：`latest.yml` + EXE blockmap + SHA-512；客户端/UI 不宣称 publisher verification。发布前新增 Immutable Releases acknowledgement、active main no-delete/no-force、`v*` tag no-delete/no-update rulesets与全 workflow Action SHA pin 门禁；既有 `v0.67.7` 仍需手动 bootstrap。
 - 2026-08-27：生产 Sentry 证明 `checkForUpdates()` 本身 resolve 后，nested `downloadPromise` 的网络 rejection 会逃逸到全局。Main 现显式拥有该 Promise，并让 nested Promise 与 updater error emitter 共用基于 phase 的一次性失败 reporter；不通过全局 ignore 隐藏真实下载失败。Claude 复审后补 emitter-first / Promise-first 行为测试，证明两种竞态均 exactly-once 且不产生 `unhandledRejection`，不再只靠源码正则固定实现形状。
+- 2026-11-21：Electron 45 把最低系统提到 macOS 13，产品决定放弃 macOS 12。不加拦截时，macOS 12 的正式版会自动装上一个打不开的新版。改为在 mac feed 里写 `minimumSystemVersion: 22.0.0`，6.8.3 起的客户端都会因此停在当前版本。应用内不做"系统过低"提示，因为拿不到这个状态。v0.67.5 以前没有 native updater 的版本、手动下载路径拦不住，只能靠 Release Notes 说明。
 - 2026-08-28：app updater 与 CLI maintenance 改为竞争同一 Main lifecycle latch；CLI 运行时应用更新保持 downloaded，普通 quit 走等待/取消/明确 force 风险的统一 coordinator。GitHub Atom Release Notes 改为 parse 后 strict sanitize，不再把 HTML 当源码显示，也不放开 raw HTML 信任边界。

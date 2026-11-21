@@ -4,6 +4,11 @@ import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import yaml from 'js-yaml';
+import {
+  compareDarwinVersions,
+  isStrictDarwinVersion,
+  readAppMinimumFromZip,
+} from './macos-minimum-system-version.mjs';
 
 const root = process.argv[2] ? path.resolve(process.argv[2]) : '';
 const expectedVersion = process.argv[3] || '';
@@ -49,6 +54,10 @@ function one(name) {
 
 function sha512Base64(file) {
   return crypto.createHash('sha512').update(fs.readFileSync(file)).digest('base64');
+}
+
+function sha256Hex(file) {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
 }
 
 function matching(pattern) {
@@ -192,6 +201,26 @@ const expectedMacUpdaterName = `CodePilot-${expectedVersion}-universal.zip`;
 if (macMetadata.files.length !== 1 || String(macMetadata.files[0]?.url) !== expectedMacUpdaterName) {
   throw new Error(`${macMetadataName} must contain exactly the current-version universal ZIP ${expectedMacUpdaterName}`);
 }
+const declaredMinimum = macMetadata.minimumSystemVersion;
+if (!isStrictDarwinVersion(declaredMinimum)) {
+  throw new Error(
+    `${macMetadataName} minimumSystemVersion must be a three-part Darwin version string, found ${JSON.stringify(declaredMinimum)}`,
+  );
+}
+const appMinimum = readAppMinimumFromZip(one(expectedMacUpdaterName));
+const minimumOrder = compareDarwinVersions(declaredMinimum, appMinimum.darwinMinimum);
+if (minimumOrder < 0) {
+  throw new Error(
+    `${macMetadataName} minimumSystemVersion ${declaredMinimum} is below the app's LSMinimumSystemVersion `
+    + `${appMinimum.lsMinimumSystemVersion} (Darwin ${appMinimum.darwinMinimum})`,
+  );
+}
+if (minimumOrder > 0) {
+  throw new Error(
+    `${macMetadataName} minimumSystemVersion ${declaredMinimum} is above the app's LSMinimumSystemVersion `
+    + `${appMinimum.lsMinimumSystemVersion} (Darwin ${appMinimum.darwinMinimum})`,
+  );
+}
 if (target === 'all' || target === 'distribution') {
   const windowsMetadataName = channel === 'stable' ? 'latest.yml' : 'preview.yml';
   const windowsMetadata = yaml.load(fs.readFileSync(one(windowsMetadataName), 'utf8'));
@@ -204,10 +233,19 @@ if (target === 'all' || target === 'distribution') {
 const checksumNames = new Set();
 for (const checksumFile of allFiles.filter((file) => /^checksums-.*\.sha256$/.test(path.basename(file)))) {
   for (const line of fs.readFileSync(checksumFile, 'utf8').split(/\r?\n/)) {
-    const match = /^\S+\s+(.+?)\s*$/.exec(line);
+    const match = /^(\S+)\s+(.+?)\s*$/.exec(line);
     if (!match) continue;
-    const recorded = match[1].replace(/^\*/, '').replace(/^\.\//, '');
-    if (recorded && path.basename(recorded) === recorded) checksumNames.add(recorded);
+    const recorded = match[2].replace(/^\*/, '').replace(/^\.\//, '');
+    if (!recorded || path.basename(recorded) !== recorded) continue;
+    if (!/^[0-9a-f]{64}$/i.test(match[1])) {
+      throw new Error(`${path.basename(checksumFile)} has a malformed SHA-256 for ${recorded}`);
+    }
+    // Metadata post-processing must happen before checksums; a stale hash here
+    // means SHA256SUMS.txt would describe a file that is not the one published.
+    if (sha256Hex(one(recorded)) !== match[1].toLowerCase()) {
+      throw new Error(`${path.basename(checksumFile)} SHA-256 mismatch for ${recorded}`);
+    }
+    checksumNames.add(recorded);
   }
 }
 for (const name of metadataNames) {
