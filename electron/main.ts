@@ -913,7 +913,10 @@ function checkNativeModuleABI(): void {
       } else if (
         entry.name === prebuildName
         && path.basename(dir) === 'prebuilds'
-        && path.basename(path.dirname(dir)) === 'better-sqlite3'
+        && (
+          path.basename(path.dirname(dir)) === 'better-sqlite3'
+          || path.basename(path.dirname(dir)).startsWith('better-sqlite3-')
+        )
       ) {
         prebuildMatch ??= fullPath;
       }

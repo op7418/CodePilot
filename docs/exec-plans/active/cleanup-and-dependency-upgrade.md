@@ -19,7 +19,7 @@
 |---|---|---|---|
 | WP1 | 三处实际缺陷：上传路由路径检查、MCP 连接管理、定时任务并发 | Opus | 完成 |
 | WP2 | 依赖：lock 同步、漏洞修复、删无用依赖 | Opus | 完成（mac universal 包未在本机验证） |
-| WP3 | Node 与 Electron 大版本升级 | Opus | 待开始 |
+| WP3 | Node 与 Electron 大版本升级 | Opus | 完成（Windows、Linux、正式签名与公证待 CI 验证） |
 | WP4 | 第二轮死代码：路由、IPC、模块、`资料/` | Gemini | 完成（`资料/` 后续已按用户决定整体删除） |
 | WP5 | GitHub 模板与工作流的过时口径 | Gemini | 完成 |
 | WP6 | 永久跳过的 E2E 用例 | Gemini | 完成（`visual-regression.spec.ts` 因基线截图未入库保持 skip） |
@@ -216,3 +216,9 @@
     - `fable51-review-followup.spec.ts`：隔离 `GET /api/settings/app` locale 覆写，将全局 `SELECT COUNT(*) FROM chat_sessions` 改为按 `provider_id` 计数并断言 `POST /api/chat/sessions` 次数为 0。
   - 验证：全量 `npm run test:e2e` 通过（100 passed, 6 skipped [仅 `visual-regression.spec.ts`], 0 failed）；还原 Next 自动改动的 `tsconfig.json`。
 - 2026-11-21：标签改名完成。仓库内 `.github/ISSUE_TEMPLATE/feature_request.yml`、`.github/TRIAGE.md`、`.github/workflows/issue-intake.yml`、`.github/workflows/stale-needs-repro.yml` 中 `v0.57+ parking-lot` 引用已全部改为 `parking-lot`（未改 GitHub 远端标签本身；push 前或同时需由仓库所有者在 GitHub 网页将标签重命名为 `parking-lot`）。
+- 2026-11-21：WP3 完成（拆分为独立 commit：better-sqlite3 13、密码框右键菜单修复、Electron 45.3.2、Node 24、以及 universal 打包发现的哈希目录预编译同步修复）：
+  - `better-sqlite3`：实测 `12.11.1` 对 Electron `45.3.2`（V8 15.6）源码编译失败（V8 15 移除 `GetPrototypeV2` / `HolderV2`），按用户确认升级至 `13.2.0`（N-API，内置 SQLite `3.54.1`，发布于 `2026-11-14`）。`npm run test` 全绿，且在 `~/.codepilot/codepilot.db`（+ `-wal`/`-shm`）的独立临时副本上通过 `PRAGMA integrity_check`（`ok`）、主表读取与事务写入回读。`scripts/after-pack.js` 改为从根 `node_modules/better-sqlite3/prebuilds` 按目标平台同步并裁剪非目标平台 `.node`（同时覆盖 `standalone/node_modules/better-sqlite3` 与 Next 哈希外部模块副本 `standalone/.next/node_modules/better-sqlite3-*`），`electron-builder.yml` `x64ArchFiles` 精确加入两处 Darwin prebuilds 路径，`electron/main.ts` `checkNativeModuleABI` 与三份 CI workflow 的 ABI 探针同步适配。
+  - `zlib-sync@0.1.10`：将传递依赖 `nan` 从 `2.25.0` 更新至 `2.30.0`（在 `^2.18.0` 范围内，发布于 `2026-10-18`），Electron `45.3.2`（arm64 与 x64）编译通过。
+  - Electron `45.3.2`（内置 Chromium 156 / Node `24.22.2` / ABI 150，发布于 `2026-11-12`）：实查 `electron.d.ts` 确认 `clipboard.writeText` 已改为异步 `Promise<void>`，适配 `electron/main.ts` 两处调用；`dialog:open-folder` 增加上次目录记忆以抵消 Electron 43+ 默认打开 Downloads 的变化；同步修复既有密码框右键菜单误用已移除的 `params.inputFieldType` 为 `params.formControlType === 'input-password'` 并补单测；最低系统要求更新为 macOS 13（`docs/rules/release.md`、三份 README、`RELEASE_NOTES.md`）；`safeStorage` 同步 API（Electron 46 移除）与 `console-message` 位置参数（Electron 47 移除）登记至 tech-debt #102；`@sentry/electron` 保持 `7.16.0` 未升（打包启动无 Sentry 报错）。
+  - Node 24：全部 workflow 14 处 `node-version: 20` 改 `24`、`package.json` 新增 `engines.node: ">=24.0.0"`、`@types/node` 升至 `^24.19.2`（2026-10-09）、三份 README 更新 Node `24+` / npm `11+`、`build-electron*.mjs` target 改 `node24`；`build.yml` 保留 `windows-2022` 并更新 tech-debt #44。
+  - 本机验证：macOS arm64 打包（ad-hoc）、`better-sqlite3` 加载（SQLite `3.54.1`, ABI `150`）、`verify-packaged-server.mjs`、`verify-electron-main-health.mjs` 全部通过；macOS universal 合并通过（`lipo -info` 确认主程序与 `zlib_sync.node` 为 `x86_64 arm64`，两处 `better-sqlite3/prebuilds` 均含 `darwin-arm64.node` 与 `darwin-x64.node`），本机 ad-hoc 签名在 `scripts/after-sign.js:176` 同根因失败（顶向下遍历先签 `Versions/A/Electron Framework` 后签 `Versions/A/Helpers/*`，Electron 45 新增 `Helpers/app_shim_loader` 排在 `chrome_crashpad_handler` 前故先报此处）；`npm rebuild better-sqlite3 zlib-sync` 后 `npm run test` 全绿、`npm run test:smoke` 31/31 通过（首次冷编译偶现 1 次 `context-chips-send-clear` textarea 未清，复跑 31/31 全过）。Windows、Linux、正式 Developer ID 签名与公证待 CI 验证。

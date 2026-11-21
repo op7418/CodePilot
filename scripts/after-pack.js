@@ -42,10 +42,15 @@ module.exports = async function afterPack(context) {
 
   console.log(`[afterPack] Electron ${electronVersion}, arch=${archName}, platform=${platform}`);
 
-  // Step 1: Prune better-sqlite3 v13+ N-API prebuilds in standalone resources
-  // to the target platform. Keeping Linux/Windows .node binaries inside a macOS
-  // bundle breaks codesign/notarization, while retaining both Darwin slices
-  // keeps arm64 and x64 app trees structurally identical for @electron/universal.
+  // Step 1: Sync better-sqlite3 v13+ N-API prebuilds in standalone resources to
+  // the exact target platform set from root node_modules/better-sqlite3/prebuilds.
+  // Next's NFT tracer only traces host-arch prebuilds (dropping darwin-x64.node
+  // on an arm64 runner while tracing foreign-OS *-arm64.node files). Copying the
+  // target-platform prebuilds and pruning foreign OS binaries guarantees both
+  // Darwin slices exist for @electron/universal and avoids codesign/notarization
+  // failures on Linux ELF / Windows PE files.
+  const projectDir = process.cwd();
+  const rootSqlitePrebuildsDir = path.join(projectDir, 'node_modules', 'better-sqlite3', 'prebuilds');
   const searchRoots = [
     path.join(appOutDir, 'CodePilot.app', 'Contents', 'Resources', 'standalone'),
     path.join(appOutDir, 'Contents', 'Resources', 'standalone'),
@@ -59,23 +64,24 @@ module.exports = async function afterPack(context) {
       : platform === 'linux'
         ? new Set([`linux-${archName}.node`, `linuxmusl-${archName}.node`])
         : null;
-  const requiredSqlitePrebuild = platform === 'mac'
-    ? `darwin-${archName}.node`
+  const requiredSqlitePrebuilds = platform === 'mac'
+    ? ['darwin-arm64.node', 'darwin-x64.node']
     : platform === 'windows'
-      ? `win32-${archName}.node`
+      ? [`win32-${archName}.node`]
       : platform === 'linux'
-        ? `linux-${archName}.node`
-        : null;
+        ? [`linux-${archName}.node`, `linuxmusl-${archName}.node`]
+        : [];
 
-  let prunedSqliteDirs = 0;
-  function pruneBetterSqlitePrebuilds(dir) {
+  let syncedSqliteDirs = 0;
+  function syncBetterSqlitePrebuilds(dir) {
     if (!fs.existsSync(dir)) return;
     const entries = fs.readdirSync(dir, { withFileTypes: true });
     for (const entry of entries) {
       if (!entry.isDirectory()) continue;
       const fullPath = path.join(dir, entry.name);
-      if (entry.name === 'prebuilds' && path.basename(dir) === 'better-sqlite3') {
-        prunedSqliteDirs++;
+      const parentName = path.basename(dir);
+      if (entry.name === 'prebuilds' && (parentName === 'better-sqlite3' || parentName.startsWith('better-sqlite3-'))) {
+        syncedSqliteDirs++;
         if (!allowedSqlitePrebuilds) continue;
         const files = fs.readdirSync(fullPath, { withFileTypes: true });
         let removed = 0;
@@ -86,31 +92,37 @@ module.exports = async function afterPack(context) {
             removed++;
           }
         }
-        if (requiredSqlitePrebuild && !fs.existsSync(path.join(fullPath, requiredSqlitePrebuild))) {
-          throw new Error(
-            `[afterPack] Required better-sqlite3 prebuild missing: ${path.join(fullPath, requiredSqlitePrebuild)}`,
-          );
+        let copied = 0;
+        for (const fileName of requiredSqlitePrebuilds) {
+          const targetFile = path.join(fullPath, fileName);
+          if (!fs.existsSync(targetFile)) {
+            const sourceFile = path.join(rootSqlitePrebuildsDir, fileName);
+            if (!fs.existsSync(sourceFile)) {
+              throw new Error(`[afterPack] Required better-sqlite3 prebuild missing in root node_modules: ${sourceFile}`);
+            }
+            fs.copyFileSync(sourceFile, targetFile);
+            copied++;
+          }
         }
         console.log(
-          `[afterPack] Pruned better-sqlite3 prebuilds at ${fullPath}: removed ${removed}, kept ${[...allowedSqlitePrebuilds].join(', ')}`,
+          `[afterPack] Synced better-sqlite3 prebuilds at ${fullPath}: removed ${removed}, copied ${copied}, kept ${requiredSqlitePrebuilds.join(', ')}`,
         );
         continue;
       }
-      pruneBetterSqlitePrebuilds(fullPath);
+      syncBetterSqlitePrebuilds(fullPath);
     }
   }
 
   for (const root of searchRoots) {
-    pruneBetterSqlitePrebuilds(root);
+    syncBetterSqlitePrebuilds(root);
   }
-  if (prunedSqliteDirs === 0) {
+  if (syncedSqliteDirs === 0) {
     throw new Error('[afterPack] No better-sqlite3/prebuilds directory found in standalone resources');
   }
 
   // Step 2: Explicitly rebuild non-N-API standalone native modules (zlib-sync)
   // for the target Electron version. electron-builder rebuilds root node_modules,
   // but Next's prebuilt standalone tree otherwise keeps the host ABI.
-  const projectDir = process.cwd();
   const nativeModules = [
     {
       packageName: 'zlib-sync',
