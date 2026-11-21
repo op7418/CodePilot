@@ -1,6 +1,6 @@
 # Issue #629 — resume 坏 session 的 error shape POC
 
-> 关联执行计划：[docs/exec-plans/active/v0.56.x-stability-trust.md](../../exec-plans/active/v0.56.x-stability-trust.md) Phase 2 Session/Stream cluster（#629）
+> 关联执行计划：`docs/exec-plans/active/v0.56.x-stability-trust.md`（已删除，见 git 历史）Phase 2 Session/Stream cluster（#629）
 > 看板：[docs/exec-plans/active/issue-tracker.md](../../exec-plans/active/issue-tracker.md) `#629`（🟡 残留 gap）
 > 状态：**已关闭（🟢，2026-06-26）。** POC-A（源码层）+ driver `--selftest` 5/5 绿；POC-B 4 个第三方 proxy 一致返回 `B_RESULT_ERROR` + 可判别 `errors[]`；修复 claude-client + route 双层落地（见下「修复已落地」+「复审 follow-up」），**Codex 端到端 smoke 通过：两轮坏 resume → 第二轮 fresh、不再 `No conversation found`**。
 > 三层写法（遵守 research 文档纪律）：A 外部事实（SDK 类型，含 file:line + 快照）/ B repo facts（file:line）/ C 推断与设计。刻意放 `docs/research/`、不进 `src/`，不触产品测试文件清单。

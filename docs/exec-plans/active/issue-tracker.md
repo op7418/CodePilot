@@ -14,7 +14,7 @@
 
 ## 〇、v0.56.x Stability / Trust 治理 issue（2026-06-19 纳入）
 
-GitHub milestone `v0.56.x Stability / Trust`（#1）+ P0/P1 label 体系已建（见 [.github/TRIAGE.md](../../../.github/TRIAGE.md)）。以下 7 个 issue 已用**当前源码**重新核验（不采信 issue 自述根因），逐条证据与修法见 [v0.56.x-stability-trust.md](v0.56.x-stability-trust.md) 的「2026-06-19 Claude Code 源码复核」表，此处只做看板索引、不重复分析。
+GitHub milestone `v0.56.x Stability / Trust`（#1）+ P0/P1 label 体系已建（见 [.github/TRIAGE.md](../../../.github/TRIAGE.md)）。以下 7 个 issue 已用**当前源码**重新核验（不采信 issue 自述根因），逐条证据与修法见 `v0.56.x-stability-trust.md`（已删除，见 git 历史）的「2026-06-19 Claude Code 源码复核」表，此处只做看板索引、不重复分析。
 
 | Issue | 复核 | label | Phase | 状态 |
 |-------|------|-------|-------|------|

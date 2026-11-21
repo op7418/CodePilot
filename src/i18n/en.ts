@@ -2419,7 +2419,7 @@ const en = {
   'health.providers.configuredOne': '{count} provider configured',
   'health.providers.configuredMany': '{count} providers configured',
   'health.providers.okCta': 'Open Providers',
-  'health.runtime.title': '执行引擎 / CLI',
+  'health.runtime.title': 'Runtime / CLI',
   'health.runtime.cliDisabledReason': 'Claude Code CLI disabled — runtime fell back to CodePilot',
   'health.runtime.cliDisabledImpact': 'Only CodePilot-compatible providers/models will run',
   'health.runtime.cliMissingReason': 'Claude Code CLI not detected — runtime fell back',
