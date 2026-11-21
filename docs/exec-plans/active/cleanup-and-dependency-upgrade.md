@@ -231,3 +231,10 @@
   - 应用内"系统过低"提示没做：新 UI 不会在 macOS 12 上运行，旧客户端只会收到 `update-not-available`，拿不到这个状态。
   - 文档：`RELEASE_NOTES.md` 改为锚定"v0.67.17 是最后一个支持 macOS 12 的版本"，开头、安装说明、系统要求三处都写；发版规则模板加入 macOS 12 用户的说明和"提高最低系统的版本必须开头写明"；`external-facts.md` 与 Updater、Release guardrail 记录结论；官网 FAQ 的 macOS 12+ 改为 13+。
   - 本机只验证了单测和在真实 universal ZIP 上执行写入脚本，没有跑过 CI，也没有在 macOS 12 机器上验证。
+- 2026-11-21：CI 验证（只跑 `preview-build.yml`，分支 `chore/cleanup-and-upgrade`，未碰 main / tag / Release）。该工作流只构建 macOS（Windows 需签名证书，保持关闭），只上传 artifact。
+  - [run 44867557403](https://github.com/op7418/CodePilot/actions/runs/44867557403)（preview.1）：源码门禁 A 失败。`app-server-manager.ts` 的一段注释自 2026-06-02 起含字面 `--listen`，门禁用 grep 拦截，main 上同样会失败。改注释措辞，门禁不动（`c4395416`）。
+  - [run 44867798271](https://github.com/op7418/CodePilot/actions/runs/44867798271)（preview.2）：Node 24 下 `npm ci`、typecheck、门禁 A/B、P0 回归都过；全量单测 1 个失败。时区用例用了旧缩写 `TZ=EST`，ubuntu 上的 Node 24.22.3 不认，退回 UTC；改用 `America/Panama`（`ca89728b`）。
+  - preview.3（run 44868558277）：本地提交被 pre-commit 拦下（`markdown-live-preview` 偶发失败），但命令没有停，在旧提交上触发了，随即取消。
+  - [run 44868696344](https://github.com/op7418/CodePilot/actions/runs/44868696344)（preview.4）：时区用例通过；`memory-records-recovery` 的双写者用例超时 15 秒。根因是子进程先发 `staged` 再 `SIGSTOP` 自己，父进程的 `SIGCONT` 可能先到而丢失。本地注入 300ms 延迟复现，改为等子进程真正停住再继续（`be3be815`）。
+  - [run 44869416141](https://github.com/op7418/CodePilot/actions/runs/44869416141)（preview.5）：全量单测在 CI 全绿；`electron:build` 通过；x64 包的 better-sqlite3 预编译同步、zlib-sync 针对 Electron 45 x64 重编通过，Developer ID 签名完成；提交公证时 Apple 返回 `HTTP 403 A required agreement is missing or has expired`。这是 Apple 开发者账号的协议未签或过期，不是代码问题，按约定停止。arm64、universal、minimumSystemVersion 写入、staple、Gatekeeper、启动检查都还没跑到。
+  - 需要账号所有者在 Apple Developer 网站（Agreements, Tax, and Banking）接受最新协议后再触发 preview.6。远端分支保留。
