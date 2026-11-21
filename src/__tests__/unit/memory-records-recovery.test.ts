@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { spawn } from 'node:child_process';
+import { spawn, spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { assertMemoryStorageWritable, MemoryRecordError, readMemoryRecords, revokeMemoryRecord, saveMemoryRecordCandidate, saveMemoryRecordCandidates } from '@/lib/memory-records';
 
@@ -68,7 +68,19 @@ async function stagedWriter(root: string, t: { after(fn: () => void): void }) {
     once(child, 'exit').then(([code]) => { throw new Error(`Writer exited before staging: ${code}: ${stderr}`); }),
     new Promise((_, reject) => { const timer = setTimeout(() => reject(new Error('Writer did not stage within 10 seconds')), 10000); timer.unref(); }),
   ]);
+  await waitUntilStopped(child.pid!);
   return child;
+}
+
+/** The 'staged' message precedes SIGSTOP; a SIGCONT sent before the child actually stops is lost. */
+async function waitUntilStopped(pid: number) {
+  const deadline = Date.now() + 10000;
+  while (Date.now() < deadline) {
+    const state = spawnSync('ps', ['-o', 'stat=', '-p', String(pid)], { encoding: 'utf8' }).stdout.trim();
+    if (state.startsWith('T')) return;
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+  throw new Error(`Writer ${pid} did not stop before rename within 10 seconds`);
 }
 
 test('two live writers cannot overwrite each other and stale revision remains a conflict', { skip: process.platform === 'win32', timeout: 15000 }, async t => {
