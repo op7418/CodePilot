@@ -268,9 +268,9 @@ jobs:
           [ -n "$APP" ] || { echo "::error::CodePilot.app not found"; exit 1; }
           PLIST_VER=$(plutil -extract CFBundleShortVersionString raw "$APP/Contents/Info.plist")
           [ "$PLIST_VER" = "$EXPECTED_VERSION" ] || { echo "::error::Info.plist $PLIST_VER != $EXPECTED_VERSION"; exit 1; }
-          SQLITE=$(find "$APP/Contents/Resources" -path "*better-sqlite3*" -name "*.node" | head -1)
-          [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 .node not found"; exit 1; }
-          ELECTRON_RUN_AS_NODE=1 "$APP/Contents/MacOS/CodePilot" -e "const path = require('node:path'); require(path.resolve(process.argv[1])); console.log('better-sqlite3 OK, ABI=' + process.versions.modules)" "$SQLITE"
+          SQLITE=$(find "$APP/Contents/Resources" -type d -path "*/node_modules/better-sqlite3" | head -1)
+          [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 package not found"; exit 1; }
+          ELECTRON_RUN_AS_NODE=1 "$APP/Contents/MacOS/CodePilot" -e "const path = require('node:path'); const Database = require(path.resolve(process.argv[1])); const db = new Database(':memory:'); db.prepare('SELECT 1').get(); db.close(); console.log('better-sqlite3 OK, ABI=' + process.versions.modules)" "$SQLITE"
           node scripts/verify-packaged-server.mjs "$APP/Contents/MacOS/CodePilot" "$APP/Contents/Resources"
           node scripts/verify-electron-main-health.mjs "$APP/Contents/MacOS/CodePilot"
 
@@ -449,10 +449,10 @@ jobs:
           EXE=$(find release -name "CodePilot.Setup.*.exe" | head -1)
           [ -n "$EXE" ] || { echo "::error::no NSIS installer produced"; exit 1; }
           case "$EXE" in *"$EXPECTED_VERSION"*) ;; *) echo "::error::installer name lacks $EXPECTED_VERSION"; exit 1 ;; esac
-          SQLITE=$(find release/win-unpacked -path "*better-sqlite3*" -name "*.node" 2>/dev/null | head -1)
-          [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 .node not found"; exit 1; }
+          SQLITE=$(find release/win-unpacked -type d -path "*/node_modules/better-sqlite3" 2>/dev/null | head -1)
+          [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 package not found"; exit 1; }
           BIN=$(find release/win-unpacked -maxdepth 1 -name "CodePilot.exe" | head -1)
-          ELECTRON_RUN_AS_NODE=1 "$BIN" -e "const path = require('node:path'); require(path.resolve(process.argv[1])); console.log('better-sqlite3 OK, ABI=' + process.versions.modules)" "$SQLITE"
+          ELECTRON_RUN_AS_NODE=1 "$BIN" -e "const path = require('node:path'); const Database = require(path.resolve(process.argv[1])); const db = new Database(':memory:'); db.prepare('SELECT 1').get(); db.close(); console.log('better-sqlite3 OK, ABI=' + process.versions.modules)" "$SQLITE"
           node scripts/verify-packaged-server.mjs "$BIN" "$(dirname "$BIN")/resources"
           node scripts/verify-electron-main-health.mjs "$BIN"
 
@@ -599,9 +599,9 @@ jobs:
             file "$BIN"
             exit 1
           }
-          SQLITE=$(find "$UNPACKED/resources" -path "*better-sqlite3*" -name "*.node" | head -1)
-          [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 .node not found"; exit 1; }
-          ELECTRON_RUN_AS_NODE=1 "$BIN" -e "const path = require('node:path'); require(path.resolve(process.argv[1])); console.log('better-sqlite3 OK, ABI=' + process.versions.modules)" "$SQLITE"
+          SQLITE=$(find "$UNPACKED/resources" -type d -path "*/node_modules/better-sqlite3" | head -1)
+          [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 package not found"; exit 1; }
+          ELECTRON_RUN_AS_NODE=1 "$BIN" -e "const path = require('node:path'); const Database = require(path.resolve(process.argv[1])); const db = new Database(':memory:'); db.prepare('SELECT 1').get(); db.close(); console.log('better-sqlite3 OK, ABI=' + process.versions.modules)" "$SQLITE"
           node scripts/verify-packaged-server.mjs "$BIN" "$UNPACKED/resources"
           xvfb-run -a node scripts/verify-electron-main-health.mjs "$BIN"
           echo "Linux build baseline: $(getconf GNU_LIBC_VERSION)"

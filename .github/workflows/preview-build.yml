@@ -304,10 +304,10 @@ jobs:
           set -euo pipefail
           APP=$(find release -maxdepth 4 -path "*mac-arm64*" -name "CodePilot.app" -type d | head -1)
           BIN="$APP/Contents/MacOS/CodePilot"
-          SQLITE=$(find "$APP/Contents/Resources" -path "*better-sqlite3*" -name "*.node" | head -1)
+          SQLITE=$(find "$APP/Contents/Resources" -type d -path "*/node_modules/better-sqlite3" | head -1)
           echo "better-sqlite3=$SQLITE" | tee -a build-meta-macos-arm64.txt
-          [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 .node not found in bundle"; exit 1; }
-          ELECTRON_RUN_AS_NODE=1 "$BIN" -e "require(process.argv[1]); console.log('better-sqlite3 OK under Electron, modules ABI=' + process.versions.modules)" "$SQLITE" | tee -a build-meta-macos-arm64.txt
+          [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 package not found in bundle"; exit 1; }
+          ELECTRON_RUN_AS_NODE=1 "$BIN" -e "const path = require('node:path'); const Database = require(path.resolve(process.argv[1])); const db = new Database(':memory:'); db.prepare('SELECT 1').get(); db.close(); console.log('better-sqlite3 OK under Electron, modules ABI=' + process.versions.modules)" "$SQLITE" | tee -a build-meta-macos-arm64.txt
       - name: Verify packaged server startup
         run: |
           set -euo pipefail
@@ -395,11 +395,11 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          SQLITE=$(find release/win-unpacked -path "*better-sqlite3*" -name "*.node" 2>/dev/null | head -1)
+          SQLITE=$(find release/win-unpacked -type d -path "*/node_modules/better-sqlite3" 2>/dev/null | head -1)
           echo "better-sqlite3=$SQLITE" | tee -a build-meta-windows-x64.txt
-          [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 .node not found in win-unpacked"; exit 1; }
+          [ -n "$SQLITE" ] || { echo "::error::better-sqlite3 package not found in win-unpacked"; exit 1; }
           BIN=$(find release/win-unpacked -maxdepth 1 -name "CodePilot.exe" | head -1)
-          ELECTRON_RUN_AS_NODE=1 "$BIN" -e "require(process.argv[1]); console.log('better-sqlite3 OK under Electron, modules ABI=' + process.versions.modules)" "$SQLITE" | tee -a build-meta-windows-x64.txt
+          ELECTRON_RUN_AS_NODE=1 "$BIN" -e "const path = require('node:path'); const Database = require(path.resolve(process.argv[1])); const db = new Database(':memory:'); db.prepare('SELECT 1').get(); db.close(); console.log('better-sqlite3 OK under Electron, modules ABI=' + process.versions.modules)" "$SQLITE" | tee -a build-meta-windows-x64.txt
       - name: Verify packaged server startup
         shell: bash
         run: |

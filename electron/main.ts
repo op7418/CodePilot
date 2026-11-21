@@ -882,42 +882,54 @@ function stopNativeDeliveryService(): void {
 }
 
 /**
- * Verify that better_sqlite3.node in standalone resources is compatible
- * with this Electron runtime's ABI. If it was built for a different
- * Node.js ABI (e.g. system Node v22 ABI 127 vs Electron's ABI 143),
- * show a clear error instead of a cryptic MODULE_NOT_FOUND crash.
+ * Verify that better-sqlite3's native addon in standalone resources is
+ * loadable under this Electron runtime. Supports both v13+ N-API prebuilds
+ * (`better-sqlite3/prebuilds/<platform>-<arch>.node`) and locally compiled
+ * `better_sqlite3.node`.
  */
 function checkNativeModuleABI(): void {
   if (isDev) return; // Skip in dev mode
 
   const standaloneDir = path.join(process.resourcesPath, 'standalone');
+  const prebuildName = `${process.platform}-${process.arch}.node`;
 
-  // Find better_sqlite3.node recursively
+  // Find better-sqlite3's native addon recursively (preferring local build,
+  // then v13+ per-platform N-API prebuild).
   function findNodeFile(dir: string): string | null {
     if (!fs.existsSync(dir)) return null;
     const entries = fs.readdirSync(dir, { withFileTypes: true });
+    let prebuildMatch: string | null = null;
     for (const entry of entries) {
       const fullPath = path.join(dir, entry.name);
       if (entry.isDirectory()) {
         const found = findNodeFile(fullPath);
-        if (found) return found;
+        if (found) {
+          if (path.basename(found) === 'better_sqlite3.node') return found;
+          prebuildMatch ??= found;
+        }
       } else if (entry.name === 'better_sqlite3.node') {
         return fullPath;
+      } else if (
+        entry.name === prebuildName
+        && path.basename(dir) === 'prebuilds'
+        && path.basename(path.dirname(dir)) === 'better-sqlite3'
+      ) {
+        prebuildMatch ??= fullPath;
       }
     }
-    return null;
+    return prebuildMatch;
   }
 
   const nodeFile = findNodeFile(path.join(standaloneDir, 'node_modules'));
   if (!nodeFile) {
-    console.warn('[ABI check] better_sqlite3.node not found in standalone resources');
+    console.warn('[ABI check] better-sqlite3 native addon not found in standalone resources');
     return;
   }
 
   try {
-    // Attempt to load the native module to verify ABI compatibility
+    // Attempt to load the native module to verify compatibility
     process.dlopen({ exports: {} } as NodeModule, nodeFile);
-    console.log(`[ABI check] better_sqlite3.node ABI is compatible (${nodeFile})`);
+    console.log(`[ABI check] better-sqlite3 native addon is compatible (${nodeFile})`);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     if (msg.includes('NODE_MODULE_VERSION')) {
@@ -932,7 +944,7 @@ function checkNativeModuleABI(): void {
       app.quit();
     } else {
       // Other load errors (missing dependencies, etc.) -- log but don't block
-      console.warn(`[ABI check] Could not verify better_sqlite3.node: ${msg}`);
+      console.warn(`[ABI check] Could not verify better-sqlite3 native addon: ${msg}`);
     }
   }
 }

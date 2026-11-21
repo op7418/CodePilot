@@ -119,6 +119,7 @@ describe('release signing and update asset contracts', () => {
       'sharp-darwin-x64/lib/sharp-darwin-x64.node',
       'sharp-libvips-darwin-arm64/lib/libvips-cpp.8.17.3.dylib',
       'sharp-libvips-darwin-x64/lib/libvips-cpp.8.17.3.dylib',
+      'better-sqlite3/prebuilds/{darwin-arm64.node,darwin-x64.node}',
       'next/node_modules/@img/{sharp-darwin-arm64/lib/sharp-darwin-arm64-0.35.5.node',
       'sharp-darwin-x64/lib/sharp-darwin-x64-0.35.5.node',
       'sharp-libvips-darwin-arm64/lib/libvips-cpp.8.18.7.dylib',
@@ -126,7 +127,7 @@ describe('release signing and update asset contracts', () => {
       'trash/lib/macos-trash',
       '.next/server/assets/macos-trash.*',
     ]) assert.ok(x64ArchFiles.includes(expected), `x64ArchFiles must include ${expected}`);
-    assert.doesNotMatch(x64ArchFiles, /\*\*|linux|win32|better-sqlite3|zlib-sync/);
+    assert.doesNotMatch(x64ArchFiles, /\*\*|linux|win32|zlib-sync/);
     assert.match(packageJson.scripts['electron:build'], /^node scripts\/prepare-macos-universal-runtime\.mjs &&/);
     for (const packageName of [
       '@img/sharp-darwin-arm64',

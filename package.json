@@ -81,7 +81,7 @@
     "@streamdown/mermaid": "1.0.1",
     "@tanstack/react-virtual": "^3.14.5",
     "ai": "^7.0.11",
-    "better-sqlite3": "^12.6.2",
+    "better-sqlite3": "^13.2.0",
     "boring-avatars": "^2.0.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

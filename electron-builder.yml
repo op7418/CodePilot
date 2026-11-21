@@ -70,12 +70,13 @@ mac:
   icon: build/icon.icns
   category: public.app-category.developer-tools
   artifactName: "${productName}-${version}-${arch}.${ext}"
-  # Prebuilt per-architecture helpers and already-universal trash helpers are
-  # intentionally identical between the two app trees. Preserve only these
-  # exact runtime-selected files instead of attempting a second lipo. Native
-  # modules such as better-sqlite3/zlib-sync are deliberately excluded: they
-  # must differ per target so @electron/universal can merge their real slices.
-  x64ArchFiles: "Contents/Resources/standalone/{.next/server/assets/macos-trash.*,node_modules/{@anthropic-ai/claude-agent-sdk/vendor/{audio-capture/{arm64,x64}-darwin/audio-capture.node,ripgrep/{arm64,x64}-darwin/rg},@img/{sharp-darwin-arm64/lib/sharp-darwin-arm64.node,sharp-darwin-x64/lib/sharp-darwin-x64.node,sharp-libvips-darwin-arm64/lib/libvips-cpp.8.17.3.dylib,sharp-libvips-darwin-x64/lib/libvips-cpp.8.17.3.dylib},next/node_modules/@img/{sharp-darwin-arm64/lib/sharp-darwin-arm64-0.35.5.node,sharp-darwin-x64/lib/sharp-darwin-x64-0.35.5.node,sharp-libvips-darwin-arm64/lib/libvips-cpp.8.18.7.dylib,sharp-libvips-darwin-x64/lib/libvips-cpp.8.18.7.dylib},trash/lib/macos-trash}}"
+  # Prebuilt per-architecture helpers (including better-sqlite3 v13+ N-API
+  # Darwin prebuilds) and already-universal trash helpers are intentionally
+  # identical between the two app trees. Preserve only these exact
+  # runtime-selected files instead of attempting a second lipo. Non-N-API
+  # native modules such as zlib-sync are deliberately excluded: they must
+  # differ per target so @electron/universal can merge their real slices.
+  x64ArchFiles: "Contents/Resources/standalone/{.next/server/assets/macos-trash.*,node_modules/{@anthropic-ai/claude-agent-sdk/vendor/{audio-capture/{arm64,x64}-darwin/audio-capture.node,ripgrep/{arm64,x64}-darwin/rg},@img/{sharp-darwin-arm64/lib/sharp-darwin-arm64.node,sharp-darwin-x64/lib/sharp-darwin-x64.node,sharp-libvips-darwin-arm64/lib/libvips-cpp.8.17.3.dylib,sharp-libvips-darwin-x64/lib/libvips-cpp.8.17.3.dylib},better-sqlite3/prebuilds/{darwin-arm64.node,darwin-x64.node},next/node_modules/@img/{sharp-darwin-arm64/lib/sharp-darwin-arm64-0.35.5.node,sharp-darwin-x64/lib/sharp-darwin-x64-0.35.5.node,sharp-libvips-darwin-arm64/lib/libvips-cpp.8.18.7.dylib,sharp-libvips-darwin-x64/lib/libvips-cpp.8.18.7.dylib},trash/lib/macos-trash}}"
   hardenedRuntime: true
   gatekeeperAssess: false
   entitlements: build/entitlements.mac.plist
