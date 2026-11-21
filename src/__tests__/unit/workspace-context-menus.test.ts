@@ -2,6 +2,7 @@ import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
+import { buildRendererEditingContextMenuTemplate } from '../../../electron/editing-context-menu';
 
 const root = path.resolve(__dirname, '../../..');
 const readSource = (relativePath: string) =>
@@ -10,17 +11,64 @@ const readSource = (relativePath: string) =>
 describe('workspace context-menu contracts', () => {
   it('gives Electron editable fields a native editing context menu', () => {
     const source = readSource('electron/main.ts');
+    const helper = readSource('electron/editing-context-menu.ts');
     const start = source.indexOf('function attachRendererEditingContextMenu');
     const end = source.indexOf('function createWindow', start);
     const block = source.slice(start, end);
 
     assert.ok(start >= 0, 'native renderer editing menu helper must exist');
     assert.match(block, /webContents\.on\(['"]context-menu['"]/);
+    assert.match(block, /buildRendererEditingContextMenuTemplate\(params\)/);
     for (const role of ['undo', 'redo', 'cut', 'copy', 'paste', 'delete', 'selectAll']) {
-      assert.match(block, new RegExp(`role:\\s*['"]${role}['"]`), `missing ${role} role`);
+      assert.match(helper, new RegExp(`role:\\s*['"]${role}['"]`), `missing ${role} role`);
     }
-    assert.match(block, /inputFieldType\s*===\s*['"]password['"]/);
+    assert.match(helper, /formControlType\s*===\s*['"]input-password['"]/);
+    assert.doesNotMatch(source, /inputFieldType/);
     assert.match(source, /attachRendererEditingContextMenu\(mainWindow\)/);
+  });
+
+  it('disables cut and copy for password fields using Electron formControlType', () => {
+    const allEnabled = {
+      canUndo: true,
+      canRedo: true,
+      canCut: true,
+      canCopy: true,
+      canPaste: true,
+      canDelete: true,
+      canSelectAll: true,
+    };
+
+    const passwordMenu = buildRendererEditingContextMenuTemplate({
+      isEditable: true,
+      selectionText: 'secret-token',
+      formControlType: 'input-password',
+      editFlags: allEnabled,
+    });
+    assert.ok(passwordMenu);
+    assert.equal(passwordMenu.find((item) => item.role === 'cut')?.enabled, false);
+    assert.equal(passwordMenu.find((item) => item.role === 'copy')?.enabled, false);
+    assert.equal(passwordMenu.find((item) => item.role === 'paste')?.enabled, true);
+    assert.equal(passwordMenu.find((item) => item.role === 'selectAll')?.enabled, true);
+
+    const textMenu = buildRendererEditingContextMenuTemplate({
+      isEditable: true,
+      selectionText: 'hello',
+      formControlType: 'input-text',
+      editFlags: allEnabled,
+    });
+    assert.ok(textMenu);
+    assert.equal(textMenu.find((item) => item.role === 'cut')?.enabled, true);
+    assert.equal(textMenu.find((item) => item.role === 'copy')?.enabled, true);
+
+    assert.equal(
+      buildRendererEditingContextMenuTemplate({
+        isEditable: false,
+        selectionText: '',
+        formControlType: 'none',
+        editFlags: allEnabled,
+      }),
+      null,
+    );
   });
 
   it('exposes project and conversation actions from row context menus', () => {

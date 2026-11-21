@@ -103,7 +103,7 @@
 - tech-debt #6 — 现有 Playwright 主要覆盖 web 层，主进程变更仍需 packaged 人工验证。
 - `webviewTag:true` 只是创建能力，不是信任；没有 `will-attach-webview` 的 issued-partition gate 与二次 hardening 时，Renderer XSS 可伪造 guest/preload。即使有 gate，host Renderer 仍天然拥有 DOM `<webview>` 控制面；当前合同只隔离不可信 guest，不把 host Renderer compromise 声称为已由 `<webview>` 解决。若要收紧这条边界，必须回到 Main-owned view 路线。
 - Electron 不自动给 renderer 输入框提供复制/粘贴菜单；逐组件实现会漏掉 CodeMirror / contenteditable。
-- `context-menu.selectionText` 不能作为密码字段可复制依据；还要检查 `inputFieldType` 与 `editFlags`。
+- `context-menu.selectionText` 不能作为密码字段可复制依据；还要检查 `formControlType === 'input-password'` 与 `editFlags`。
 - v0.34 crash on upgrade 根因是 `dist-electron/` 未清理，stale artifacts 进入 app.asar。
 - v0.58.2 Windows 构建暴露重叠 FileSet 的 `EBUSY`；资源组目标必须互斥。
 - v0.58.3 `.next/node_modules` 被过滤导致 packaged server 无法启动；哈希 alias 必须独立复制并真实启动验证。

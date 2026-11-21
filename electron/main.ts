@@ -73,6 +73,7 @@ const nativeCrashSmokeEnabled = electronTelemetry.enabled
 
 import { app, autoUpdater as nativeAutoUpdater, BrowserWindow, Notification, nativeImage, nativeTheme, dialog, session, utilityProcess, ipcMain, shell, Tray, Menu, clipboard } from 'electron';
 import { resolveDefaultAssistantHome } from './default-assistant-home';
+import { buildRendererEditingContextMenuTemplate } from './editing-context-menu';
 import {
   buildNativeNotificationOptions,
   deliverNativeNotification,
@@ -1805,34 +1806,8 @@ const LOADING_HTML = `data:text/html;charset=utf-8,${encodeURIComponent(`<!DOCTY
  */
 function attachRendererEditingContextMenu(targetWindow: BrowserWindow): void {
   targetWindow.webContents.on('context-menu', (_event, params) => {
-    const hasSelection = params.selectionText.length > 0;
-    const isPassword = params.inputFieldType === 'password';
-
-    if (!params.isEditable && !hasSelection) return;
-
-    const template: Electron.MenuItemConstructorOptions[] = params.isEditable
-      ? [
-          { role: 'undo', enabled: params.editFlags.canUndo },
-          { role: 'redo', enabled: params.editFlags.canRedo },
-          { type: 'separator' },
-          {
-            role: 'cut',
-            enabled: !isPassword && params.editFlags.canCut,
-          },
-          {
-            role: 'copy',
-            enabled: !isPassword && params.editFlags.canCopy,
-          },
-          { role: 'paste', enabled: params.editFlags.canPaste },
-          { role: 'delete', enabled: params.editFlags.canDelete },
-          { type: 'separator' },
-          { role: 'selectAll', enabled: params.editFlags.canSelectAll },
-        ]
-      : [
-          { role: 'copy', enabled: hasSelection },
-          { type: 'separator' },
-          { role: 'selectAll' },
-        ];
+    const template = buildRendererEditingContextMenuTemplate(params);
+    if (!template) return;
 
     Menu.buildFromTemplate(template).popup({ window: targetWindow });
   });
