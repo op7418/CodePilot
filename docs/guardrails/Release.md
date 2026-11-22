@@ -78,7 +78,7 @@
 |------|----------|
 | 构建产物 server 启动 | `scripts/verify-packaged-server.mjs` + `.github/workflows/build.yml` |
 | tag/version、P0 regression、macOS version/ABI/server-health/checksum | `.github/workflows/build.yml` |
-| release notes / package version drift | `scripts/lint-docs-drift.mjs` + CI verify-source |
+| release notes / package version drift | CI verify-source（tag 与 package.json 版本一致）；`lint-docs-drift.mjs` 只检查计划目录索引，不检查这一项 |
 | macOS Developer ID + notarization | `macos-signing-policy.test.ts` + final CI verifier |
 | Windows Authenticode | `release-trust-update-assets.test.ts` + final CI PowerShell verifier |
 | metadata/blockmap/checksum/channel、Action SHA、GitHub ruleset shape | `release-trust-update-assets.test.ts` + `verify-update-assets.mjs` + `verify-github-update-rulesets.mjs` |

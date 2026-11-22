@@ -12,7 +12,6 @@
 
 | 文件 | 主题 | 状态 |
 |------|------|------|
-| [cleanup-and-dependency-upgrade.md](active/cleanup-and-dependency-upgrade.md) | 清理收尾与依赖升级：两处缺陷、漏洞依赖、Node 与 Electron 升级、第二轮死代码、过时的 GitHub 文案 | 待开始 |
 | [astra-openai-oauth-compatibility.md](active/astra-openai-oauth-compatibility.md) | **Astra / OpenAI OAuth / Fable 5.1 兼容修复**：刷新并发、非阻塞目录、恢复提示、冷缓存能力与 Fable 协议 | 🟡 Code complete + Tests pass：5518 pass / 1 skip、后续旧聊天 E2E 2 pass；真实账号 smoke 待验证 |
 | [composer-model-route-permission-consolidation.md](active/composer-model-route-permission-consolidation.md) | **Composer 模型路线、能力参数与权限入口收口**：Favorites 精确组合 + Runtime 左栏、Provider 分组模型右栏、能力描述符、上下文/Send 末端布局与权限档位双向映射 | 🟡 本轮 UI/定向 unit/scoped E2E 通过；三 Runtime 真实 effective-wire smoke 待执行（Tier 2） |
 | [runtime-thread-ownership-and-handoff.md](active/runtime-thread-ownership-and-handoff.md) | **Runtime 会话所有权、交接与成本可见性（P0/P1）**：首次执行锁定 Runtime；完整路线原子写入；同 Runtime 在原聊天跨服务商换模型并承接历史；目录校验对齐执行层；普通 Picker 不创建或跳转聊天 | 🟡 9 月 5 日两项 P2 续接修复 Tests pass：5485 pass / 1 skip、E2E 3/3；已有原聊天切换 Dev smoke；真实视觉 smoke、独立复审与原计划其他长历史 smoke 待跑 |
